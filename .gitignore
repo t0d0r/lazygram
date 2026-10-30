@@ -1,0 +1,11 @@
+.env
+.env.*
+*.pem
+*.key
+*.session
+*.session-journal
+session.json
+.state/
+/lazygram
+*.log
+.DS_Store
