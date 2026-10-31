@@ -46,9 +46,24 @@ not committed.
   it. Documented rather than special-cased: the history holds entered
   lines, and the next key decides (specs/ui.md, Input history).
 
+## Released
+
+- Commit `bfd45af` on `feature/ctrlx-sends-raw`, fast-forwarded into
+  `master` after a clean sync with `origin/master`; `make check` and
+  `make smoke` green; Linux and macOS CI green on that commit.
+- Tag `v0.4.17` at `bfd45af`, pushed; `make dist` and `make release`
+  published the GitHub release (four tarballs and SHA256SUMS). Read back:
+  not a draft or prerelease, marked latest; every asset's digest on
+  GitHub equals the local build, the downloaded SHA256SUMS is identical
+  to `dist/SHA256SUMS`, `shasum -c` passes for all four tarballs, the
+  downloaded darwin-arm64 binary prints `lazygram v0.4.17`.
+
 ## Open
 
-- Nothing in the code; the branch awaits review, then a commit.
+- The Homebrew formula still builds 0.4.14; the Arch/Omarchy recipe
+  still names 0.4.14 (packaging/omarchy/README.md, step 0).
+- The worktree `../lazygram-ctrlx-send` and the merged branch can be
+  removed.
 
 ## Files touched
 
@@ -63,5 +78,4 @@ not committed.
 
 ## Next
 
-- Commit on `feature/ctrlx-sends-raw` after approval, then merge into
-  master or open a pull request.
+- Bump the Homebrew formula and the Arch/Omarchy recipe to 0.4.17.
