@@ -150,11 +150,13 @@ const (
 	appNone   appSource = iota
 	appStored           // app.json in the state directory
 	appEnv              // TG_API_ID / TG_API_HASH in the environment
-	appBuilt            // embedded at build time
+	appBuilt            // embedded privately at build time (make embed)
+	appPublic           // the registration shipped in the source
 )
 
 // telegramConfig resolves the application registration: the stored file
-// wins, then the environment, then the build-time value.
+// wins, then the environment, then a private embed, then the public one
+// shipped in the source.
 func telegramConfig(dataDir string) (cfg config.Telegram, src appSource, err error) {
 	dir := config.TelegramDir(dataDir)
 	cfg = config.Telegram{SessionDir: dir}
@@ -181,6 +183,14 @@ func telegramConfig(dataDir string) (cfg config.Telegram, src appSource, err err
 		}
 		cfg.App = app
 		return cfg, appBuilt, nil
+	}
+	if publicAppID != "" {
+		app, err = config.ParseApp(publicAppID, publicAppHash)
+		if err != nil {
+			return cfg, appNone, fmt.Errorf("built-in application registration: %w", err)
+		}
+		cfg.App = app
+		return cfg, appPublic, nil
 	}
 	return cfg, appNone, nil
 }

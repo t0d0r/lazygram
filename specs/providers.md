@@ -52,11 +52,16 @@ provider returns ErrNotImplemented.
 No environment variables. Everything is under `<data>/telegram/`:
 
 - `app.json`: the Telegram application registration (api id and hash from
-  https://my.telegram.org). Decision: lazygram ships no registration of its
-  own and does not reuse nchat's; nchat's SCOPE.md asks forks to obtain their
-  own because a shared registration gets rate-limited or banned.
-  Resolution order at every start: `app.json`, then the environment
-  (`TG_API_ID`/`TG_API_HASH`, or nchat's `TG_APIID`/`TG_APIHASH`), then the
+  https://my.telegram.org). Decision (2026-10-31): like nchat, lazygram
+  ships its author's registration in the source
+  (`cmd/lazygram/app_public.go`, byte slices so scanners stay quiet; it is
+  public, not secret), so brew and source builds work without setup. The
+  known risk, as nchat's SCOPE.md states, is that a registration shared by
+  many clients can be throttled or banned by Telegram, which would stop
+  every build carrying it, the author's included; forks must register
+  their own. Resolution order at every start: `app.json`, then the
+  environment (`TG_API_ID`/`TG_API_HASH`, or nchat's `TG_APIID`/`TG_APIHASH`),
+  then the
   value carried by the binary: the git-ignored `cmd/lazygram/app_local.go`
   that `make embed` generates from `TG_API_ID`/`TG_API_HASH` in the
   environment (nchat keeps its registration in source the same way, but
@@ -64,8 +69,9 @@ No environment variables. Everything is under `<data>/telegram/`:
   personal). `make embed` reads the values through the shell environment,
   never expands them into the recipe, requires digits and hex, and refuses
   to write a file git would track.
-  `lazygram login` stores whatever it resolved from the environment, or asks
-  (hash hidden) when nothing is found, so later starts need no environment.
+  then the public registration shipped in the source. `lazygram login`
+  stores whatever it resolved from the environment, or asks (hash hidden)
+  when nothing at all is found, so later starts need no environment.
   A variable set without its partner, or with a bad value, is an error that
   names the variable, never the value.
 - `session.json`: the gotd session (auth key and account authorization),

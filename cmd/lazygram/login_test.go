@@ -63,8 +63,8 @@ func TestLoginAppResolution(t *testing.T) {
 		t.Fatal("environment registration must be stored")
 	}
 
-	// stored or built in: use as is, write nothing, say nothing
-	for _, src := range []appSource{appStored, appBuilt} {
+	// stored, built in or public: use as is, write nothing, say nothing
+	for _, src := range []appSource{appStored, appBuilt, appPublic} {
 		dir3 := config.TelegramDir(t.TempDir())
 		if _, err := loginApp(config.Telegram{App: app, SessionDir: dir3}, src, ask, say); err != nil || asked != 1 || len(said) != 1 {
 			t.Fatalf("src %v: %v %d %v", src, err, asked, said)

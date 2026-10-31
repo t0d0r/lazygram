@@ -47,6 +47,7 @@
 - [x] GitHub repository (github.com/t0d0r/lazygram), releases v0.3.0, v0.4.0, v0.4.2, v0.4.3, Homebrew formula in t0d0r/homebrew-tap
 - [x] figlet banners at start and exit (specs/ui.md)
 - [x] /theme with nine colour schemes, persisted (specs/ui.md)
+- [x] public application registration shipped in the source for brew builds (specs/providers.md)
 - [x] attachments sealed in the vault; plain copies only while viewing; image names from content type (specs/storage.md)
 - [x] clickable text bright; running light under the pointer, /fx; scrolled-up marker; status line without brackets (specs/ui.md)
 - [x] Up/Down walk the input history (specs/ui.md)

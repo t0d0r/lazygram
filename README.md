@@ -55,10 +55,13 @@ Link Desktop Device, and scan it. No phone number or SMS code is typed. If the
 account has two-step verification, the password is asked once, hidden. Use
 `-ascii` if the block characters do not render in your terminal.
 
-Telegram's protocol requires every client to identify with an application id
-and hash. nchat ships its own; lazygram does not (nchat's documentation asks
-forks not to reuse theirs). Get yours once from https://my.telegram.org under
-"API development tools" and give them to lazygram in one of three ways:
+Telegram's protocol requires every client to identify with an application
+id and hash. Like nchat, lazygram ships one in its source, so a brew or
+source build logs in with nothing to configure. If you prefer your own
+(forks must: a registration shared by many clients can be throttled or
+banned by Telegram), get it from https://my.telegram.org under "API
+development tools" and give it to lazygram in one of three ways; each wins
+over the built-in one:
 
 - `TG_API_ID` and `TG_API_HASH` in the environment, for example from a
   direnv `.envrc` in the project directory (git-ignored). `lazygram login`
@@ -70,8 +73,8 @@ forks not to reuse theirs). Get yours once from https://my.telegram.org under
   environment (direnv), and every `make build` after that carries them. No
   environment at run time, no prompt.
 
-A stored registration wins over the environment, which wins over the baked-in
-one; delete `<state>/telegram/app.json` to switch. Never commit these values:
+A stored registration wins over the environment, which wins over a private
+embed, which wins over the one shipped in the source; delete `<state>/telegram/app.json` to switch. Never commit these values:
 `.envrc`, `*_local.go` and `.state/` are git-ignored for that reason.
 
 ## Using it

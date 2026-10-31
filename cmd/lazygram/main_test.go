@@ -13,6 +13,7 @@ import (
 
 func TestNotLinkedExitsWithHint(t *testing.T) {
 	clearEnv(t)
+	noPublic(t)
 	err := run([]string{"-data", t.TempDir()})
 	var ec exitError
 	if !errors.As(err, &ec) || ec.code != 2 || !strings.Contains(ec.msg, "lazygram login") || !strings.Contains(ec.msg, "lazygram demo") {
@@ -68,6 +69,14 @@ func clearEnv(t *testing.T) {
 	for _, n := range []string{"TG_API_ID", "TG_API_HASH", "TG_APIID", "TG_APIHASH"} {
 		t.Setenv(n, "")
 	}
+}
+
+// noPublic hides the registration shipped in the source for one test.
+func noPublic(t *testing.T) {
+	t.Helper()
+	id, hash := publicAppID, publicAppHash
+	publicAppID, publicAppHash = "", ""
+	t.Cleanup(func() { publicAppID, publicAppHash = id, hash })
 }
 
 func TestEmbeddedAppIsUsed(t *testing.T) {
@@ -154,5 +163,29 @@ func TestUpdateHint(t *testing.T) {
 	}
 	if time.Since(start) > 3*time.Second {
 		t.Fatal("the check must stay brief")
+	}
+}
+
+func TestPublicRegistrationIsTheLastFallback(t *testing.T) {
+	clearEnv(t)
+	cfg, src, err := telegramConfig(t.TempDir())
+	if err != nil || src != appPublic || cfg.App.APIID <= 0 || len(cfg.App.APIHash) < 16 {
+		t.Fatalf("%+v %v %v", cfg, src, err)
+	}
+	buildAppID, buildAppHash = "42", strings.Repeat("ab", 16)
+	defer func() { buildAppID, buildAppHash = "", "" }()
+	if _, src, _ := telegramConfig(t.TempDir()); src != appBuilt {
+		t.Fatal("a private embed wins over the public registration")
+	}
+	buildAppID, buildAppHash = "", ""
+	t.Setenv("TG_API_ID", "7")
+	t.Setenv("TG_API_HASH", strings.Repeat("cd", 16))
+	if _, src, _ := telegramConfig(t.TempDir()); src != appEnv {
+		t.Fatal("the environment wins over the public registration")
+	}
+	clearEnv(t)
+	noPublic(t)
+	if _, src, _ := telegramConfig(t.TempDir()); src != appNone {
+		t.Fatal("without any source there is none")
 	}
 }

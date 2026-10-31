@@ -211,3 +211,7 @@ at the hidden password prompt takes effect only after Enter.
   clock in milliseconds instead of a tick counter).
 - Fix: the first hover after an idle screen now schedules the light's tick
   at once (the decision used the previous render's state).
+- Public registration: `cmd/lazygram/app_public.go` carries the author's
+  api id and hash as byte slices (decision recorded in specs/providers.md
+  with the shared-use risk); it is the last fallback after app.json, the
+  environment and a private embed. Brew and source builds need no setup.
