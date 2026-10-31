@@ -290,7 +290,7 @@ func TestTabCompletesNamesAndCommands(t *testing.T) {
 // bar or input line.
 func body(m *Model) string {
 	lines := strings.Split(m.View(), "\n")
-	return strings.Join(lines[:len(lines)-3], "\n")
+	return strings.Join(lines[:len(lines)-5], "\n")
 }
 
 func TestListIsSelectableAndHidesDeleted(t *testing.T) {
@@ -633,8 +633,11 @@ func TestWindowBarListsEveryWindow(t *testing.T) {
 		}
 	}
 	lines := strings.Split(v, "\n")
-	if len(lines) != 20 || !strings.Contains(lines[18], "[0:server]") {
-		t.Fatalf("bar must be the line above the input: %d lines", len(lines))
+	if len(lines) != 20 || !strings.Contains(lines[19], "[0:server]") {
+		t.Fatalf("bar must be the last line: %d lines", len(lines))
+	}
+	if !strings.Contains(lines[15], "\u2500") || !strings.Contains(lines[17], "\u2500") || !strings.HasPrefix(lines[16], "[") {
+		t.Fatalf("the prompt sits between two rules:\n%s", strings.Join(lines[15:18], "\n"))
 	}
 }
 

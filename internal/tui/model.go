@@ -1677,7 +1677,9 @@ func (m *Model) listItems() []domain.Chat {
 	return out
 }
 
-func (m *Model) contentHeight() int { return max(m.height-3, 1) }
+// contentHeight leaves room for the rule, input, rule, status and window
+// bar rows.
+func (m *Model) contentHeight() int { return max(m.height-5, 1) }
 
 func (m *Model) nameWidth() int {
 	w := 4
@@ -1783,13 +1785,26 @@ func (m *Model) View() string {
 		b.WriteByte('\n')
 	}
 	bar, barSpans := m.windowBar()
+	// The prompt sits between two rules; the top one carries the send hint
+	// at its right end, like a label.
+	hint := ""
+	if w.chatID != "" && m.mode == modeWin {
+		hint = "ctrl-x: to send"
+		if w.enterSends {
+			hint = "enter: to send"
+		}
+	}
+	b.WriteString(m.rule(hint))
+	b.WriteByte('\n')
+	b.WriteString(m.inputLine(prompt))
+	b.WriteByte('\n')
+	b.WriteString(m.rule(""))
+	b.WriteByte('\n')
 	b.WriteString(m.statusLine())
 	b.WriteByte('\n')
 	b.WriteString(bar)
-	b.WriteByte('\n')
-	b.WriteString(m.inputLine(prompt))
-	// Screen rows: h content rows, status, window bar, input.
-	m.clicks = append(append([][]span{}, bodySpans...), nil, barSpans, nil)
+	// Screen rows: h content rows, rule, input, rule, status, window bar.
+	m.clicks = append(append([][]span{}, bodySpans...), nil, nil, nil, nil, barSpans)
 	m.animOn = m.hover != "" // the light runs only under the pointer
 	return b.String()
 }
@@ -1899,13 +1914,6 @@ func (m *Model) statusLine() string {
 		}
 		text += gap
 	}
-	if w.chatID != "" && m.mode == modeWin {
-		how := "ctrl-x: to send"
-		if w.enterSends {
-			how = "enter: to send"
-		}
-		text += seg(how, 2, false)
-	}
 	return lipgloss.NewStyle().Background(statusBG()).Render(fitLine(text, m.width))
 }
 
@@ -1935,6 +1943,16 @@ func (m *Model) windowBar() (string, []span) {
 		b.WriteString(infoStyle.Render(" "))
 	}
 	return lipgloss.NewStyle().Background(statusBG()).Render(fitLine(" "+b.String(), m.width)), spans
+}
+
+// rule is a thin horizontal line across the screen, with an optional label
+// at its right end.
+func (m *Model) rule(label string) string {
+	line := strings.Repeat("\u2500", max(m.width, 1))
+	if label != "" && lipgloss.Width(label)+4 <= m.width {
+		line = strings.Repeat("\u2500", m.width-lipgloss.Width(label)-3) + " " + label + " \u2500"
+	}
+	return dimStyle.Render(line)
 }
 
 func (m *Model) inputLine(prompt string) string {

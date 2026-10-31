@@ -1,10 +1,13 @@
 # UI
 
-Layout, top to bottom: content, status line, window bar, input line.
-There is no header: the status line carries the window tag, and in the
-list and pager views it shows what the view holds in place of the status
-message. The window bar lists every window as `[N:name]`; the current
-window is highlighted and windows with unread messages stand out. The
+Layout, top to bottom: content, a thin rule, the input line, a thin rule,
+the status line, the window bar. The prompt sits between the two rules;
+the upper rule carries the send hint (`ctrl-x: to send` or `enter: to
+send`) at its right end. There is no header: the status line carries the
+window tag, and in the list and pager views it shows what the view holds
+in place of the status message. The window bar lists every window as
+`[N:name]`; the current window is highlighted and windows with unread
+messages stand out. The
 model is BitchX/irssi: virtual windows, a slash-command input line, Tab
 completion, and an activity indicator.
 
@@ -255,8 +258,9 @@ and the status line shows `[scrolled up N lines]` in the same colour.
 
 ## Status line
 
-`time  provider  [N:name]  Act: ...  M msgs  sync state  scrolled up K lines  message  ctrl-x: to send`
-(brackets only around the window tag; two spaces between segments). The
+`time  provider  [N:name]  Act: ...  M msgs  sync state  scrolled up K lines  message`
+(brackets only around the window tag; two spaces between segments; the
+send hint lives on the rule above the prompt). The
 sync segment keeps a fixed width and colour (`synced: HH:MM:SS` or
 `syncing HH:MM:SS` with the last completion time) and a poll that brings
 nothing changes no status text, so the line does not flicker every ten
@@ -282,5 +286,5 @@ the hint to remove it and log in again.
 ## Non-interactive mode
 
 When stdin or stdout is not a terminal, or with -smoke, lazygram loads
-chats, syncs once, prints one 100x24 screen of the server window (21
-content rows, status, window bar, input) and exits 0. `login` refuses without a terminal.
+chats, syncs once, prints one 100x24 screen of the server window (19
+content rows, rule, input, rule, status, window bar) and exits 0. `login` refuses without a terminal.
