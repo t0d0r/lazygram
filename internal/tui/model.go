@@ -133,6 +133,11 @@ type (
 		target string
 		err    error
 	}
+	fetchedMsg struct {
+		chatID, msgID string
+		path          string
+		err           error
+	}
 	tickMsg time.Time
 )
 
@@ -290,6 +295,16 @@ func (m *Model) pressCmd(chatID string, msg domain.Message, b domain.Button) tea
 	}
 }
 
+func (m *Model) fetchCmd(chatID, msgID string) tea.Cmd {
+	p := m.opt.Provider
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		path, err := p.Fetch(ctx, chatID, msgID)
+		return fetchedMsg{chatID: chatID, msgID: msgID, path: path, err: err}
+	}
+}
+
 func (m *Model) openCmd(target string) tea.Cmd {
 	open := m.opt.Open
 	return func() tea.Msg { return openedMsg{target: target, err: open(target)} }
@@ -382,6 +397,28 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.syncCmd())
 		}
 		return m, tea.Batch(cmds...)
+	case fetchedMsg:
+		_, w := m.winFor(msg.chatID)
+		if w == nil {
+			w = m.wins[0]
+		}
+		if msg.err != nil {
+			m.setErr("fetch: " + errText(msg.err))
+			m.note(w, "fetch: "+errText(msg.err))
+			break
+		}
+		var media *domain.Media
+		for _, x := range m.msgs {
+			if x.ChatID == msg.chatID && x.ID == msg.msgID {
+				media = x.Media
+			}
+		}
+		if media.Image() {
+			m.note(w, "opening "+msg.path)
+			return m, m.openCmd(msg.path)
+		}
+		m.note(w, "saved "+msg.path)
+		m.setInfo("saved " + msg.path)
 	case openedMsg:
 		if msg.err != nil {
 			m.setErr("open: " + msg.err.Error())
@@ -448,6 +485,10 @@ func (m *Model) click(s span) (tea.Model, tea.Cmd) {
 	case spanURL:
 		m.setInfo("opening " + s.target + "...")
 		return m, m.openCmd(s.target)
+	case spanMedia:
+		chatID, msgID, _ := strings.Cut(s.target, "\x00")
+		m.setInfo("fetching...")
+		return m, m.fetchCmd(chatID, msgID)
 	case spanWin:
 		i, _ := strconv.Atoi(s.target)
 		return m, m.switchTo(i)
@@ -849,6 +890,26 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.whois(c.Arg)
 	case command.Press:
 		return m.press(c.Arg)
+	case command.Open:
+		if w.chatID == "" {
+			m.setErr("the server window has no chat; /win to the chat first")
+			break
+		}
+		msg, ok := domain.LatestWithMedia(m.msgs, w.chatID)
+		if c.Arg != "" {
+			ok = false
+			for _, x := range m.msgs {
+				if x.ChatID == w.chatID && x.ID == c.Arg {
+					msg, ok = x, x.Media != nil
+				}
+			}
+		}
+		if !ok {
+			m.setErr("no photo or file to open in " + m.nameOf(w.chatID))
+			break
+		}
+		m.setInfo("fetching...")
+		return m, m.fetchCmd(w.chatID, msg.ID)
 	case command.Me:
 		if w.chatID == "" {
 			m.setErr("the server window has no chat; /win to a chat first")
@@ -1362,8 +1423,8 @@ const keyHelp = `Keys
   Esc                    close the list or pager; clear the input
   Ctrl-C                 quit
 Mouse: click a chat name or nick in window 1 to open its window, a tag in
-the window bar to focus it, a row in a list to open it, a link to open it
-with the system; the wheel scrolls.
+the window bar to focus it, a row in a list to open it, a link or a
+[photo] / [file] token to open it with the system; the wheel scrolls.
 Window 1 is the server window: every chat interleaved, plus notices.
 A window opens for a chat when it gets a message or has unread ones;
 [Act: 2,3] in the status line lists windows with unread messages.

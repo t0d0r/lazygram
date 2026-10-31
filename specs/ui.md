@@ -91,6 +91,7 @@ as notices; there is no separate help view.
 | `/stats`                      | print client statistics                              |
 | `/me <text>`                  | send `* text` to this window's chat (shown as `* you text`) |
 | `/press N`, `/press <msg> N`  | press a bot button (see Buttons)                     |
+| `/open [msg]`                 | fetch an attachment; open it when it is an image     |
 
 Short forms: `/w`, `/j`, `/join`, `/query` for `/win`; `/wc`, `/part` for
 `/close`; `/history` for `/last`; `/find`, `/log` for `/search`; `/wi`,
@@ -124,6 +125,18 @@ system opener (`open`, `xdg-open`, `rundll32`), which starts the browser or
 preview app for the link's content. The wheel scrolls the window three
 lines (the cursor in a list). Opening happens only on a click, only for
 http and https links with a host; nothing is opened automatically.
+
+## Attachments
+
+A message with a photo or file shows a token before its caption:
+`[photo]`, `[image: name]` or `[file: name]`. Clicking the token, or
+`/open` (the latest such message in the window's chat; `/open <msg>` for a
+given one), fetches the attachment through `Provider.Fetch` into the
+provider's private media directory (0700, files 0600; fetched once, then
+reused) and then: an image (`photo`, `image`) is handed to the system
+opener, which starts the preview app; any other file only gets
+`-!- saved <path>`, it is never opened. Media lazygram cannot fetch (polls,
+locations, ...) shows as `[media]`. Fetch errors land in the window.
 
 ## Sending
 

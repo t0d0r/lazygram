@@ -46,11 +46,14 @@
 - [x] lazygram update: brew or binary, SHA256SUMS-checked (specs/release.md)
 - [x] GitHub repository (github.com/t0d0r/lazygram), v0.3.0 release, Homebrew formula in t0d0r/homebrew-tap
 - [x] figlet banners at start and exit (specs/ui.md)
+- [x] attachments: [photo]/[file] tokens, /open and click fetch; images open in the system viewer (specs/ui.md)
 - [x] mouse: clicks on chat names, nicks, window bar, list rows, links; wheel scroll (specs/ui.md)
 - [x] double Ctrl-X toggles Enter-sends; help fits 80 columns; Tab only completes (specs/ui.md)
 - [x] bot inline buttons: rendered under the message, /press answers callbacks, links printed, reply text sent (specs/ui.md)
 
 ## Next
+
+- [ ] clean up or cap the media directory (specs/storage.md)
 
 - [ ] sending messages (post-v0.1)
 - [ ] unread markers and mention highlight

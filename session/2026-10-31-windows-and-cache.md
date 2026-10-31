@@ -136,3 +136,8 @@ at the hidden password prompt takes effect only after Enter.
   the model keeps the span map of the last View; wheel scrolls. Links open
   through `internal/opener` (open/xdg-open/rundll32, http(s) only, no
   shell); `Options.Open` is injectable for tests.
+- Attachments: `domain.Media`, `Provider.Fetch`; Telegram downloads the
+  largest photo size or the document via gotd's downloader after a refetch
+  for a fresh file reference, into `<state>/telegram/media/`; `/open` and
+  the `[photo]` token click; only images are opened, files are saved. Demo
+  draws a PNG. Untested against the real service (fakes only).

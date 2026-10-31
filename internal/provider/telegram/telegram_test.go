@@ -40,6 +40,9 @@ func TestInertWithoutClient(t *testing.T) {
 	if _, err := p.Press(context.Background(), "x", "1", domain.Button{}); !errors.Is(err, provider.ErrNotImplemented) {
 		t.Fatalf("press: %v", err)
 	}
+	if _, err := p.Fetch(context.Background(), "x", "1"); !errors.Is(err, provider.ErrNotImplemented) {
+		t.Fatalf("fetch: %v", err)
+	}
 	var _ provider.Provider = p
 }
 

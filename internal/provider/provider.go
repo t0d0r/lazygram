@@ -30,4 +30,7 @@ type Provider interface {
 	// Press presses a callback button of a message and returns the bot's
 	// answer, with the message as it is afterwards when it changed.
 	Press(ctx context.Context, chatID, msgID string, b domain.Button) (domain.PressAnswer, error)
+	// Fetch downloads a message's attachment to a local file and returns
+	// its path. A file already fetched is returned without a download.
+	Fetch(ctx context.Context, chatID, msgID string) (string, error)
 }

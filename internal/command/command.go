@@ -24,6 +24,7 @@ const (
 	Whois        // print what is known about a chat (Arg) or the current window's chat
 	Me           // send an action line ("* text") to the current window's chat
 	Press        // press a bot button: Arg is "N" or "<message id> N"
+	Open         // fetch and open the attachment of the latest message with one, or of message Arg
 )
 
 // Command is a parsed slash command.
@@ -45,6 +46,7 @@ var table = map[string]Kind{
 	"whois": Whois, "wi": Whois, "info": Whois,
 	"me": Me, "action": Me,
 	"press": Press, "button": Press, "btn": Press,
+	"open": Open, "fetch": Open, "download": Open,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -91,4 +93,6 @@ const HelpText = `Commands
   /whois [name]          what is known about a chat
   /stats                 client statistics
   /me <text>             send an action line
-  /press N | <msg> N     press a bot button (numbers shown under it)`
+  /press N | <msg> N     press a bot button (numbers shown under it)
+  /open [msg]            fetch a photo or file and open it (images) or
+                         show where it was saved`

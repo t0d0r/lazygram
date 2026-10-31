@@ -66,6 +66,14 @@ id means all; limit <= 0 means all), `Count`, `Latest`, `Chats`,
 `SetChats` (replaces the list, keeping order), `SetState`/`State` (small
 sealed JSON documents such as the window layout, in `meta`), `Close`.
 
+## Media
+
+`<data>/telegram/media/` holds fetched attachments (`/open`, clicks),
+0700 with 0600 files, named `<chat>-<msg>.<ext>`. They are plain files so
+the system viewer can open them; nothing cleans them up yet. The demo
+writes into a `lazygram-demo` directory under the system temporary
+directory.
+
 ## Limits
 
 No compaction or size cap. The TUI mirrors the newest 2000 cached messages

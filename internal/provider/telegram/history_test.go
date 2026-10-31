@@ -3,6 +3,9 @@ package telegram
 import (
 	"context"
 	"errors"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,6 +28,35 @@ type fakeAPI struct {
 
 	extraDialogs []tg.DialogClass // listed before the fixed dialogs
 	extraChats   []tg.ChatClass
+
+	file      []byte // served by UploadGetFile
+	downloads int
+}
+
+func (f *fakeAPI) UploadGetFile(_ context.Context, r *tg.UploadGetFileRequest) (tg.UploadFileClass, error) {
+	f.downloads++
+	off := int(r.Offset)
+	if off >= len(f.file) {
+		return &tg.UploadFile{Type: &tg.StorageFileJpeg{}}, nil
+	}
+	end := min(off+r.Limit, len(f.file))
+	return &tg.UploadFile{Type: &tg.StorageFileJpeg{}, Bytes: f.file[off:end]}, nil
+}
+
+func (f *fakeAPI) UploadGetFileHashes(context.Context, *tg.UploadGetFileHashesRequest) ([]tg.FileHash, error) {
+	return nil, errors.New("not in the fake")
+}
+
+func (f *fakeAPI) UploadReuploadCDNFile(context.Context, *tg.UploadReuploadCDNFileRequest) ([]tg.FileHash, error) {
+	return nil, errors.New("not in the fake")
+}
+
+func (f *fakeAPI) UploadGetCDNFileHashes(context.Context, *tg.UploadGetCDNFileHashesRequest) ([]tg.FileHash, error) {
+	return nil, errors.New("not in the fake")
+}
+
+func (f *fakeAPI) UploadGetWebFile(context.Context, *tg.UploadGetWebFileRequest) (*tg.UploadWebFile, error) {
+	return nil, errors.New("not in the fake")
 }
 
 func newFakeAPI() *fakeAPI {
@@ -477,5 +509,80 @@ func TestPressAnswersAndRefetches(t *testing.T) {
 	}
 	if _, err := s.Press(context.Background(), "telegram:7", "5", domain.Button{Kind: domain.ButtonCallback, Data: []byte("boom")}); err == nil {
 		t.Fatal("bot error must surface")
+	}
+}
+
+func withPhoto(m *tg.Message) *tg.Message {
+	m.SetMedia(&tg.MessageMediaPhoto{Photo: &tg.Photo{ID: 77, AccessHash: 8, FileReference: []byte("ref"), Sizes: []tg.PhotoSizeClass{
+		&tg.PhotoSize{Type: "m", W: 320, H: 200},
+		&tg.PhotoSizeProgressive{Type: "y", W: 1280, H: 800, Sizes: []int{1000, 20000}},
+		&tg.PhotoSize{Type: "x", W: 800, H: 500},
+	}}})
+	return m
+}
+
+func TestMediaConversion(t *testing.T) {
+	photo := convert("telegram:7", entity{}, withPhoto(tmsg(1, 0, "")), collect(nil, nil))
+	if photo.Media == nil || photo.Media.Kind != "photo" || photo.Text != "" {
+		t.Fatalf("%+v", photo)
+	}
+	doc := tmsg(2, 0, "look")
+	doc.SetMedia(&tg.MessageMediaDocument{Document: &tg.Document{ID: 5, MimeType: "image/png", Attributes: []tg.DocumentAttributeClass{&tg.DocumentAttributeFilename{FileName: "C:\\\\pics\\\\cat.png"}}}})
+	img := convert("telegram:7", entity{}, doc, collect(nil, nil))
+	if img.Media == nil || img.Media.Kind != "image" || img.Media.Name != "cat.png" || img.Text != "look" {
+		t.Fatalf("%+v", img.Media)
+	}
+	pdf := tmsg(3, 0, "")
+	pdf.SetMedia(&tg.MessageMediaDocument{Document: &tg.Document{ID: 6, MimeType: "application/pdf"}})
+	if f := convert("telegram:7", entity{}, pdf, collect(nil, nil)); f.Media == nil || f.Media.Kind != "file" || f.Text != "" {
+		t.Fatalf("%+v", f)
+	}
+	poll := tmsg(4, 0, "")
+	poll.SetMedia(&tg.MessageMediaGeo{})
+	if g := convert("telegram:7", entity{}, poll, collect(nil, nil)); g.Media != nil || g.Text != "[media]" {
+		t.Fatalf("%+v", g)
+	}
+	loc, ext, err := location(withPhoto(tmsg(1, 0, "")))
+	if err != nil || ext != ".jpg" || loc.(*tg.InputPhotoFileLocation).ThumbSize != "y" {
+		t.Fatalf("largest size: %v %s %v", loc, ext, err)
+	}
+	if _, _, err := location(tmsg(5, 0, "plain")); err == nil {
+		t.Fatal("no media")
+	}
+}
+
+func TestFetchDownloadsOnceIntoPrivateDir(t *testing.T) {
+	f := newFakeAPI()
+	f.file = []byte("JPEGDATA-JPEGDATA")
+	f.msgs[7] = []tg.MessageClass{withPhoto(tmsg(5, 5, ""))}
+	s := newService(f)
+	if _, err := s.Dialogs(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Fetch(context.Background(), "telegram:7", "5"); err == nil {
+		t.Fatal("no downloader configured")
+	}
+	s.files, s.mediaDir = f, filepath.Join(t.TempDir(), "media")
+	path, err := s.Fetch(context.Background(), "telegram:7", "5")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil || string(got) != "JPEGDATA-JPEGDATA" || !strings.HasSuffix(path, "telegram_7-5.jpg") {
+		t.Fatalf("%q %v %s", got, err, path)
+	}
+	st, _ := os.Stat(path)
+	if st.Mode().Perm()&0o077 != 0 {
+		t.Fatal("downloaded file must be owner-only")
+	}
+	if dst, _ := os.Stat(s.mediaDir); dst.Mode().Perm()&0o077 != 0 {
+		t.Fatal("media dir must be private")
+	}
+	n := f.downloads
+	if again, err := s.Fetch(context.Background(), "telegram:7", "5"); err != nil || again != path || f.downloads != n {
+		t.Fatalf("second fetch must use the file: %v %v %d", again, err, f.downloads-n)
+	}
+	if _, err := s.Fetch(context.Background(), "telegram:7", "404"); err == nil {
+		t.Fatal("unknown message")
 	}
 }

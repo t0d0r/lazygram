@@ -59,14 +59,24 @@ type Button struct {
 	URL   string     `json:"url,omitempty"`
 }
 
+// Media is an attachment a provider can fetch to a local file.
+type Media struct {
+	Kind string `json:"kind"`           // "photo", "image" (a file that is an image) or "file"
+	Name string `json:"name,omitempty"` // file name, when the service gives one
+}
+
+// Image reports whether the attachment is a picture a viewer can show.
+func (m *Media) Image() bool { return m != nil && (m.Kind == "photo" || m.Kind == "image") }
+
 // Message is one message in a chat.
 type Message struct {
 	ID      string    `json:"id"` // unique within the chat
 	ChatID  string    `json:"chat_id"`
 	Sender  string    `json:"sender"`
-	Text    string    `json:"text"`
+	Text    string    `json:"text"` // the caption, for a message with Media
 	Time    time.Time `json:"time"`
 	Buttons []Button  `json:"buttons,omitempty"` // numbered from 1 in this order
+	Media   *Media    `json:"media,omitempty"`
 }
 
 // PressAnswer is what a provider reports after a button was pressed.
@@ -124,6 +134,16 @@ func Replace(msgs []Message, m Message) []Message {
 		}
 	}
 	return Merge(msgs, []Message{m})
+}
+
+// LatestWithMedia returns the newest message of chatID with an attachment.
+func LatestWithMedia(msgs []Message, chatID string) (Message, bool) {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].ChatID == chatID && msgs[i].Media != nil {
+			return msgs[i], true
+		}
+	}
+	return Message{}, false
 }
 
 // LatestWithButtons returns the newest message of chatID that has buttons.

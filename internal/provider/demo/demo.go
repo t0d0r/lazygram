@@ -5,6 +5,11 @@ package demo
 import (
 	"context"
 	"fmt"
+	"image"
+	"image/color"
+	"image/png"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -62,6 +67,7 @@ var script = []line{
 	{1, -34 * time.Minute, "ken", "looking into the queue depth alert"},
 	{1, -30 * time.Minute, "ken", "false alarm, a batch job finished late"},
 	{2, -25 * time.Minute, "me", "no problem, ordering for you"},
+	{2, -24 * time.Minute, "linus", "the place looks like this today"},
 	{0, -20 * time.Minute, "ada", "who owns the history pager spec?"},
 	{0, -19 * time.Minute, "alan", "I do, draft is in specs/"},
 	{3, -12 * time.Minute, "wire", "Demo headline: terminal UIs gain search-first pagers"},
@@ -93,6 +99,9 @@ func newAt(now func() time.Time) *Provider {
 		}
 		if l.sender == "demobot" {
 			m.Buttons = append([]domain.Button(nil), botButtons...)
+		}
+		if l.text == "the place looks like this today" {
+			m.Media = &domain.Media{Kind: "photo"}
 		}
 		p.msgs = append(p.msgs, m)
 	}
@@ -176,4 +185,43 @@ func (p *Provider) Press(_ context.Context, chatID, msgID string, b domain.Butto
 		return domain.PressAnswer{Text: "Got it: " + string(b.Data), Updated: &updated}, nil
 	}
 	return domain.PressAnswer{}, fmt.Errorf("demo: no message %s in %s", msgID, chatID)
+}
+
+// Fetch implements provider.Provider: it draws a small PNG into a private
+// temporary directory, so the preview flow works without a service.
+func (p *Provider) Fetch(_ context.Context, chatID, msgID string) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for _, m := range p.msgs {
+		if m.ChatID != chatID || m.ID != msgID {
+			continue
+		}
+		if m.Media == nil {
+			return "", fmt.Errorf("demo: message %s has no attachment", msgID)
+		}
+		dir := filepath.Join(os.TempDir(), "lazygram-demo")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return "", err
+		}
+		path := filepath.Join(dir, msgID+".png")
+		if _, err := os.Stat(path); err == nil {
+			return path, nil
+		}
+		img := image.NewRGBA(image.Rect(0, 0, 160, 100))
+		for y := 0; y < 100; y++ {
+			for x := 0; x < 160; x++ {
+				img.Set(x, y, color.RGBA{uint8(x * 255 / 160), uint8(y * 255 / 100), 160, 255})
+			}
+		}
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+		if err != nil {
+			return "", err
+		}
+		if err := png.Encode(f, img); err != nil {
+			_ = f.Close()
+			return "", err
+		}
+		return path, f.Close()
+	}
+	return "", fmt.Errorf("demo: no message %s in %s", msgID, chatID)
 }

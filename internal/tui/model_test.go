@@ -24,11 +24,20 @@ type fake struct {
 	calls   []string // Recent calls as "chat:limit"
 	sent    []string // Send calls as "chat:text"
 	pressed []string // Press calls as "chat:msg:label"
+	fetched []string // Fetch calls as "chat:msg"
 }
 
 func (f *fake) Send(_ context.Context, chatID, text string) error {
 	f.sent = append(f.sent, chatID+":"+text)
 	return f.err
+}
+
+func (f *fake) Fetch(_ context.Context, chatID, msgID string) (string, error) {
+	f.fetched = append(f.fetched, chatID+":"+msgID)
+	if f.err != nil {
+		return "", f.err
+	}
+	return "/tmp/fake/" + msgID + ".jpg", nil
 }
 
 func (f *fake) Press(_ context.Context, chatID, msgID string, b domain.Button) (domain.PressAnswer, error) {
@@ -886,4 +895,67 @@ func TestMouseClicksOpenWindowsAndLinks(t *testing.T) {
 	// clicks outside any span do nothing
 	click(m, 0, 0)
 	click(m, 99, 999)
+}
+
+func TestOpenFetchesAndOpensImages(t *testing.T) {
+	f := newFake()
+	photo := mk("c1", "20", "ada", "look", 5)
+	photo.Media = &domain.Media{Kind: "photo"}
+	file := mk("c1", "21", "ada", "", 6)
+	file.Media = &domain.Media{Kind: "file", Name: "report.pdf"}
+	f.msgs = append(f.msgs, photo, file)
+	var opened []string
+	st, _ := store.Open(store.Memory, bytes.Repeat([]byte{6}, 32))
+	defer func() { _ = st.Close() }()
+	m := New(Options{Store: st, Provider: f, Open: func(s string) error { opened = append(opened, s); return nil }})
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.Update(m.chatsCmd()())
+	m.Update(m.syncCmd()())
+	v := body(m)
+	if !strings.Contains(v, "[photo] look") || !strings.Contains(v, "[file: report.pdf]") {
+		t.Fatalf("tokens:\n%s", v)
+	}
+	enter(m, "/open")
+	if !m.isErr {
+		t.Fatal("server window")
+	}
+	enter(m, "/win #dev")
+	cmd := enter(m, "/open") // latest with media: the file
+	if cmd == nil {
+		t.Fatal("expected a fetch")
+	}
+	_, next := m.Update(cmd())
+	if f.fetched[0] != "c1:21" || next != nil || !strings.Contains(body(m), "-!- saved /tmp/fake/21.jpg") || len(opened) != 0 {
+		t.Fatalf("file: fetched=%v opened=%v\n%s", f.fetched, opened, body(m))
+	}
+	cmd = enter(m, "/open 20") // the photo: fetched then opened
+	_, next = m.Update(cmd())
+	if next == nil {
+		t.Fatal("images must be opened")
+	}
+	m.Update(next())
+	if len(opened) != 1 || opened[0] != "/tmp/fake/20.jpg" {
+		t.Fatalf("opened=%v", opened)
+	}
+	enter(m, "/open 1") // a message without media
+	if !m.isErr {
+		t.Fatal("no media")
+	}
+	// clicking the token does the same
+	m.View()
+	x, y := find(m, spanMedia, "c1\x0020")
+	if x < 0 {
+		t.Fatal("no media span")
+	}
+	cmd = click(m, x, y)
+	_, next = m.Update(cmd())
+	m.Update(next())
+	if len(opened) != 2 {
+		t.Fatalf("click: opened=%v", opened)
+	}
+	f.err = errors.New("FILE_REFERENCE_EXPIRED")
+	_, next = m.Update(enter(m, "/open 20")())
+	if !m.isErr || !strings.Contains(body(m), "-!- fetch: FILE_REFERENCE_EXPIRED") || next != nil {
+		t.Fatal("fetch errors land in the window")
+	}
 }

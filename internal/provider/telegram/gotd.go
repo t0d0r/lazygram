@@ -92,7 +92,10 @@ func (c *MTProto) run(ctx context.Context) error {
 		if !st.Authorized {
 			return ErrNotLoggedIn
 		}
-		c.svc = newService(floodAPI{api: tg.NewClient(cl), sleep: sleepCtx})
+		raw := tg.NewClient(cl)
+		c.svc = newService(floodAPI{api: raw, sleep: sleepCtx})
+		c.svc.files = raw
+		c.svc.mediaDir = filepath.Join(c.cfg.SessionDir, "media")
 		close(c.ready)
 		<-ctx.Done()
 		return nil
@@ -159,6 +162,16 @@ func (c *MTProto) Press(ctx context.Context, chatID, msgID string, b domain.Butt
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.svc.Press(ctx, chatID, msgID, b)
+}
+
+// Fetch implements Client.
+func (c *MTProto) Fetch(ctx context.Context, chatID, msgID string) (string, error) {
+	if err := c.wait(ctx); err != nil {
+		return "", err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.svc.Fetch(ctx, chatID, msgID)
 }
 
 // Recent implements Client.

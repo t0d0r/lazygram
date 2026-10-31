@@ -168,6 +168,11 @@ func renderRich(msgs []domain.Message, notes []note, o lineOpts) ([]string, [][]
 		}
 		first = append(first, span{nickX, lipgloss.Width(plainPrefix) - 1, spanNick, m.Sender})
 		prefixW := lipgloss.Width(plainPrefix)
+		if m.Media != nil { // the attachment token leads the text and is a click target
+			token := mediaToken(m.Media)
+			first = append(first, span{prefixW, prefixW + lipgloss.Width(token), spanMedia, m.ChatID + "\x00" + m.ID})
+			text = strings.TrimSpace(token + " " + text)
+		}
 		// Continuation lines sit just past the time column, BitchX style,
 		// rather than under the text, so long messages waste no width.
 		indent := strings.Repeat(" ", len(stamp(t))+1)
@@ -206,6 +211,18 @@ func linkSpans(l string, base int, full []string) []span {
 		out = append(out, span{base + lipgloss.Width(l[:loc[0]]), base + lipgloss.Width(l[:loc[1]]), spanURL, target})
 	}
 	return out
+}
+
+// mediaToken is how an attachment shows in the line: "[photo]" or
+// "[file: name]".
+func mediaToken(md *domain.Media) string {
+	switch {
+	case md.Kind == "photo":
+		return "[photo]"
+	case md.Name != "":
+		return "[" + md.Kind + ": " + sanitize(md.Name, false) + "]"
+	}
+	return "[" + md.Kind + "]"
 }
 
 // buttonLine lists a message's buttons as "[1] OK  [2] Docs (link)  (msg 42)"

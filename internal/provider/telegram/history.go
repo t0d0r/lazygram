@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/gotd/td/telegram/downloader"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
 
@@ -41,6 +42,9 @@ type api interface {
 // connected, and older messages come through Recent on demand.
 type service struct {
 	api api
+
+	files    downloader.Client // nil: attachments cannot be fetched
+	mediaDir string            // where fetched attachments go (0700, files 0600)
 
 	known map[string]entity // chat id -> entity, filled by Dialogs
 	top   map[string]int    // chat id -> top message id already fetched
@@ -222,6 +226,17 @@ func (s *service) Press(ctx context.Context, chatID, msgID string, b domain.Butt
 
 // message fetches one message by id as it is now.
 func (s *service) message(ctx context.Context, chatID string, ent entity, id int) (*domain.Message, error) {
+	m, ents, err := s.rawMessage(ctx, ent, id)
+	if err != nil {
+		return nil, err
+	}
+	out := convert(chatID, ent, m, ents)
+	return &out, nil
+}
+
+// rawMessage fetches one message by id in the service's own form, with the
+// users it mentions. It is also how a fresh file reference is obtained.
+func (s *service) rawMessage(ctx context.Context, ent entity, id int) (*tg.Message, entities, error) {
 	ids := []tg.InputMessageClass{&tg.InputMessageID{ID: id}}
 	var res tg.MessagesMessagesClass
 	var err error
@@ -231,17 +246,16 @@ func (s *service) message(ctx context.Context, chatID string, ent entity, id int
 		res, err = s.api.MessagesGetMessages(ctx, ids)
 	}
 	if err != nil {
-		return nil, err
+		return nil, entities{}, err
 	}
 	raw, users := historyParts(res)
 	ents := collect(users, nil)
 	for _, mc := range raw {
 		if m, ok := mc.(*tg.Message); ok && m.ID == id {
-			out := convert(chatID, ent, m, ents)
-			return &out, nil
+			return m, ents, nil
 		}
 	}
-	return nil, errors.New("message not found")
+	return nil, ents, errors.New("message not found")
 }
 
 // buttons flattens a message's inline keyboard (or reply keyboard) into the
@@ -336,8 +350,9 @@ func historyParts(res tg.MessagesMessagesClass) ([]tg.MessageClass, []tg.UserCla
 // convert maps a Telegram message to the domain model.
 func convert(chatID string, chat entity, m *tg.Message, ents entities) domain.Message {
 	text := m.Message
-	if text == "" && m.Media != nil {
-		text = "[media]"
+	media := mediaOf(m)
+	if text == "" && m.Media != nil && media == nil {
+		text = "[media]" // something lazygram cannot fetch: a poll, a location, ...
 	}
 	out := domain.Message{
 		ID:     strconv.Itoa(m.ID),
@@ -349,6 +364,7 @@ func convert(chatID string, chat entity, m *tg.Message, ents entities) domain.Me
 	if mk, ok := m.GetReplyMarkup(); ok {
 		out.Buttons = buttons(mk)
 	}
+	out.Media = media
 	return out
 }
 

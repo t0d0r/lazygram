@@ -100,6 +100,7 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/stats`                   | client statistics                             |
 | `/me <text>`               | send an action line (`* you waves`)           |
 | `/press N`                 | press button N under the latest bot message; `/press <msg> N` for an older one |
+| `/open [msg]`              | fetch a `[photo]`/`[file]`; images open in the system viewer |
 | `/refresh`, `/help`, `/quit` | sync now; print the help into the window; leave |
 
 In a chat window, type text and press **Ctrl-X** to send it to that chat;
@@ -122,7 +123,7 @@ reply-keyboard buttons send their label.
 | Ctrl-X              | send the typed text to this window's chat          |
 | Ctrl-X twice        | toggle "Enter sends" for this window               |
 | Ctrl-C              | quit                                               |
-| mouse               | click chat names, nicks, window tags, list rows and links; wheel scrolls |
+| mouse               | click chat names, nicks, window tags, list rows, links and `[photo]` tokens; wheel scrolls |
 
 ## Development
 
@@ -171,9 +172,9 @@ specs/providers.md.
   or real messages in git, specs, session notes or logs. `.gitignore` blocks
   `.env*`, keys, session files and `.state/`.
 - The state directory holds `telegram/session.json` (account access: treat it
-  like a password), `telegram/app.json` (your application registration) and
-  `telegram/cache.sqlite`, the message cache. Directories are 0700, files
-  0600.
+  like a password), `telegram/app.json` (your application registration),
+  `telegram/cache.sqlite`, the message cache, and `telegram/media/`, the
+  photos and files you fetched. Directories are 0700, files 0600.
 - The cache is encrypted per row with AES-256-GCM; the key is derived from
   the session's auth key, so the cache is unreadable without `session.json`
   and a new login starts a fresh one. Only message ids, timestamps and
