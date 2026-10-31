@@ -51,6 +51,7 @@
 - [x] /send <path> [caption] uploads photos and files; Tab completes paths and /open out, /win list (specs/ui.md)
 - [x] /help and F1 print into the server window and focus it (specs/ui.md)
 - [x] block-face banners (figlet banner3/chunky); start-up windows and the exit banner print line by line (specs/ui.md)
+- [x] exit banner picks one of several faces at random (own pixel font, figlet, wordmark); a window's first history rolls in (specs/ui.md)
 - [x] /edit and /delete for the last own message (specs/ui.md)
 - [x] public application registration shipped in the source for brew builds (specs/providers.md)
 - [x] attachments sealed in the vault; plain copies only while viewing; image names from content type (specs/storage.md)

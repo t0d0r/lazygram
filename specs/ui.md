@@ -28,10 +28,16 @@ completion, and an activity indicator.
   the last frame is the ordinary view and nothing jumps (one line per
   28 ms, several per tick when the scrollback is long so the whole reveal
   takes at most 2 s). Only that first screen rolls in: switching windows
-  shows them at once, and smoke mode shows everything.
-  After the program ends the banner is printed to the terminal the same
-  way (one line per 56 ms), BitchX style, in the same faces (banner3 on
-  76 columns or more, chunky below), with the tagline (`by t0d0r`), the
+  shows them at once, and smoke mode shows everything. A window whose
+  chat had no cached messages rolls in the same way once its first
+  history fetch lands (when it is shown).
+  After the program ends a banner is printed to the terminal the same
+  way (one line per 56 ms), BitchX style, in one of several faces picked
+  at random among those that fit the terminal width: the figlet block
+  face, the word in lazygram's own 5-row pixel font (`internal/logo/
+  pixel.go`: solid `##`, bracketed `[]`, and `##` standing on a `::`
+  shadow), the compact figlet face, or a spaced wordmark over a rule;
+  below 49 columns the compact face regardless. Then the tagline (`by t0d0r`), the
   session statistics (time wasted; messages arrived, sent, buttons
   pressed, files fetched, cached; windows open at exit, opened, chats
   visited, commands run) and, for a release build, a one-line hint when

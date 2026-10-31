@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"lazygram/internal/domain"
+	"lazygram/internal/logo"
 	"lazygram/internal/provider"
 	"lazygram/internal/store"
 )
@@ -821,8 +822,15 @@ func TestStartBannerAndTagline(t *testing.T) {
 	if out := ExitBanner("v9.9.9", 100, "up 1s"); !strings.Contains(out, "lazygram v9.9.9") || !strings.Contains(out, "thanks") || !strings.Contains(out, "up 1s") || strings.Count(out, "\n") < 6 {
 		t.Fatalf("exit banner:\n%s", out)
 	}
-	if wide, narrow := ExitBanner("v1", 120, ""), ExitBanner("v1", 60, ""); wide == narrow || !strings.Contains(wide, "##") {
-		t.Fatal("a narrow terminal gets the small banner")
+	for _, width := range []int{120, 60, 20} {
+		art := ansi.Strip(ExitBanner("v1", width, ""))
+		found := false
+		for _, v := range logo.Variants(width) {
+			found = found || strings.Contains(art, v)
+		}
+		if !found {
+			t.Fatalf("width %d: the exit banner is one of the faces that fit:\n%s", width, art)
+		}
 	}
 	enter(m, "/win 1")
 	enter(m, "/stats")
@@ -1775,5 +1783,31 @@ func TestArrivalStatusNamesTheWindows(t *testing.T) {
 	m.Update(syncedMsg{at: now, fresh: []domain.Message{{ID: "n4", ChatID: "c2", Sender: "alice", Text: "four", Time: now}}})
 	if m.status != "1 new message in 3:@alice" {
 		t.Fatalf("status %q", m.status)
+	}
+}
+
+func TestFirstHistoryOfAWindowRollsIn(t *testing.T) {
+	m := setup(t, newFake())
+	now := time.Now()
+	_, w := m.winFor("c3") // #news: opened for its unread count, no messages yet
+	if w == nil || w.revealing {
+		t.Fatal("window for c3 open and still")
+	}
+	_, cmd := m.Update(recentMsg{chatID: "c3", fresh: []domain.Message{{ID: "h1", ChatID: "c3", Sender: "wire", Text: "old news", Time: now.Add(-time.Hour)}}})
+	if !w.revealing || w.revealed != 0 {
+		t.Fatal("the first fetched history rolls in")
+	}
+	if cmd != nil { // not current: the ticks start when it is shown
+		t.Fatal("no tick for a window that is not shown")
+	}
+	enter(m, "/win #news")
+	if !w.revealing {
+		t.Fatal("still pending when switched to")
+	}
+	m.revealAll()
+	_, w2 := m.winFor("c1") // #dev already has lines: a later fetch appends quietly
+	m.Update(recentMsg{chatID: "c1", fresh: []domain.Message{{ID: "h2", ChatID: "c1", Sender: "ada", Text: "older", Time: now.Add(-2 * time.Hour)}}})
+	if w2.revealing {
+		t.Fatal("a window with content does not roll in again")
 	}
 }

@@ -264,3 +264,12 @@ at the hidden password prompt takes effect only after Enter.
   banner one line per 56 ms.
 - The arrival status names the windows: `N new message(s) in 2:#dev (2),
   3:@alice`, four windows at most, then `+N more`.
+- Exit faces: `internal/logo/pixel.go` draws "lazygram" from a 5-row
+  pixel font of its own (L 3 wide, M 5, others 4) with two characters per
+  pixel, in solid, bracketed and standing-on-a-shadow styles; with the two figlet
+  faces and a spaced wordmark `logo.Random(width)` picks one that fits.
+- A window whose chat had no cached messages rolls in (start-up style)
+  when its first history fetch lands; windows with content never do.
+- Tags v0.4.7 .. v0.4.10 pushed; v0.4.8 released on GitHub, the formula
+  builds from the v0.4.10 source tarball. `make release` for the later
+  tags is refused from the agent session and has to be run by hand.

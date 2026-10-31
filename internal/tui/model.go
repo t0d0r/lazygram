@@ -271,10 +271,10 @@ func Tagline(version string) string {
 }
 
 // ExitBanner is what the terminal shows after lazygram ends, BitchX style:
-// the wide logo when the terminal has room, then the tagline and the
-// session summary.
+// one of the logo faces that fit the terminal, at random, then the
+// tagline and the session summary.
 func ExitBanner(version string, width int, summary string) string {
-	out := strings.Join(Banner(logo.Lines(logo.Pick(width))), "\n") + "\n" + dimStyle.Render(Tagline(version)+" by t0d0r - thanks for using lazygram")
+	out := strings.Join(Banner(logo.Lines(logo.Random(width))), "\n") + "\n" + dimStyle.Render(Tagline(version)+" by t0d0r - thanks for using lazygram")
 	for _, l := range strings.Split(summary, "\n") {
 		if l != "" {
 			out += "\n" + dimStyle.Render("  "+l)
@@ -677,8 +677,12 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 		w.loaded = true
+		empty := w.chatID != "" && len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})) == 0
 		m.absorb(msg.fresh)
 		m.note(w, fmt.Sprintf("fetched %d older message(s)", len(msg.fresh)))
+		if empty && len(msg.fresh) > 0 { // a window's first content prints like at start-up
+			w.revealing, w.revealed = true, 0
+		}
 	case pressedMsg:
 		_, w := m.winFor(msg.chatID)
 		if w == nil {
