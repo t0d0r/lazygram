@@ -254,7 +254,11 @@ and the status line shows `[scrolled up N lines]` in the same colour.
 ## Status line
 
 `time  provider  [N:name]  Act: ...  M msgs  sync state  scrolled up K lines  message  ctrl-x: to send`
-(brackets only around the window tag; two spaces between segments)
+(brackets only around the window tag; two spaces between segments). The
+sync segment keeps a fixed width and colour (`synced  HH:MM:SS` or
+`syncing HH:MM:SS` with the last completion time) and a poll that brings
+nothing changes no status text, so the line does not flicker every ten
+seconds.
 (the last item says how text is sent in a chat window: `ctrl-x` or `enter`).
 Each segment has its own palette colour from the theme (the sync state
 changes colour: syncing, synced, never); the window bar stays in one

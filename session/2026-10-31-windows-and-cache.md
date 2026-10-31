@@ -220,3 +220,5 @@ at the hidden password prompt takes effect only after Enter.
   passed, tap pushed. The GitHub release assets for v0.4.4 and v0.4.5 are
   built in dist/ but not uploaded (upload refused from this session);
   `make release` at the tag publishes them. Brew does not need them.
+- Status bar: fixed-width, fixed-colour sync segment; "nothing new" polls
+  leave the status alone (no ten-second flicker).

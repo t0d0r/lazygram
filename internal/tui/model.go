@@ -573,7 +573,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setErr("sync: " + errText(msg.err))
 			m.note(m.wins[0], "sync: "+errText(msg.err))
 		case len(msg.fresh) == 0:
-			m.setInfo("synced, nothing new")
+			// Nothing to say: a status that pops up every poll only flickers.
 		}
 	case recentMsg:
 		delete(m.loading, msg.chatID)
@@ -954,7 +954,7 @@ func (m *Model) refresh() tea.Cmd {
 		return nil
 	}
 	m.syncing = true
-	m.setInfo("syncing...")
+	m.setInfo("syncing now")
 	return tea.Batch(m.chatsCmd(), m.syncCmd())
 }
 
@@ -1876,12 +1876,14 @@ func seg(text string, i int, bold bool) string {
 }
 
 func (m *Model) statusLine() string {
-	sync, syncColor := "never synced", 6
-	switch {
-	case m.syncing:
-		sync, syncColor = "syncing", 4
-	case !m.lastSync.IsZero():
-		sync, syncColor = "synced "+m.lastSync.Format("15:04:05"), 2
+	// The sync segment keeps its width and colour across polls, so the
+	// rest of the line does not jump every ten seconds.
+	sync, syncColor := "never synced    ", 6
+	if !m.lastSync.IsZero() {
+		sync, syncColor = "synced  "+m.lastSync.Format("15:04:05"), 2
+		if m.syncing {
+			sync = "syncing " + m.lastSync.Format("15:04:05")
+		}
 	}
 	w := m.wins[m.cur]
 	gap := infoStyle.Render("  ")
