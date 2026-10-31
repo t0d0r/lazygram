@@ -646,10 +646,10 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 		if md.Image() && imageFile(path) {
-			m.note(w, "opening "+path+" (plain copy, removed on exit; the vault keeps it encrypted)")
+			m.note(w, "opening "+filepath.Base(path)+" in the viewer (temporary copy; kept encrypted in the vault)")
 			return m, m.openCmd(path)
 		}
-		m.note(w, "decrypted to "+path+" until exit; kept encrypted in the vault")
+		m.note(w, "decrypted to "+path+" (until exit; kept encrypted in the vault)")
 		m.setInfo("decrypted to " + path)
 	case sendLaterMsg:
 		if p := m.pending; p != nil && p.seq == msg.seq {
