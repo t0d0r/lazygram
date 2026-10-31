@@ -1261,7 +1261,7 @@ func TestScrolledUpIndicator(t *testing.T) {
 	m.View()
 	press(m, tea.KeyPgUp)
 	v := m.View()
-	if !strings.Contains(v, "more line(s) below") || !strings.Contains(v, "scrolled up") {
+	if !strings.Contains(v, fmt.Sprintf("vvv %d more vvv", m.wins[m.cur].scroll)) || !strings.Contains(v, "scrolled up") {
 		t.Fatalf("indicator missing:\n%s", v)
 	}
 	x, y := find(m, spanEnd, "")
@@ -1269,7 +1269,7 @@ func TestScrolledUpIndicator(t *testing.T) {
 		t.Fatal("the marker must be clickable")
 	}
 	click(m, x, y)
-	if m.wins[m.cur].scroll != 0 || strings.Contains(m.View(), "more line(s) below") {
+	if m.wins[m.cur].scroll != 0 || strings.Contains(m.View(), "more vvv") {
 		t.Fatal("a click jumps to the newest line")
 	}
 }

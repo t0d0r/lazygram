@@ -1761,10 +1761,11 @@ func (m *Model) View() string {
 		m.lastLines = len(lines)
 		body, w.scroll = window(lines, h, w.scroll)
 		bodySpans, _ = window(sp, h, w.scroll)
-		if w.scroll > 0 && h > 1 { // not at the bottom: say so where the eye is
-			marker := fmt.Sprintf("vvv %d more line(s) below - End or a click here jumps to the newest vvv", w.scroll)
-			body[h-1] = actStyle.Render(fitLine(marker, m.width))
-			bodySpans[h-1] = []span{{0, m.width, spanEnd, ""}}
+		if w.scroll > 0 && h > 1 { // not at the bottom: a short centred marker
+			marker := fmt.Sprintf("vvv %d more vvv", w.scroll)
+			pad := max((m.width-lipgloss.Width(marker))/2, 0)
+			body[h-1] = actStyle.Render(fitLine(strings.Repeat(" ", pad)+marker, m.width))
+			bodySpans[h-1] = []span{{pad, pad + lipgloss.Width(marker), spanEnd, ""}}
 		}
 		topic = m.topic()
 		prompt = "[" + m.winName(m.cur) + "] "

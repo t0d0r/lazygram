@@ -247,8 +247,8 @@ window as a notice. There is no cycling.
 
 Scroll is lines above the bottom, per window. At 0 the window follows new
 messages. When scrolled back, arriving messages keep the view anchored,
-the last content row becomes a marker in the activity colour (`vvv N more
-line(s) below - End or a click here jumps to the newest vvv`, clickable)
+the last content row shows a short centred marker in the activity colour
+(`vvv N more vvv`; a click on it, or End, jumps to the newest line)
 and the status line shows `[scrolled up N lines]` in the same colour.
 
 ## Status line
