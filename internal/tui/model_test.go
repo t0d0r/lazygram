@@ -574,3 +574,37 @@ func TestEscThenDigitSwitchesWindows(t *testing.T) {
 		t.Fatal("no window 9")
 	}
 }
+
+func TestWindowLayoutSurvivesRestart(t *testing.T) {
+	st, err := store.Open(store.Memory, bytes.Repeat([]byte{3}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+	f := newFake()
+	m := New(Options{Store: st, Provider: f})
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	m.Update(m.chatsCmd()())
+	m.Update(m.syncCmd()()) // opens #news, #dev, @alice
+	enter(m, "/close 3")    // #dev
+	enter(m, "/win @alice")
+	if len(m.wins) != 3 || m.cur != 2 {
+		t.Fatalf("wins=%d cur=%d", len(m.wins), m.cur)
+	}
+
+	again := New(Options{Store: st, Provider: f})
+	if len(again.wins) != 3 || again.wins[1].chatID != "c3" || again.wins[2].chatID != "c2" || again.cur != 2 {
+		t.Fatalf("restored wins=%d cur=%d", len(again.wins), again.cur)
+	}
+	if n := again.wins[0].notes; len(n) == 0 || !strings.Contains(n[len(n)-1].text, "2 windows reopened") {
+		t.Fatal("restore notice in the server window")
+	}
+	again.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	if cmd := again.Init(); cmd == nil {
+		t.Fatal("Init should fetch the restored current window")
+	}
+	again.Update(again.chatsCmd()()) // unread #news already has a window: no duplicate
+	if len(again.wins) != 3 {
+		t.Fatalf("duplicate windows after chats load: %d", len(again.wins))
+	}
+}

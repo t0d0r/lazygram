@@ -77,3 +77,7 @@ typed; sync budget 90s so a FLOOD_WAIT retry fits; unusable session files
 get a recovery hint; "no environment variables" wording corrected; login
 registration resolution extracted and tested. Known and documented: Ctrl-C
 at the hidden password prompt takes effect only after Enter.
+- Window bar `[N:name]` above the input; Esc then a digit switches windows
+  (input restored). The window layout (open windows, current) is stored
+  sealed in the cache (`Store.SetState`) on every change and restored at
+  start.

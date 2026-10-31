@@ -63,7 +63,8 @@ client.
 `Open(path, secret)`, `Add(msgs) (fresh, err)` (insert-or-ignore by chat
 and id), `Messages(chatID, limit)` (newest limit, oldest first; empty chat
 id means all; limit <= 0 means all), `Count`, `Latest`, `Chats`,
-`SetChats` (replaces the list, keeping order), `Close`.
+`SetChats` (replaces the list, keeping order), `SetState`/`State` (small
+sealed JSON documents such as the window layout, in `meta`), `Close`.
 
 ## Limits
 

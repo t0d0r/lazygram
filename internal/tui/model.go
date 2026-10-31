@@ -38,8 +38,9 @@ const (
 )
 
 const (
-	defaultBacklog = 2000 // cached messages loaded at start
-	recentOnOpen   = 10   // messages fetched when a chat window first opens
+	layoutKey      = "windows" // store state key for the window layout
+	defaultBacklog = 2000      // cached messages loaded at start
+	recentOnOpen   = 10        // messages fetched when a chat window first opens
 	maxRecent      = 100
 	maxNotes       = 500
 )
@@ -126,17 +127,54 @@ func New(opt Options) *Model {
 	m.chats, _ = opt.Store.Chats()
 	m.msgs, _ = opt.Store.Messages("", opt.Backlog)
 	m.note(m.wins[0], "lazygram started; /help lists commands, /list the chats")
+	m.restoreLayout()
 	return m
 }
 
-// Init starts the first chat fetch, sync, and poll timer.
+// Init starts the first chat fetch, sync, and poll timer, and loads the
+// restored current window.
 func (m *Model) Init() tea.Cmd {
 	m.syncing = true
 	cmds := []tea.Cmd{m.chatsCmd(), m.syncCmd()}
 	if m.opt.Poll > 0 {
 		cmds = append(cmds, m.tickCmd())
 	}
+	if m.cur > 0 {
+		cmds = append(cmds, m.switchTo(m.cur))
+	}
 	return tea.Batch(cmds...)
+}
+
+// layout is what survives a restart: the open windows and the current one.
+type layout struct {
+	Windows []string `json:"windows"` // chat ids of windows 2..N
+	Current int      `json:"current"`
+}
+
+func (m *Model) saveLayout() {
+	l := layout{Current: m.cur}
+	for _, w := range m.wins[1:] {
+		l.Windows = append(l.Windows, w.chatID)
+	}
+	if err := m.opt.Store.SetState(layoutKey, l); err != nil {
+		m.setErr("layout not saved: " + err.Error())
+	}
+}
+
+func (m *Model) restoreLayout() {
+	var l layout
+	if found, err := m.opt.Store.State(layoutKey, &l); !found || err != nil {
+		return
+	}
+	for _, id := range l.Windows {
+		if _, w := m.winFor(id); id != "" && w == nil {
+			m.wins = append(m.wins, &win{chatID: id})
+		}
+	}
+	m.cur = min(max(l.Current, 0), len(m.wins)-1)
+	if n := len(m.wins) - 1; n > 0 {
+		m.note(m.wins[0], fmt.Sprintf("%d windows reopened from the last session", n))
+	}
 }
 
 func (m *Model) tickCmd() tea.Cmd {
@@ -365,13 +403,18 @@ func (m *Model) openWin(chatID string) (int, *win) {
 	m.wins = append(m.wins, w)
 	i := len(m.wins) - 1
 	m.note(m.wins[0], fmt.Sprintf("window %d opened for %s", i+1, m.nameOf(chatID)))
+	m.saveLayout()
 	return i, w
 }
 
 // switchTo makes window i current and fetches its recent history once.
 func (m *Model) switchTo(i int) tea.Cmd {
 	i = min(max(i, 0), len(m.wins)-1)
-	m.cur, m.mode = i, modeWin
+	if i != m.cur {
+		m.cur = i
+		m.saveLayout()
+	}
+	m.mode = modeWin
 	w := m.wins[i]
 	w.unread = 0
 	m.setInfo("window " + strconv.Itoa(i+1) + ": " + m.winName(i))
@@ -401,6 +444,7 @@ func (m *Model) closeWin(i int) {
 	}
 	m.note(m.wins[0], "window closed: "+name)
 	m.setInfo("closed " + name)
+	m.saveLayout()
 }
 
 func (m *Model) refresh() tea.Cmd {

@@ -22,7 +22,12 @@ completion, and an activity indicator.
   service (`-!- fetching the last 10 messages`, then
   `-!- fetched N older message(s)`); `/last N` fetches more, up to 100.
 - The status line shows `[Act: 2,3]`: the windows with unread messages.
-- Window state (list, unread, scroll) lives for the session only.
+- The layout (which windows are open, in order, and which is current) is
+  saved in the encrypted cache whenever a window opens, closes or becomes
+  current, and restored at start (`-!- N windows reopened from the last
+  session`); the restored current window fetches its recent messages as on
+  any first show. Unread counts and scroll positions are not kept; unread
+  comes from the service again.
 
 ## Names
 

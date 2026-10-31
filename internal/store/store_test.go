@@ -160,3 +160,32 @@ func TestMemoryStore(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestStateRoundTripIsSealed(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cache.sqlite")
+	s := mustOpen(t, path, secret)
+	type layout struct {
+		Windows []string
+		Current int
+	}
+	var got layout
+	if found, err := s.State("windows", &got); found || err != nil {
+		t.Fatalf("absent: %v %v", found, err)
+	}
+	want := layout{Windows: []string{"telegram:4242", "telegram:7"}, Current: 2}
+	if err := s.SetState("windows", want); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	r := mustOpen(t, path, secret)
+	found, err := r.State("windows", &got)
+	if err != nil || !found || len(got.Windows) != 2 || got.Windows[0] != "telegram:4242" || got.Current != 2 {
+		t.Fatalf("%+v %v %v", got, found, err)
+	}
+	raw, _ := os.ReadFile(path)
+	if bytes.Contains(raw, []byte("4242")) || bytes.Contains(raw, []byte("telegram")) {
+		t.Fatal("state must not be readable in the file")
+	}
+}

@@ -292,6 +292,34 @@ func (s *Store) Latest() (time.Time, error) {
 	return time.Unix(0, ns.Int64).UTC(), nil
 }
 
+// SetState stores a small JSON document (for example the window layout)
+// under key, encrypted like everything else.
+func (s *Store) SetState(key string, v any) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	plain, err := json.Marshal(v)
+	if err != nil {
+		return err
+	}
+	return s.setMeta("state:"+key, s.seal(plain, []byte("state:"+key)))
+}
+
+// State loads a document stored with SetState. found is false when there
+// is none.
+func (s *Store) State(key string, v any) (found bool, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	blob, err := s.meta("state:" + key)
+	if err != nil || blob == nil {
+		return false, err
+	}
+	plain, err := s.open(blob, []byte("state:"+key))
+	if err != nil {
+		return true, fmt.Errorf("store: state %s: %w", key, err)
+	}
+	return true, json.Unmarshal(plain, v)
+}
+
 // Chats returns the stored chat list in its stored order.
 func (s *Store) Chats() ([]domain.Chat, error) {
 	s.mu.Lock()

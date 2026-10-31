@@ -51,7 +51,8 @@ one; delete `<state>/telegram/app.json` to switch. Never commit these values:
 
 It works like BitchX/irssi. Window 1 is the server window: every chat
 interleaved by time as `HH:MM #chat <sender> text`, plus `-!-` notices. A
-window bar above the input lists every window as `[N:name]`.
+window bar above the input lists every window as `[N:name]`. Open windows
+and the current one are remembered across restarts.
 When a chat gets a message (or has unread messages at start) a window opens
 for it; the status line shows `[Act: 2,3]` for windows with unread. People
 are `@name`, groups and channels are `#name`. lazygram shows what arrives

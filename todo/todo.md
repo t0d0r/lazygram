@@ -26,7 +26,6 @@
 - [ ] reconnect after a dropped connection
 - [ ] dialogs beyond the 100 most recent; per-chat include/exclude list
 - [ ] persist the per-chat cursor so a restart shows what arrived meanwhile
-- [ ] remember open windows across restarts
 - [ ] cache size cap or compaction (specs/storage.md)
 - [ ] `lazygram logout` (delete session file)
 
@@ -39,6 +38,7 @@
 - [x] encrypted SQLite cache keyed from the session auth key (specs/storage.md)
 - [x] centred-cursor list scrolling; selectable /win list; Ctrl-X sends; /help prints in-window (specs/ui.md)
 - [x] /stats, /whois, /me; compact wrapping past the time column (specs/ui.md)
+- [x] window bar, Esc+digit, window layout kept across restarts (specs/ui.md)
 
 ## Next
 
