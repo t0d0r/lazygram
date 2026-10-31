@@ -836,7 +836,7 @@ func (m *Model) listItems() []domain.Chat {
 	return out
 }
 
-func (m *Model) contentHeight() int { return max(m.height-3, 1) }
+func (m *Model) contentHeight() int { return max(m.height-4, 1) }
 
 func (m *Model) nameWidth() int {
 	w := 4
@@ -909,6 +909,8 @@ func (m *Model) View() string {
 		b.WriteByte('\n')
 	}
 	b.WriteString(m.statusLine())
+	b.WriteByte('\n')
+	b.WriteString(m.windowBar())
 	b.WriteByte('\n')
 	b.WriteString(m.inputLine(prompt))
 	return b.String()
@@ -1014,6 +1016,25 @@ func (m *Model) statusLine() string {
 		text += st.Render(m.status)
 	}
 	return lipgloss.NewStyle().Background(lipgloss.Color("236")).Render(fitLine(text, m.width))
+}
+
+// windowBar lists every window as [N:name]; the current one is
+// highlighted and windows with unread messages stand out.
+func (m *Model) windowBar() string {
+	var b strings.Builder
+	for i, w := range m.wins {
+		tag := fmt.Sprintf("[%d:%s]", i+1, m.winName(i))
+		switch {
+		case i == m.cur:
+			b.WriteString(hiStyle.Render(tag))
+		case w.unread > 0:
+			b.WriteString(actStyle.Render(tag))
+		default:
+			b.WriteString(infoStyle.Render(tag))
+		}
+		b.WriteString(infoStyle.Render(" "))
+	}
+	return lipgloss.NewStyle().Background(lipgloss.Color("236")).Render(fitLine(" "+b.String(), m.width))
 }
 
 func (m *Model) inputLine(prompt string) string {

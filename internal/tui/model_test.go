@@ -234,10 +234,17 @@ func TestTabCompletesNamesAndCommands(t *testing.T) {
 	}
 }
 
+// body returns the content rows of the screen: no topic, status, window
+// bar or input line.
+func body(m *Model) string {
+	lines := strings.Split(m.View(), "\n")
+	return strings.Join(lines[1:len(lines)-3], "\n")
+}
+
 func TestListIsSelectableAndHidesDeleted(t *testing.T) {
 	m := setup(t, newFake())
 	enter(m, "/list")
-	v := m.View()
+	v := body(m)
 	for _, want := range []string{"@alice", "#dev", "#news", "4 unread"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("list lacks %q:\n%s", want, v)
@@ -252,12 +259,12 @@ func TestListIsSelectableAndHidesDeleted(t *testing.T) {
 		t.Fatalf("Enter should open the selected chat: mode=%v name=%s", m.mode, m.winName(m.cur))
 	}
 	enter(m, "/list --show-deleted")
-	if !strings.Contains(m.View(), "(deleted)") {
+	if !strings.Contains(body(m), "(deleted)") {
 		t.Fatal("--show-deleted")
 	}
 	press(m, tea.KeyEsc)
 	enter(m, "/list ali")
-	if v := m.View(); strings.Contains(v, "#dev") || !strings.Contains(v, "@alice") {
+	if v := body(m); strings.Contains(v, "#dev") || !strings.Contains(v, "@alice") {
 		t.Fatalf("filtered list:\n%s", v)
 	}
 }
@@ -525,5 +532,19 @@ func TestListEnterPicksTheFilteredSelection(t *testing.T) {
 	press(m, tea.KeyEnter)
 	if m.winName(m.cur) != "#news" {
 		t.Fatalf("picked %s", m.winName(m.cur))
+	}
+}
+
+func TestWindowBarListsEveryWindow(t *testing.T) {
+	m := setup(t, newFake())
+	v := m.View()
+	for _, want := range []string{"[1:server]", "[2:#news]", "[3:#dev]", "[4:@alice]"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("window bar lacks %q:\n%s", want, v)
+		}
+	}
+	lines := strings.Split(v, "\n")
+	if len(lines) != 20 || !strings.Contains(lines[18], "[1:server]") {
+		t.Fatalf("bar must be the line above the input: %d lines", len(lines))
 	}
 }

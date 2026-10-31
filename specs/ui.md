@@ -1,6 +1,8 @@
 # UI
 
-Layout, top to bottom: topic bar, content, status line, input line. The
+Layout, top to bottom: topic bar, content, status line, window bar, input
+line. The window bar lists every window as `[N:name]`; the current window
+is highlighted and windows with unread messages stand out. The
 model is BitchX/irssi: virtual windows, a slash-command input line, Tab
 completion, and an activity indicator.
 
