@@ -105,3 +105,6 @@ at the hidden password prompt takes effect only after Enter.
   `git push origin v0.3.0`, `make release`, fill the formula's sha256 from
   the tag's source tarball, `brew install --build-from-source
   t0d0r/tap/lazygram`, `brew test lazygram`, push the tap.
+- Figlet banners (`internal/logo`, generated with figlet slant/smslant,
+  ASCII only): start banner as a raw note at the top of the server window
+  with a version tagline; exit banner printed after the alt screen closes.

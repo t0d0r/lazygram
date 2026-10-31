@@ -32,9 +32,24 @@ var (
 )
 
 // note is a client-side line in a window: "-!- connected", /list output, ...
+// A raw note is shown as it is, without time stamp or marker: the banner.
 type note struct {
 	at   time.Time
 	text string
+	raw  bool
+}
+
+// gradient colours banner lines from top to bottom.
+var gradient = []lipgloss.Color{"81", "75", "69", "99", "135", "171", "207"}
+
+// Banner colours figlet lines with the gradient; used for the start banner
+// in the server window and for the exit banner on the terminal.
+func Banner(lines []string) []string {
+	out := make([]string, 0, len(lines))
+	for i, l := range lines {
+		out = append(out, lipgloss.NewStyle().Foreground(gradient[i%len(gradient)]).Bold(true).Render(l))
+	}
+	return out
 }
 
 // lineOpts controls how messages become terminal lines.
@@ -68,6 +83,11 @@ func renderLines(msgs []domain.Message, notes []note, o lineOpts) []string {
 	i, j := 0, 0
 	for i < len(msgs) || j < len(notes) {
 		if j < len(notes) && (i >= len(msgs) || !notes[j].at.After(msgs[i].Time)) {
+			if notes[j].raw {
+				out = append(out, Banner(strings.Split(sanitize(notes[j].text, true), "\n"))...)
+				j++
+				continue
+			}
 			t := notes[j].at.Local()
 			day(t)
 			prefix := stamp(t) + " "

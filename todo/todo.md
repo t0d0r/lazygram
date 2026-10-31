@@ -45,6 +45,7 @@
 - [x] LICENSE (BSD-2-Clause), git-describe version, make dist/release (specs/release.md)
 - [x] lazygram update: brew or binary, SHA256SUMS-checked (specs/release.md)
 - [~] GitHub repository, v0.3.0 release, Homebrew formula in t0d0r/homebrew-tap (tag, dist and formula prepared; publish pending)
+- [x] figlet banners at start and exit (specs/ui.md)
 - [ ] bot inline buttons: render under the message, /press to answer callbacks
 
 ## Next

@@ -18,6 +18,7 @@ import (
 
 	"lazygram/internal/command"
 	"lazygram/internal/domain"
+	"lazygram/internal/logo"
 	"lazygram/internal/provider"
 	"lazygram/internal/store"
 )
@@ -51,6 +52,7 @@ type Options struct {
 	Provider provider.Provider
 	Poll     time.Duration // background sync interval; zero disables
 	Backlog  int           // cached messages loaded at start; zero means defaultBacklog
+	Version  string        // shown in the start banner
 }
 
 // win is one virtual window. wins[0] is the server window (chatID empty).
@@ -126,9 +128,27 @@ func New(opt Options) *Model {
 		wins: []*win{{}}, status: "type /help for commands", started: time.Now()}
 	m.chats, _ = opt.Store.Chats()
 	m.msgs, _ = opt.Store.Messages("", opt.Backlog)
-	m.note(m.wins[0], "lazygram started; /help lists commands, /list the chats")
+	// The banner has the zero time so it stays above everything, however old
+	// the cached messages are.
+	m.wins[0].notes = append(m.wins[0].notes, note{text: logo.Start, raw: true})
+	m.note(m.wins[0], Tagline(opt.Version))
+	m.note(m.wins[0], "/help lists commands, /list the chats")
 	m.restoreLayout()
 	return m
+}
+
+// Tagline is the one-line description under the banners.
+func Tagline(version string) string {
+	if version == "" {
+		version = "dev"
+	}
+	return "lazygram " + version + " - IRC-style Telegram client"
+}
+
+// ExitBanner is what the terminal shows after lazygram ends, BitchX style.
+func ExitBanner(version string) string {
+	lines := Banner(logo.Lines(logo.Exit))
+	return strings.Join(lines, "\n") + "\n" + dimStyle.Render(Tagline(version)+" - bye") + "\n"
 }
 
 // Init starts the first chat fetch, sync, and poll timer, and loads the

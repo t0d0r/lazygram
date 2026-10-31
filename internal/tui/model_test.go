@@ -375,12 +375,12 @@ func TestScrollAnchorsWhenNewMessagesArrive(t *testing.T) {
 func TestSnapshot(t *testing.T) {
 	st, _ := store.Open(store.Memory, bytes.Repeat([]byte{2}, 32))
 	defer func() { _ = st.Close() }()
-	out := Snapshot(Options{Store: st, Provider: newFake()}, 80, 12)
+	out := Snapshot(Options{Store: st, Provider: newFake()}, 80, 24)
 	if !strings.Contains(out, "hi there") {
 		t.Fatal(out)
 	}
-	if n := strings.Count(out, "\n"); n != 11 {
-		t.Fatalf("screen should be 12 rows, got %d newlines", n)
+	if n := strings.Count(out, "\n"); n != 23 {
+		t.Fatalf("screen should be 24 rows, got %d newlines", n)
 	}
 }
 
@@ -606,5 +606,42 @@ func TestWindowLayoutSurvivesRestart(t *testing.T) {
 	again.Update(again.chatsCmd()()) // unread #news already has a window: no duplicate
 	if len(again.wins) != 3 {
 		t.Fatalf("duplicate windows after chats load: %d", len(again.wins))
+	}
+}
+
+func TestStartBannerAndTagline(t *testing.T) {
+	st, _ := store.Open(store.Memory, bytes.Repeat([]byte{4}, 32))
+	defer func() { _ = st.Close() }()
+	f := newFake()
+	m := New(Options{Store: st, Provider: f, Version: "v9.9.9"})
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.Update(m.syncCmd()()) // hour-old messages must still come after the banner
+	press(m, tea.KeyHome)
+	v := m.View()
+	for _, want := range []string{"/_/\\__,_/", "-!- lazygram v9.9.9"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("banner lacks %q:\n%s", want, v)
+		}
+	}
+	first := -1
+	for i, l := range strings.Split(v, "\n") {
+		if strings.Contains(l, "/ /___") {
+			first = i
+			if strings.Contains(l, "-!-") {
+				t.Fatalf("banner line carries the notice marker: %q", l)
+			}
+		}
+	}
+	if first < 1 {
+		t.Fatal("banner line not found")
+	}
+	if a, b := strings.Index(v, "/_/\\__,_/"), strings.Index(v, "first dev line"); a < 0 || b < 0 || a > b {
+		t.Fatal("banner must precede the messages")
+	}
+	if out := ExitBanner("v9.9.9"); !strings.Contains(out, "lazygram v9.9.9") || !strings.Contains(out, "bye") || strings.Count(out, "\n") < 4 {
+		t.Fatalf("exit banner:\n%s", out)
+	}
+	if Tagline("") != Tagline("dev") {
+		t.Fatal("empty version reads dev")
 	}
 }

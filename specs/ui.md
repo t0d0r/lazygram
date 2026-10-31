@@ -10,7 +10,10 @@ completion, and an activity indicator.
 
 - Window 1 is the server window: every chat interleaved by time, plus
   client notices (`-!-`): start-up, chat counts, windows opened or closed,
-  sync errors, `/win` output.
+  sync errors, `/win` output. It opens with a figlet banner (font slant,
+  plain ASCII, coloured top to bottom) and a tagline with the version;
+  after the program ends a smaller banner (font smslant) is printed to the
+  terminal, BitchX style. Not in smoke mode.
 - A window opens for a chat when a message arrives for it and no window
   exists, and at start for every chat the service reports as unread
   (deleted accounts never open windows). `/win @user`, `/win #chan` and

@@ -262,13 +262,16 @@ func runTUI(o options, prov provider.Provider, st *store.Store, poll time.Durati
 		defer func() { _ = c.Close() }()
 	}
 	defer func() { _ = st.Close() }()
-	opt := tui.Options{Store: st, Provider: prov, Poll: poll}
+	opt := tui.Options{Store: st, Provider: prov, Poll: poll, Version: version}
 	if o.smoke || !isTerminal(os.Stdout) || !isTerminal(os.Stdin) {
 		fmt.Print(tui.Snapshot(opt, 100, 24))
 		fmt.Println()
 		return nil
 	}
 	_, err := tea.NewProgram(tui.New(opt), tea.WithAltScreen()).Run()
+	if err == nil {
+		fmt.Print(tui.ExitBanner(version))
+	}
 	return err
 }
 

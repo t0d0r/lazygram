@@ -76,7 +76,8 @@ one; delete `<state>/telegram/app.json` to switch. Never commit these values:
 
 ## Using it
 
-It works like BitchX/irssi. Window 1 is the server window: every chat
+It works like BitchX/irssi, down to the figlet banner at start and exit.
+Window 1 is the server window: every chat
 interleaved by time as `HH:MM #chat <sender> text`, plus `-!-` notices. A
 window bar above the input lists every window as `[N:name]`. Open windows
 and the current one are remembered across restarts.
