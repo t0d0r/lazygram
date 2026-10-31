@@ -81,3 +81,4 @@
 - [ ] cmd/lazygram tests for provider selection
 - [ ] gitleaks pre-commit hook
 - [x] CI: Linux and macOS workflows with README badges (specs/ci.md)
+- [x] input cursor: Left/Right, Ctrl-A/E, Delete, Ctrl-K, Ctrl-W before the cursor; completion at the cursor (specs/ui.md)

@@ -309,3 +309,7 @@ at the hidden password prompt takes effect only after Enter.
   stopan-cli bump before the push).
 - Open: the stray GitHub release and tag `v0.4.11-1-gd0bdc3f` still
   need deleting by hand.
+- Input cursor: `curBack` (runes right of the cursor, 0 = end, so direct
+  assignments keep the cursor at the end); Left/Right, Ctrl-A/E, Delete,
+  Ctrl-K, Ctrl-W before the cursor; completion works on the text before
+  the cursor and re-attaches the rest; the input row scrolls to the cursor.

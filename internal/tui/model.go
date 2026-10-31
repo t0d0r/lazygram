@@ -97,8 +97,9 @@ type Model struct {
 	cur  int
 	mode mode
 
-	input []rune
-	comp  *completion
+	input   []rune
+	curBack int // runes to the right of the cursor; 0 puts it at the end
+	comp    *completion
 
 	history  []string // lines entered: commands and sent text, oldest first
 	histIdx  int      // position while walking the history; len(history) is the new line
@@ -1152,7 +1153,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case digit && (k.Alt || escPending):
 		if escPending {
-			m.input = m.escSaved // the Esc was a prefix, not a clear
+			m.input, m.curBack = m.escSaved, 0 // the Esc was a prefix, not a clear
 		}
 		n := int(k.Runes[0] - '0') // 0 is the server window
 		if n < len(m.wins) {
@@ -1169,10 +1170,10 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEsc:
 		m.escPending, m.escSaved = true, nil
 		if m.mode != modeWin { // the input held a filter or search, not a draft
-			m.mode, m.input = modeWin, nil
+			m.mode, m.input, m.curBack = modeWin, nil, 0
 		} else {
 			m.escSaved = append([]rune(nil), m.input...)
-			m.input = nil
+			m.input, m.curBack = nil, 0
 		}
 	case tea.KeyEnter:
 		return m.enter()
@@ -1183,7 +1184,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.mode == modeWin && w.chatID != "" && now.Sub(m.lastCtrlX) < doubleCtrlX {
 			m.lastCtrlX = time.Time{}
 			if m.pending != nil {
-				m.input = []rune(m.pending.text)
+				m.input, m.curBack = []rune(m.pending.text), 0
 				m.pending = nil
 			}
 			if n := len(m.input); n > 0 && m.input[n-1] == '\n' { // the first press added a line
@@ -1200,7 +1201,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		m.lastCtrlX = now
 		if w.enterSends && w.chatID != "" && m.mode == modeWin && strings.TrimSpace(string(m.input)) != "" {
-			m.input = append(m.input, '\n') // Enter sends: Ctrl-X adds a line instead
+			m.insert('\n') // Enter sends: Ctrl-X adds a line instead
 			m.setInfo("line added; Enter sends the message")
 			return m, nil
 		}
@@ -1214,19 +1215,37 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.mode == modeWin && len(m.input) == 0 {
 			return m, m.switchTo((m.cur + len(m.wins) - 1) % len(m.wins))
 		}
-	case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
-		if len(m.input) > 0 {
-			m.input = m.input[:len(m.input)-1]
-		}
-	case tea.KeyCtrlU:
-		m.input = nil
-	case tea.KeyCtrlW:
-		s := strings.TrimRight(string(m.input), " ")
-		if i := strings.LastIndex(s, " "); i >= 0 {
-			m.input = []rune(s[:i+1])
+	case tea.KeyBackspace, tea.KeyCtrlH:
+		m.cut(m.pos()-1, m.pos())
+	case tea.KeyDelete:
+		// Forward delete; at the end of the line it acts as Backspace,
+		// because some terminals send this code for the Backspace key.
+		if m.curBack == 0 {
+			m.cut(m.pos()-1, m.pos())
 		} else {
-			m.input = nil
+			m.cut(m.pos(), m.pos()+1)
 		}
+	case tea.KeyLeft:
+		m.curBack = min(m.curBack+1, len(m.input))
+	case tea.KeyRight:
+		m.curBack = max(m.curBack-1, 0)
+	case tea.KeyCtrlA:
+		m.curBack = len(m.input)
+	case tea.KeyCtrlE:
+		m.curBack = 0
+	case tea.KeyCtrlU:
+		m.input, m.curBack = nil, 0
+	case tea.KeyCtrlK:
+		m.cut(m.pos(), len(m.input))
+	case tea.KeyCtrlW: // the word before the cursor, with the spaces after it
+		p, i := m.pos(), m.pos()
+		for i > 0 && m.input[i-1] == ' ' {
+			i--
+		}
+		for i > 0 && m.input[i-1] != ' ' {
+			i--
+		}
+		m.cut(i, p)
 	case tea.KeyPgUp:
 		w.scroll += page
 	case tea.KeyPgDown:
@@ -1258,11 +1277,11 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyF1:
 		return m, m.help()
 	case tea.KeySpace:
-		m.input = append(m.input, ' ')
+		m.insert(' ')
 	case tea.KeyRunes:
 		for _, r := range k.Runes {
 			if r >= ' ' && r != 0x7f {
-				m.input = append(m.input, r)
+				m.insert(r)
 			}
 		}
 		m.histIdx = len(m.history) // typing leaves the history walk
@@ -1305,7 +1324,7 @@ func (m *Model) send() (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	m.input = nil
+	m.input, m.curBack = nil, 0
 	m.remember(text)
 	m.setInfo("sending to " + m.nameOf(chatID) + "...")
 	return m, m.sendCmd(chatID, text)
@@ -1318,7 +1337,7 @@ func (m *Model) holdSend() (tea.Model, tea.Cmd) {
 	if !ok {
 		return m, nil
 	}
-	m.input = nil
+	m.input, m.curBack = nil, 0
 	m.pendingSeq++
 	m.pending = &pendingSend{chatID: chatID, text: text, seq: m.pendingSeq}
 	m.setInfo("sending to " + m.nameOf(chatID) + "... (Ctrl-X again to keep the text and toggle)")
@@ -1359,22 +1378,22 @@ func (m *Model) historyStep(d int) {
 		return
 	case i >= len(m.history):
 		m.histIdx = len(m.history)
-		m.input = append([]rune(nil), m.histSave...)
+		m.input, m.curBack = append([]rune(nil), m.histSave...), 0
 		return
 	}
 	m.histIdx = i
-	m.input = []rune(m.history[i])
+	m.input, m.curBack = []rune(m.history[i]), 0
 }
 
 func (m *Model) enter() (tea.Model, tea.Cmd) {
 	line := strings.TrimSpace(string(m.input))
 	if m.mode == modeList && !strings.HasPrefix(line, "/") {
 		if m.listSrc == listWindows {
-			m.input = nil
+			m.input, m.curBack = nil, 0
 			return m, m.switchTo(m.listCur)
 		}
 		items := m.listItems() // while the typed filter still applies
-		m.input = nil
+		m.input, m.curBack = nil, 0
 		if len(items) == 0 {
 			m.mode = modeWin
 			return m, nil
@@ -1398,13 +1417,13 @@ func (m *Model) enter() (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			{
-				m.input = nil
+				m.input, m.curBack = nil, 0
 				m.setErr("not a command (start with /); Ctrl-X sends text in a chat window")
 			}
 		}
 		return m, nil
 	}
-	m.input = nil
+	m.input, m.curBack = nil, 0
 	m.remember(line)
 	cmd, err := command.Parse(line)
 	if err != nil {
@@ -1437,7 +1456,7 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 				words = append(words, f)
 			}
 		}
-		m.mode, m.listSrc, m.listCur, m.input = modeList, listChats, 0, []rune(strings.Join(words, " "))
+		m.mode, m.listSrc, m.listCur, m.input, m.curBack = modeList, listChats, 0, []rune(strings.Join(words, " ")), 0
 	case command.Win:
 		return m.winCommand(c.Arg)
 	case command.Close:
@@ -1470,7 +1489,7 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 			return m, m.deleteCmd(last)
 		}
 		if c.Arg == "" { // put the text in the prompt for changing
-			m.input = []rune("/edit " + last.Text)
+			m.input, m.curBack = []rune("/edit "+last.Text), 0
 			m.setInfo("change the text and press Enter")
 			break
 		}
@@ -1533,7 +1552,7 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.note(w, fmt.Sprintf("fetching the last %d messages", n))
 		return m, m.recentCmd(w.chatID, n)
 	case command.Search:
-		m.mode, m.input = modePager, []rune(c.Arg)
+		m.mode, m.input, m.curBack = modePager, []rune(c.Arg), 0
 		w.scroll = 0
 	case command.Stats:
 		m.stats()
@@ -1875,7 +1894,7 @@ func (m *Model) slowStep() {
 // window.
 func (m *Model) winCommand(arg string) (tea.Model, tea.Cmd) {
 	if arg == "" || strings.EqualFold(arg, "list") {
-		m.mode, m.listSrc, m.listCur, m.input = modeList, listWindows, m.cur, nil
+		m.mode, m.listSrc, m.listCur, m.input, m.curBack = modeList, listWindows, m.cur, nil, 0
 		return m, nil
 	}
 	if n, err := strconv.Atoi(arg); err == nil {
@@ -1895,6 +1914,32 @@ func (m *Model) winCommand(arg string) (tea.Model, tea.Cmd) {
 		i, _ = m.openWin(c.ID)
 	}
 	return m, m.switchTo(i)
+}
+
+// pos is the cursor's rune index in the input.
+func (m *Model) pos() int { return len(m.input) - min(max(m.curBack, 0), len(m.input)) }
+
+// insert puts runes at the cursor and leaves the cursor after them.
+func (m *Model) insert(rs ...rune) {
+	p := m.pos()
+	m.input = append(m.input[:p], append(append([]rune(nil), rs...), m.input[p:]...)...)
+}
+
+// cut removes the runes [from, to) of the input, keeping the cursor on the
+// same text.
+func (m *Model) cut(from, to int) {
+	from, to = max(from, 0), min(to, len(m.input))
+	if from >= to {
+		return
+	}
+	p := m.pos()
+	m.input = append(m.input[:from], m.input[to:]...)
+	switch {
+	case p >= to:
+		m.curBack = len(m.input) - (p - (to - from))
+	case p >= from:
+		m.curBack = len(m.input) - from
+	}
 }
 
 // completion remembers that the last Tab could not extend the word, so
@@ -1921,6 +1966,11 @@ var openCmds = map[string]bool{"/open": true, "/fetch": true, "/download": true}
 // space; several are extended to their longest common prefix, and a second
 // Tab that cannot extend further prints them into the window.
 func (m *Model) complete() {
+	// Only the text before the cursor takes part; what follows it is put
+	// back unchanged, with the cursor still in front of it.
+	tail := append([]rune(nil), m.input[m.pos():]...)
+	m.input = m.input[:m.pos()]
+	defer func() { m.input, m.curBack = append(m.input, tail...), len(tail) }()
 	start := 0
 	for i := len(m.input) - 1; i >= 0; i-- {
 		if m.input[i] == ' ' {
@@ -2390,15 +2440,27 @@ func (m *Model) rule(label string) string {
 	return dash(2) + " " + msgStyle.Render(msg) + " " + dash(fill) + dimStyle.Render(right)
 }
 
-// inputLine shows the input with line breaks as a return mark, the tail
-// when it is longer than the row.
+// inputLine shows the input with line breaks as a return mark and the
+// cursor as a reverse-video cell; a line longer than the row scrolls so
+// the cursor stays in view.
 func (m *Model) inputLine(prompt string) string {
 	room := max(m.width-lipgloss.Width(prompt)-1, 1)
 	in := []rune(strings.ReplaceAll(string(m.input), "\n", "\u21b5"))
-	if len(in) > room {
-		in = in[len(in)-room:]
+	p := m.pos()
+	start := 0
+	if p >= room {
+		start = p - room + 1
 	}
-	return dimStyle.Render(prompt) + string(in) + lipgloss.NewStyle().Reverse(true).Render(" ")
+	in, p = in[start:min(start+room, len(in))], p-start
+	under := " "
+	if p < len(in) {
+		under = string(in[p])
+	}
+	after := ""
+	if p+1 <= len(in) {
+		after = string(in[min(p+1, len(in)):])
+	}
+	return dimStyle.Render(prompt) + string(in[:p]) + lipgloss.NewStyle().Reverse(true).Render(under) + after
 }
 
 const keyHelp = `Keys
@@ -2411,6 +2473,9 @@ const keyHelp = `Keys
                          Ctrl-X then adds a line instead
   Ctrl-N / Ctrl-P        next / previous window (Alt-Right / Alt-Left too)
   Alt-0..9, Esc 0..9     window 0..9 (0 is the server window)
+  Left / Right           move the cursor; Ctrl-A / Ctrl-E line start / end;
+                         Backspace / Delete remove before / under the cursor;
+                         Ctrl-W the word before it, Ctrl-K to the end, Ctrl-U all
   Up / Down              walk the input history (commands and sent lines)
   PgUp / PgDn            scroll a page (the wheel scrolls too)
   Home / End             oldest / newest

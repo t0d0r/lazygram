@@ -301,7 +301,10 @@ status line and the window.
 | F1                   | focus the server window and print the help there  |
 | Esc                  | close the list or pager, else clear the input     |
 | Ctrl-X               | send the typed text to this window's chat         |
-| Ctrl-U / Ctrl-W      | clear the input / delete the last word            |
+| Ctrl-U / Ctrl-W      | clear the input / delete the word before the cursor (and the spaces after it) |
+| Left / Right         | move the cursor one rune; never past the ends      |
+| Ctrl-A / Ctrl-E      | cursor to the start / end of the input            |
+| Delete / Ctrl-K      | delete the rune under the cursor (at the end of the line Delete acts as Backspace, since some terminals send it for that key) / to the end |
 | Ctrl-C               | quit                                              |
 
 ## Input history
@@ -314,9 +317,15 @@ the walk. In a list Up/Down move the cursor, in the pager they scroll.
 
 ## Completion
 
+The input line has a cursor, drawn as a reverse-video cell (on the rune
+under it, or one past the text at the end); typing inserts at the
+cursor, Backspace deletes before it, Delete under it. A line longer
+than the row scrolls so the cursor stays in view. History recall, Esc,
+Enter and the list and pager prompts put the cursor at the end.
+
 On an empty prompt in a window, Tab switches to the next window and
-Shift-Tab to the previous one. With text typed, Tab completes the last
-word of the input like bash. A line that is one
+Shift-Tab to the previous one. With text typed, Tab completes the word
+before the cursor like bash and keeps what follows the cursor. A line that is one
 word starting with `/` completes command names; after `/theme ` theme
 names; after `/send ` (and its aliases) local paths: entries of the typed
 directory that start with the typed base name, `~` expanded, hidden files

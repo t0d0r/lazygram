@@ -12,6 +12,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"lazygram/internal/domain"
@@ -1916,5 +1917,95 @@ func TestRedrawDropsNotesKeepsMessages(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(m.lines(), "\n"), "first dev line") {
 		t.Fatal("messages stay in the server window")
+	}
+}
+
+func TestCursorEditing(t *testing.T) {
+	m := setup(t, newFake())
+	typ(m, "abc")
+	press(m, tea.KeyLeft)
+	press(m, tea.KeyLeft)
+	typ(m, "X")
+	if got := string(m.input); got != "aXbc" || m.pos() != 2 {
+		t.Fatalf("insert: %q pos %d", got, m.pos())
+	}
+	press(m, tea.KeyRight)
+	press(m, tea.KeyDelete)
+	if got := string(m.input); got != "aXb" || m.pos() != 3 {
+		t.Fatalf("delete: %q pos %d", got, m.pos())
+	}
+	press(m, tea.KeyCtrlA)
+	press(m, tea.KeyDelete) // forward delete away from the end
+	if got := string(m.input); got != "Xb" || m.pos() != 0 {
+		t.Fatalf("delete at start: %q pos %d", got, m.pos())
+	}
+	press(m, tea.KeyCtrlE)
+	press(m, tea.KeyDelete) // at the end it is a Backspace (terminals that send it for Backspace)
+	if got := string(m.input); got != "X" || m.pos() != 1 {
+		t.Fatalf("delete at end: %q pos %d", got, m.pos())
+	}
+	for i := 0; i < 5; i++ { // never past the ends
+		press(m, tea.KeyRight)
+	}
+	for i := 0; i < 5; i++ {
+		press(m, tea.KeyLeft)
+	}
+	if m.pos() != 0 {
+		t.Fatalf("pos %d", m.pos())
+	}
+	press(m, tea.KeyBackspace) // nothing before the cursor
+	if string(m.input) != "X" {
+		t.Fatal("backspace at the start")
+	}
+	m.input, m.curBack = []rune("one two  three"), 0
+	press(m, tea.KeyLeft)
+	press(m, tea.KeyLeft) // cursor before "ee"
+	press(m, tea.KeyCtrlW)
+	if got := string(m.input); got != "one two  ee" || m.pos() != 9 {
+		t.Fatalf("ctrl-w: %q pos %d", got, m.pos())
+	}
+	press(m, tea.KeyCtrlW) // the spaces and "two"
+	if got := string(m.input); got != "one ee" || m.pos() != 4 {
+		t.Fatalf("ctrl-w twice: %q pos %d", got, m.pos())
+	}
+	press(m, tea.KeyCtrlK)
+	if got := string(m.input); got != "one " {
+		t.Fatalf("ctrl-k: %q", got)
+	}
+	// Completion acts on the word before the cursor and keeps the rest.
+	m.input, m.curBack = []rune("/win @al tail"), 5
+	m.comp = nil
+	m.complete()
+	if got := string(m.input); got != "/win @alice  tail" || m.pos() != 12 {
+		t.Fatalf("complete mid-line: %q pos %d", got, m.pos())
+	}
+	// History and Esc put the cursor at the end.
+	press(m, tea.KeyCtrlU)
+	enter(m, "/stats")
+	press(m, tea.KeyUp)
+	if m.pos() != len(m.input) || string(m.input) != "/stats" {
+		t.Fatalf("history: %q pos %d", string(m.input), m.pos())
+	}
+}
+
+func TestInputLineShowsTheCursor(t *testing.T) {
+	m := setup(t, newFake())
+	m.width = 20
+	m.input, m.curBack = []rune("abc"), 1 // cursor on "c": no extra cell
+	if got := ansi.Strip(m.inputLine("> ")); got != "> abc" {
+		t.Fatalf("%q", got)
+	}
+	m.curBack = 0
+	if got := ansi.Strip(m.inputLine("> ")); got != "> abc " {
+		t.Fatalf("cursor cell after the text: %q", got)
+	}
+	m.input, m.curBack = []rune(strings.Repeat("x", 40)+"END"), 1 // long line, cursor near the end
+	got := ansi.Strip(m.inputLine("> "))
+	if !strings.HasSuffix(got, "END") || lipgloss.Width(got) > 20 {
+		t.Fatalf("scrolled to the cursor: %q (%d)", got, lipgloss.Width(got))
+	}
+	m.curBack = len(m.input) // cursor at the start: the head shows
+	if got := ansi.Strip(m.inputLine("> ")); !strings.HasPrefix(got, "> xxx") || strings.Contains(got, "END") {
+		t.Fatalf("scrolled to the start: %q", got)
 	}
 }

@@ -178,6 +178,7 @@ viewer instead.
 | Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
 | Alt-0 .. Alt-9      | window 0 .. 9 (Esc then the digit works too)       |
 | Up / Down           | input history (commands and sent lines)            |
+| Left / Right        | move the cursor in the input; Ctrl-A / Ctrl-E start / end; Delete removes under the cursor (as Backspace at the end), Ctrl-W the word before it, Ctrl-K to the end |
 | PgUp / PgDn         | scroll a page; Home / End oldest / newest          |
 | Ctrl-R              | sync now                                           |
 | F1                  | print the help into the server window              |
