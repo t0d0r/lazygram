@@ -939,6 +939,8 @@ func (m *Model) absorb(fresh []domain.Message) {
 // and activity is counted.
 func (m *Model) arrived(fresh []domain.Message) {
 	m.absorb(fresh)
+	var order []int // windows that got something, in order of appearance
+	count := map[int]int{}
 	for _, msg := range fresh {
 		i, w := m.winFor(msg.ChatID)
 		if w == nil {
@@ -950,9 +952,36 @@ func (m *Model) arrived(fresh []domain.Message) {
 		if i != m.cur {
 			w.unread++
 		}
+		if count[i] == 0 {
+			order = append(order, i)
+		}
+		count[i]++
 	}
 	m.seen += len(fresh)
-	m.setInfo(fmt.Sprintf("%d new message(s)", len(fresh)))
+	sort.Ints(order)
+	// The status says where the messages went: "3 new messages in 2:#dev,
+	// 4:@alice (2)"; a long list is cut after four windows.
+	var where []string
+	for n, i := range order {
+		if n == 4 {
+			where = append(where, fmt.Sprintf("+%d more", len(order)-n))
+			break
+		}
+		s := fmt.Sprintf("%d:%s", i, m.winName(i))
+		if count[i] > 1 {
+			s += fmt.Sprintf(" (%d)", count[i])
+		}
+		where = append(where, s)
+	}
+	word := "messages"
+	if len(fresh) == 1 {
+		word = "message"
+	}
+	if len(where) == 0 {
+		m.setInfo(fmt.Sprintf("%d new %s", len(fresh), word))
+		return
+	}
+	m.setInfo(fmt.Sprintf("%d new %s in %s", len(fresh), word, strings.Join(where, ", ")))
 }
 
 // openUnread opens windows for chats the service reports as unread.

@@ -1752,3 +1752,20 @@ func TestPrintSlowlyKeepsEveryLine(t *testing.T) {
 		t.Fatalf("%q", b.String())
 	}
 }
+
+func TestArrivalStatusNamesTheWindows(t *testing.T) {
+	m := setup(t, newFake())
+	now := time.Now()
+	m.Update(syncedMsg{at: now, fresh: []domain.Message{
+		{ID: "n1", ChatID: "c1", Sender: "ada", Text: "one", Time: now},
+		{ID: "n2", ChatID: "c1", Sender: "ada", Text: "two", Time: now},
+		{ID: "n3", ChatID: "c2", Sender: "alice", Text: "three", Time: now},
+	}})
+	if m.status != "3 new messages in 2:#dev (2), 3:@alice" {
+		t.Fatalf("status %q", m.status)
+	}
+	m.Update(syncedMsg{at: now, fresh: []domain.Message{{ID: "n4", ChatID: "c2", Sender: "alice", Text: "four", Time: now}}})
+	if m.status != "1 new message in 3:@alice" {
+		t.Fatalf("status %q", m.status)
+	}
+}

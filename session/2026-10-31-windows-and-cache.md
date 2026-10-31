@@ -260,3 +260,5 @@ at the hidden password prompt takes effect only after Enter.
   of the screen, with a step so a long scrollback finishes within 2 s;
   `revealAll` for snapshots and tests. `tui.PrintSlowly` prints the exit
   banner one line per 56 ms.
+- The arrival status names the windows: `N new message(s) in 2:#dev (2),
+  3:@alice`, four windows at most, then `+N more`.
