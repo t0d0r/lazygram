@@ -19,6 +19,7 @@ import (
 	"lazygram/internal/command"
 	"lazygram/internal/domain"
 	"lazygram/internal/logo"
+	"lazygram/internal/opener"
 	"lazygram/internal/provider"
 	"lazygram/internal/store"
 )
@@ -51,9 +52,10 @@ const (
 type Options struct {
 	Store    *store.Store
 	Provider provider.Provider
-	Poll     time.Duration // background sync interval; zero disables
-	Backlog  int           // cached messages loaded at start; zero means defaultBacklog
-	Version  string        // shown in the start banner
+	Poll     time.Duration      // background sync interval; zero disables
+	Backlog  int                // cached messages loaded at start; zero means defaultBacklog
+	Version  string             // shown in the start banner
+	Open     func(string) error // opens a link or file; nil means opener.Open
 }
 
 // win is one virtual window. wins[0] is the server window (chatID empty).
@@ -79,6 +81,8 @@ type Model struct {
 
 	input []rune
 	comp  *completion
+
+	clicks [][]span // what a click on each screen row does, as of the last View
 
 	escPending bool      // an Esc was just pressed: a digit now switches windows
 	escSaved   []rune    // the input as it was before that Esc cleared it
@@ -125,6 +129,10 @@ type (
 		answer domain.PressAnswer
 		err    error
 	}
+	openedMsg struct {
+		target string
+		err    error
+	}
 	tickMsg time.Time
 )
 
@@ -133,6 +141,9 @@ type (
 func New(opt Options) *Model {
 	if opt.Backlog <= 0 {
 		opt.Backlog = defaultBacklog
+	}
+	if opt.Open == nil {
+		opt.Open = opener.Open
 	}
 	m := &Model{opt: opt, width: 100, height: 30, loading: map[string]bool{},
 		wins: []*win{{}}, status: "type /help for commands", started: time.Now()}
@@ -279,6 +290,11 @@ func (m *Model) pressCmd(chatID string, msg domain.Message, b domain.Button) tea
 	}
 }
 
+func (m *Model) openCmd(target string) tea.Cmd {
+	open := m.opt.Open
+	return func() tea.Msg { return openedMsg{target: target, err: open(target)} }
+}
+
 // Update handles messages.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -366,8 +382,78 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmds = append(cmds, m.syncCmd())
 		}
 		return m, tea.Batch(cmds...)
+	case openedMsg:
+		if msg.err != nil {
+			m.setErr("open: " + msg.err.Error())
+			m.note(m.wins[m.cur], "open "+msg.target+": "+msg.err.Error())
+		} else {
+			m.setInfo("opened " + msg.target)
+		}
+	case tea.MouseMsg:
+		return m.mouse(msg)
 	case tea.KeyMsg:
 		return m.key(msg)
+	}
+	return m, nil
+}
+
+// mouse handles wheel scrolling and clicks on the spans of the last View.
+func (m *Model) mouse(e tea.MouseMsg) (tea.Model, tea.Cmd) {
+	w := m.wins[m.cur]
+	switch {
+	case e.Button == tea.MouseButtonWheelUp:
+		if m.mode == modeList {
+			m.listCur = max(m.listCur-1, 0)
+		} else {
+			w.scroll += 3
+		}
+	case e.Button == tea.MouseButtonWheelDown:
+		if m.mode == modeList {
+			m.listCur++
+		} else {
+			w.scroll = max(w.scroll-3, 0)
+		}
+	case e.Action == tea.MouseActionPress && e.Button == tea.MouseButtonLeft:
+		if e.Y < 0 || e.Y >= len(m.clicks) {
+			return m, nil
+		}
+		for _, s := range m.clicks[e.Y] {
+			if s.hit(e.X) {
+				return m.click(s)
+			}
+		}
+	}
+	return m, nil
+}
+
+func (m *Model) click(s span) (tea.Model, tea.Cmd) {
+	switch s.kind {
+	case spanChat:
+		i, w := m.winFor(s.target)
+		if w == nil {
+			i, _ = m.openWin(s.target)
+		}
+		return m, m.switchTo(i)
+	case spanNick:
+		c, err := domain.ResolveChat(m.chats, s.target)
+		if err != nil {
+			m.setErr("no chat named " + s.target)
+			return m, nil
+		}
+		i, w := m.winFor(c.ID)
+		if w == nil {
+			i, _ = m.openWin(c.ID)
+		}
+		return m, m.switchTo(i)
+	case spanURL:
+		m.setInfo("opening " + s.target + "...")
+		return m, m.openCmd(s.target)
+	case spanWin:
+		i, _ := strconv.Atoi(s.target)
+		return m, m.switchTo(i)
+	case spanRow:
+		m.listCur, _ = strconv.Atoi(s.target)
+		return m.enter()
 	}
 	return m, nil
 }
@@ -1038,13 +1124,18 @@ func (m *Model) nameWidth() int {
 
 // lines renders the current window's scrollback.
 func (m *Model) lines() []string {
+	lines, _ := m.richLines()
+	return lines
+}
+
+func (m *Model) richLines() ([]string, [][]span) {
 	w := m.wins[m.cur]
 	o := lineOpts{width: m.width, nameOf: m.nameOf, nameW: m.nameWidth(), showChat: w.chatID == ""}
 	msgs := m.msgs
 	if w.chatID != "" {
 		msgs = domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})
 	}
-	return renderLines(msgs, w.notes, o)
+	return renderRich(msgs, w.notes, o)
 }
 
 // Quitting reports whether the user asked to leave.
@@ -1059,34 +1150,45 @@ func (m *Model) View() string {
 	w := m.wins[m.cur]
 	var topic, prompt string
 	var body []string
+	bodySpans := make([][]span, h) // one entry per content row
 
 	switch m.mode {
 	case modeList:
+		var rows []string
 		if m.listSrc == listWindows {
 			m.listCur = min(max(m.listCur, 0), len(m.wins)-1)
 			topic = fmt.Sprintf("windows (%d) - Up/Down moves, Enter focuses, Esc returns", len(m.wins))
-			body = topWindow(m.winLines(), h, m.listCur)
+			rows = m.winLines()
 			prompt = "windows > "
-			break
+		} else {
+			items := m.listItems()
+			m.listCur = min(max(m.listCur, 0), max(len(items)-1, 0))
+			topic = fmt.Sprintf("chats (%d) - Up/Down moves, Enter opens the window, Esc returns, type to narrow", len(items))
+			rows = m.listLines(items)
+			prompt = "list > "
 		}
-		items := m.listItems()
-		m.listCur = min(max(m.listCur, 0), max(len(items)-1, 0))
-		topic = fmt.Sprintf("chats (%d) - Up/Down moves, Enter opens the window, Esc returns, type to narrow", len(items))
-		body = topWindow(m.listLines(items), h, m.listCur)
-		prompt = "list > "
+		body = topWindow(rows, h, m.listCur)
+		start := topWindowStart(len(rows), h, m.listCur)
+		for y := range body {
+			if i := start + y; i < len(rows) && body[y] != "" {
+				bodySpans[y] = []span{{0, m.width, spanRow, strconv.Itoa(i)}}
+			}
+		}
 	case modePager:
 		q := string(m.input)
 		hits := domain.Filter(m.msgs, domain.Query{ChatID: w.chatID, Text: q})
-		lines := renderLines(hits, nil, lineOpts{width: m.width, nameOf: m.nameOf, nameW: m.nameWidth(),
+		lines, sp := renderRich(hits, nil, lineOpts{width: m.width, nameOf: m.nameOf, nameW: m.nameWidth(),
 			showChat: w.chatID == "", fullDate: true, highlight: q})
 		body, w.scroll = window(lines, h, w.scroll)
+		bodySpans, _ = window(sp, h, w.scroll)
 		topic = fmt.Sprintf("history of %s - %d of %d messages - type to search, PgUp/PgDn, Esc returns",
 			m.winName(m.cur), len(hits), len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})))
 		prompt = "search > "
 	default:
-		lines := m.lines()
+		lines, sp := m.richLines()
 		m.lastLines = len(lines)
 		body, w.scroll = window(lines, h, w.scroll)
+		bodySpans, _ = window(sp, h, w.scroll)
 		topic = m.topic()
 		prompt = "[" + m.winName(m.cur) + "] "
 		if w.enterSends {
@@ -1101,11 +1203,14 @@ func (m *Model) View() string {
 		b.WriteString(lipgloss.NewStyle().MaxWidth(m.width).Render(l))
 		b.WriteByte('\n')
 	}
+	bar, barSpans := m.windowBar()
 	b.WriteString(m.statusLine())
 	b.WriteByte('\n')
-	b.WriteString(m.windowBar())
+	b.WriteString(bar)
 	b.WriteByte('\n')
 	b.WriteString(m.inputLine(prompt))
+	// Screen rows: topic, h content rows, status, window bar, input.
+	m.clicks = append(append([][]span{nil}, bodySpans...), nil, barSpans, nil)
 	return b.String()
 }
 
@@ -1212,11 +1317,16 @@ func (m *Model) statusLine() string {
 }
 
 // windowBar lists every window as [N:name]; the current one is
-// highlighted and windows with unread messages stand out.
-func (m *Model) windowBar() string {
+// highlighted and windows with unread messages stand out. Each tag is a
+// click target.
+func (m *Model) windowBar() (string, []span) {
 	var b strings.Builder
+	var spans []span
+	x := 1
 	for i, w := range m.wins {
 		tag := fmt.Sprintf("[%d:%s]", i+1, m.winName(i))
+		spans = append(spans, span{x, x + lipgloss.Width(tag), spanWin, strconv.Itoa(i)})
+		x += lipgloss.Width(tag) + 1
 		switch {
 		case i == m.cur:
 			b.WriteString(hiStyle.Render(tag))
@@ -1227,7 +1337,7 @@ func (m *Model) windowBar() string {
 		}
 		b.WriteString(infoStyle.Render(" "))
 	}
-	return lipgloss.NewStyle().Background(lipgloss.Color("236")).Render(fitLine(" "+b.String(), m.width))
+	return lipgloss.NewStyle().Background(lipgloss.Color("236")).Render(fitLine(" "+b.String(), m.width)), spans
 }
 
 func (m *Model) inputLine(prompt string) string {
@@ -1251,6 +1361,9 @@ const keyHelp = `Keys
   F1                     this help
   Esc                    close the list or pager; clear the input
   Ctrl-C                 quit
+Mouse: click a chat name or nick in window 1 to open its window, a tag in
+the window bar to focus it, a row in a list to open it, a link to open it
+with the system; the wheel scrolls.
 Window 1 is the server window: every chat interleaved, plus notices.
 A window opens for a chat when it gets a message or has unread ones;
 [Act: 2,3] in the status line lists windows with unread messages.

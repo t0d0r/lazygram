@@ -113,6 +113,18 @@ fetched again so the bot's edit replaces the old line (in the window, the
 mirror and the cache). Link: the URL is printed as a notice, never opened.
 Reply text: the label is sent like Ctrl-X. Pressing is always explicit.
 
+## Mouse
+
+Clicks act on what is under the pointer as of the last render: a chat name
+in the server window opens or focuses that chat's window; a nick opens the
+chat of the same name when one exists (otherwise "no chat named ..."); a
+`[N:name]` tag in the window bar focuses window N; a row in `/list` or
+`/win` opens it; an `http(s)` link in a message or notice is handed to the
+system opener (`open`, `xdg-open`, `rundll32`), which starts the browser or
+preview app for the link's content. The wheel scrolls the window three
+lines (the cursor in a list). Opening happens only on a click, only for
+http and https links with a host; nothing is opened automatically.
+
 ## Sending
 
 In a chat window, typed text plus Ctrl-X sends it to that chat through

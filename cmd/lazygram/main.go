@@ -268,7 +268,7 @@ func runTUI(o options, prov provider.Provider, st *store.Store, poll time.Durati
 		fmt.Println()
 		return nil
 	}
-	_, err := tea.NewProgram(tui.New(opt), tea.WithAltScreen()).Run()
+	_, err := tea.NewProgram(tui.New(opt), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
 	if err == nil {
 		fmt.Print(tui.ExitBanner(version))
 	}

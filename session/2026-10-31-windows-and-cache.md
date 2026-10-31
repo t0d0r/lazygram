@@ -131,3 +131,8 @@ at the hidden password prompt takes effect only after Enter.
 - Double Ctrl-X (within 600 ms) toggles "Enter sends" per window (prompt
   `[@name]> `). Help text re-laid out under 70 columns; long indented
   lines keep their indent when wrapped. Tab only completes, in every view.
+- Mouse support (`tea.WithMouseCellMotion`): `renderRich` returns click
+  spans per line (chat column, nick, links; list rows; window bar tags);
+  the model keeps the span map of the last View; wheel scrolls. Links open
+  through `internal/opener` (open/xdg-open/rundll32, http(s) only, no
+  shell); `Options.Open` is injectable for tests.

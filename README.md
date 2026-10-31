@@ -122,6 +122,7 @@ reply-keyboard buttons send their label.
 | Ctrl-X              | send the typed text to this window's chat          |
 | Ctrl-X twice        | toggle "Enter sends" for this window               |
 | Ctrl-C              | quit                                               |
+| mouse               | click chat names, nicks, window tags, list rows and links; wheel scrolls |
 
 ## Development
 

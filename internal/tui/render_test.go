@@ -186,3 +186,62 @@ func TestRenderButtonsUnderTheMessage(t *testing.T) {
 		t.Fatal("button labels must be sanitized")
 	}
 }
+
+func spanAt(sp []span, x int) (span, bool) {
+	for _, s := range sp {
+		if s.hit(x) {
+			return s, true
+		}
+	}
+	return span{}, false
+}
+
+func TestRenderRichSpans(t *testing.T) {
+	ts := time.Date(2026, 5, 6, 14, 7, 0, 0, time.Local)
+	long := "https://example.invalid/" + strings.Repeat("abc/", 20) + "end"
+	msgs := []domain.Message{{ID: "1", ChatID: "c1", Sender: "ada", Text: "see https://example.invalid/x and " + long, Time: ts}}
+	lines, spans := renderRich(msgs, nil, lineOpts{width: 60, nameW: 4, nameOf: nameX, showChat: true})
+	if len(lines) != len(spans) || len(lines) < 3 {
+		t.Fatalf("lines=%d spans=%d", len(lines), len(spans))
+	}
+	first := spans[1] // after the day separator
+	if s, ok := spanAt(first, 7); !ok || s.kind != spanChat || s.target != "c1" {
+		t.Fatalf("chat column: %+v", first)
+	}
+	if s, ok := spanAt(first, 12); !ok || s.kind != spanNick || s.target != "ada" {
+		t.Fatalf("nick: %+v", first)
+	}
+	var urls []string
+	for _, row := range spans {
+		for _, s := range row {
+			if s.kind == spanURL {
+				urls = append(urls, s.target)
+			}
+		}
+	}
+	if len(urls) < 2 || urls[0] != "https://example.invalid/x" {
+		t.Fatalf("urls: %v", urls)
+	}
+	for _, u := range urls[1:] {
+		if u != long {
+			t.Fatalf("a wrapped link must map to the full URL: %q", u)
+		}
+	}
+	_, sp := renderRich(msgs, nil, lineOpts{width: 60, nameW: 4, nameOf: nameX})
+	for _, s := range sp[1] {
+		if s.kind == spanChat {
+			t.Fatal("no chat column in a chat window")
+		}
+	}
+	if s, ok := spanAt(sp[1], 7); !ok || s.kind != spanNick {
+		t.Fatalf("nick right after the time in a chat window: %+v", sp[1])
+	}
+}
+
+func TestWindowGenericPadsAtTop(t *testing.T) {
+	sp := [][]span{{{0, 1, spanURL, "a"}}, {{0, 1, spanURL, "b"}}}
+	got, off := window(sp, 4, 0)
+	if off != 0 || len(got) != 4 || got[0] != nil || got[3][0].target != "b" {
+		t.Fatalf("%v %d", got, off)
+	}
+}

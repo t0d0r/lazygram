@@ -792,3 +792,98 @@ func TestTabInListOnlyCompletes(t *testing.T) {
 		t.Fatalf("Tab completes the filter: %q", got)
 	}
 }
+
+func click(m *Model, x, y int) tea.Cmd {
+	_, cmd := m.Update(tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	return cmd
+}
+
+// find returns the screen row and column of the first span of kind k whose
+// target is t, as of the last View.
+func find(m *Model, k spanKind, t string) (int, int) {
+	for y, row := range m.clicks {
+		for _, s := range row {
+			if s.kind == k && s.target == t {
+				return s.x0, y
+			}
+		}
+	}
+	return -1, -1
+}
+
+func TestMouseClicksOpenWindowsAndLinks(t *testing.T) {
+	f := newFake()
+	f.msgs = append(f.msgs, mk("c1", "9", "alice", "read https://example.invalid/doc now", 4))
+	var opened []string
+	st, _ := store.Open(store.Memory, bytes.Repeat([]byte{5}, 32))
+	defer func() { _ = st.Close() }()
+	m := New(Options{Store: st, Provider: f, Open: func(s string) error { opened = append(opened, s); return nil }})
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.Update(m.chatsCmd()())
+	m.Update(m.syncCmd()())
+	m.View()
+
+	// chat column in the server window opens that chat's window
+	x, y := find(m, spanChat, "c1")
+	if x < 0 {
+		t.Fatal("no chat span")
+	}
+	click(m, x, y)
+	if m.winName(m.cur) != "#dev" {
+		t.Fatalf("click on #dev: %s", m.winName(m.cur))
+	}
+	// the window bar focuses
+	m.View()
+	x, y = find(m, spanWin, "0")
+	click(m, x, y)
+	if m.cur != 0 {
+		t.Fatalf("window bar: cur=%d", m.cur)
+	}
+	// a nick that names a chat opens it
+	m.View()
+	x, y = find(m, spanNick, "alice")
+	click(m, x+2, y)
+	if m.winName(m.cur) != "@alice" {
+		t.Fatalf("nick click: %s", m.winName(m.cur))
+	}
+	// a nick without a chat is an error, not a crash
+	enter(m, "/win 1")
+	m.View()
+	x, y = find(m, spanNick, "ada")
+	click(m, x, y)
+	if !m.isErr || !strings.Contains(m.status, "no chat named ada") {
+		t.Fatalf("unknown nick: %q", m.status)
+	}
+	// a link is handed to the opener
+	m.View()
+	x, y = find(m, spanURL, "https://example.invalid/doc")
+	cmd := click(m, x, y)
+	if cmd == nil {
+		t.Fatal("link click must open")
+	}
+	m.Update(cmd())
+	if len(opened) != 1 || opened[0] != "https://example.invalid/doc" || m.isErr {
+		t.Fatalf("opened=%v status=%q", opened, m.status)
+	}
+	// list rows open on click
+	enter(m, "/list")
+	m.View()
+	x, y = find(m, spanRow, "2") // #news
+	cmd = click(m, x, y)
+	if m.mode != modeWin || m.winName(m.cur) != "#news" {
+		t.Fatalf("row click: mode=%v win=%s", m.mode, m.winName(m.cur))
+	}
+	_ = cmd
+	// the wheel scrolls
+	m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelUp, Action: tea.MouseActionPress})
+	if m.wins[m.cur].scroll != 3 {
+		t.Fatalf("wheel: %d", m.wins[m.cur].scroll)
+	}
+	m.Update(tea.MouseMsg{Button: tea.MouseButtonWheelDown, Action: tea.MouseActionPress})
+	if m.wins[m.cur].scroll != 0 {
+		t.Fatal("wheel down")
+	}
+	// clicks outside any span do nothing
+	click(m, 0, 0)
+	click(m, 99, 999)
+}

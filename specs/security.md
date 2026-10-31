@@ -21,6 +21,10 @@
 - Sending is explicit: only text typed in a chat window and confirmed with
   Ctrl-X, or given to /me, is sent; Enter never sends. Bot buttons are
   pressed only by /press; link buttons are printed, never opened.
+- A link in a message is opened only when clicked, only `http`/`https`
+  with a host, through the system opener with the link as a single
+  argument (no shell). Links are remote content: a click opens whatever
+  the sender chose, in the browser or preview app the system assigns.
 - `lazygram login` links by QR code, so no phone number or SMS code passes
   through lazygram; a two-step password is read without echo and never
   stored. The only login artifact is the session file.

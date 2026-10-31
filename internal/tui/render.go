@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"hash/fnv"
+	"regexp"
 	"strings"
 	"time"
 	"unicode"
@@ -53,6 +54,29 @@ func Banner(lines []string) []string {
 	return out
 }
 
+// spanKind says what a click on a span does.
+type spanKind int
+
+const (
+	spanChat  spanKind = iota // open the chat's window; target is the chat id
+	spanNick                  // open the chat named like the sender; target is the sender
+	spanURL                   // open the link; target is the URL
+	spanMedia                 // fetch and open the attachment; target is "chat\x00msg"
+	spanWin                   // focus window; target is its index
+	spanRow                   // list row; target is its index
+)
+
+// span is a clickable range of columns on one rendered line.
+type span struct {
+	x0, x1 int // columns, x1 exclusive
+	kind   spanKind
+	target string
+}
+
+func (s span) hit(x int) bool { return x >= s.x0 && x < s.x1 }
+
+var urlRE = regexp.MustCompile(`https?://[^\s<>"']+`)
+
 // lineOpts controls how messages become terminal lines.
 type lineOpts struct {
 	width     int
@@ -67,11 +91,22 @@ type lineOpts struct {
 // lines, interleaved by time. A dim separator is inserted when the local
 // calendar day changes.
 func renderLines(msgs []domain.Message, notes []note, o lineOpts) []string {
+	lines, _ := renderRich(msgs, notes, o)
+	return lines
+}
+
+// renderRich is renderLines plus, for every line, the spans a click acts on.
+func renderRich(msgs []domain.Message, notes []note, o lineOpts) ([]string, [][]span) {
 	var out []string
+	var spans [][]span
+	add := func(line string, sp ...span) {
+		out = append(out, line)
+		spans = append(spans, sp)
+	}
 	lastDay := ""
 	day := func(t time.Time) {
 		if d := t.Format("2006-01-02"); d != lastDay && !o.fullDate {
-			out = append(out, dayStyle.Render("--- "+t.Format("Mon 2006-01-02")+" ---"))
+			add(dayStyle.Render("--- " + t.Format("Mon 2006-01-02") + " ---"))
 			lastDay = d
 		}
 	}
@@ -85,7 +120,9 @@ func renderLines(msgs []domain.Message, notes []note, o lineOpts) []string {
 	for i < len(msgs) || j < len(notes) {
 		if j < len(notes) && (i >= len(msgs) || !notes[j].at.After(msgs[i].Time)) {
 			if notes[j].raw {
-				out = append(out, Banner(strings.Split(sanitize(notes[j].text, true), "\n"))...)
+				for _, l := range Banner(strings.Split(sanitize(notes[j].text, true), "\n")) {
+					add(l)
+				}
 				j++
 				continue
 			}
@@ -94,10 +131,11 @@ func renderLines(msgs []domain.Message, notes []note, o lineOpts) []string {
 			prefix := stamp(t) + " "
 			room := max(o.width-len(prefix)-4, 10)
 			for k, l := range wrapText(sanitize(notes[j].text, true), room, room) {
+				base := len(prefix) + 4
 				if k == 0 {
-					out = append(out, dimStyle.Render(prefix)+noteStyle.Render("-!- "+l))
+					add(dimStyle.Render(prefix)+noteStyle.Render("-!- "+l), linkSpans(l, base, nil)...)
 				} else {
-					out = append(out, strings.Repeat(" ", len(prefix)+4)+noteStyle.Render(l))
+					add(strings.Repeat(" ", base)+noteStyle.Render(l), linkSpans(l, base, nil)...)
 				}
 			}
 			j++
@@ -110,12 +148,15 @@ func renderLines(msgs []domain.Message, notes []note, o lineOpts) []string {
 		day(t)
 		plainPrefix := stamp(t) + " "
 		prefix := dimStyle.Render(stamp(t)) + " "
+		var first []span
 		if o.showChat {
 			name := o.nameOf(m.ChatID)
+			first = append(first, span{len(plainPrefix), len(plainPrefix) + lipgloss.Width(name), spanChat, m.ChatID})
 			plainPrefix += fmt.Sprintf("%-*s ", o.nameW, name)
 			prefix += lipgloss.NewStyle().Foreground(colorFor(m.ChatID)).Bold(true).Render(fmt.Sprintf("%-*s", o.nameW, name)) + " "
 		}
 		text := m.Text
+		nickX := lipgloss.Width(plainPrefix)
 		if action, ok := strings.CutPrefix(m.Text, "* "); ok && strings.TrimSpace(action) != "" {
 			// IRC-style action (/me): "* sender does something"
 			plainPrefix += "* " + m.Sender + " "
@@ -125,24 +166,44 @@ func renderLines(msgs []domain.Message, notes []note, o lineOpts) []string {
 			plainPrefix += "<" + m.Sender + "> "
 			prefix += lipgloss.NewStyle().Foreground(colorFor(m.Sender)).Render("<"+m.Sender+">") + " "
 		}
+		first = append(first, span{nickX, lipgloss.Width(plainPrefix) - 1, spanNick, m.Sender})
 		prefixW := lipgloss.Width(plainPrefix)
 		// Continuation lines sit just past the time column, BitchX style,
 		// rather than under the text, so long messages waste no width.
 		indent := strings.Repeat(" ", len(stamp(t))+1)
+		urls := urlRE.FindAllString(text, -1)
 		body := wrapText(text, max(o.width-prefixW, 10), max(o.width-len(indent), 10))
 		for k, l := range body {
-			l = highlight(l, o.highlight)
+			styled := highlight(l, o.highlight)
 			if k == 0 {
-				out = append(out, prefix+l)
+				add(prefix+styled, append(first, linkSpans(l, prefixW, urls)...)...)
 			} else {
-				out = append(out, indent+l)
+				add(indent+styled, linkSpans(l, len(indent), urls)...)
 			}
 		}
 		if len(m.Buttons) > 0 {
 			for _, l := range wrapText(buttonLine(m), max(o.width-len(indent), 10), max(o.width-len(indent), 10)) {
-				out = append(out, indent+buttonStyle.Render(l))
+				add(indent + buttonStyle.Render(l))
 			}
 		}
+	}
+	return out, spans
+}
+
+// linkSpans finds the links in one plain line of text that starts at
+// column base. A link cut by wrapping maps to the full URL it belongs to
+// when full is given.
+func linkSpans(l string, base int, full []string) []span {
+	var out []span
+	for _, loc := range urlRE.FindAllStringIndex(l, -1) {
+		target := l[loc[0]:loc[1]]
+		for _, u := range full {
+			if strings.HasPrefix(u, target) {
+				target = u
+				break
+			}
+		}
+		out = append(out, span{base + lipgloss.Width(l[:loc[0]]), base + lipgloss.Width(l[:loc[1]]), spanURL, target})
 	}
 	return out
 }
@@ -273,6 +334,12 @@ func fitLine(s string, width int) string {
 	return s
 }
 
+// topWindowStart is the first visible row of a list for topWindow.
+func topWindowStart(n, height, sel int) int {
+	sel = min(max(sel, 0), max(n-1, 0))
+	return min(max(sel-height/2, 0), max(n-height, 0))
+}
+
 // topWindow returns exactly height lines of a list. The selected line sel
 // moves down the screen until it reaches the middle, then stays there while
 // the list scrolls under it, and moves on to the bottom only when the list
@@ -281,8 +348,7 @@ func topWindow(lines []string, height, sel int) []string {
 	if height < 1 {
 		return nil
 	}
-	sel = min(max(sel, 0), max(len(lines)-1, 0))
-	start := min(max(sel-height/2, 0), max(len(lines)-height, 0))
+	start := topWindowStart(len(lines), height, sel)
 	end := min(start+height, len(lines))
 	view := append([]string(nil), lines[start:end]...)
 	for len(view) < height {
@@ -292,8 +358,9 @@ func topWindow(lines []string, height, sel int) []string {
 }
 
 // window returns exactly height lines: the slice of lines ending offset lines
-// above the bottom. It returns the clamped offset so callers can store it.
-func window(lines []string, height, offset int) ([]string, int) {
+// above the bottom, padded at the top. It returns the clamped offset so
+// callers can store it. It works for the lines' spans too.
+func window[T any](lines []T, height, offset int) ([]T, int) {
 	if height < 1 {
 		return nil, 0
 	}
@@ -301,11 +368,12 @@ func window(lines []string, height, offset int) ([]string, int) {
 	offset = min(max(offset, 0), maxOff)
 	end := len(lines) - offset
 	start := max(end-height, 0)
-	view := append([]string(nil), lines[start:end]...)
-	for len(view) < height {
-		view = append([]string{""}, view...)
+	view := make([]T, 0, height)
+	for i := 0; i < height-(end-start); i++ {
+		var zero T
+		view = append(view, zero)
 	}
-	return view, offset
+	return append(view, lines[start:end]...), offset
 }
 
 // sanitize drops control characters (including ESC) so remote text cannot
