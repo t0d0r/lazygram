@@ -532,7 +532,9 @@ func (m *Model) openCmd(target string) tea.Cmd {
 // kept going while something animated is on screen.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	model, cmd := m.update(msg)
-	if m.fx && m.animOn && !m.ticking {
+	// Decide from the hover state as it is now, not from the last render:
+	// the first hover after an idle screen must start the clock at once.
+	if m.fx && m.hover != "" && !m.ticking {
 		m.ticking = true
 		tick := tea.Tick(fxTick, func(time.Time) tea.Msg { return fxTickMsg{} })
 		if cmd == nil {

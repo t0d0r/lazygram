@@ -209,3 +209,5 @@ at the hidden password prompt takes effect only after Enter.
   selecting text while reporting is on.
 - Light speed derives from element length: a pass takes 400 ms (hover
   clock in milliseconds instead of a tick counter).
+- Fix: the first hover after an idle screen now schedules the light's tick
+  at once (the decision used the previous render's state).

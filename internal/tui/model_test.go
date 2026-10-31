@@ -1299,9 +1299,12 @@ func TestRunningLightFollowsTheMouse(t *testing.T) {
 		t.Fatal("nothing hovered: no animation")
 	}
 	x, y := find(m, spanURL, "https://example.invalid/doc")
-	m.Update(tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionMotion})
+	_, first := m.Update(tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionMotion})
 	if m.hover != hoverKey(span{kind: spanURL, target: "https://example.invalid/doc"}) {
 		t.Fatalf("hover=%q", m.hover)
+	}
+	if first == nil || !m.ticking {
+		t.Fatal("the very first hover must schedule a tick without waiting for another event")
 	}
 	m.View()
 	_, cmd := m.Update(fxTickMsg{})
