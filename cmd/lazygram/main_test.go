@@ -110,3 +110,17 @@ func TestBrokenEnvironmentIsReportedWithoutValue(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestRemoveLegacyCache(t *testing.T) {
+	dir := t.TempDir()
+	for _, f := range []string{"messages.jsonl", "chats.json"} {
+		if err := os.WriteFile(filepath.Join(dir, f), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	removeLegacyCache(dir)
+	if _, err := os.Stat(filepath.Join(dir, "messages.jsonl")); !os.IsNotExist(err) {
+		t.Fatal("legacy cache must be removed")
+	}
+	removeLegacyCache(dir) // idempotent
+}

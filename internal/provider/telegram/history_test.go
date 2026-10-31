@@ -31,11 +31,13 @@ func (f *fakeAPI) MessagesGetDialogs(context.Context, *tg.MessagesGetDialogsRequ
 	}
 	return &tg.MessagesDialogsSlice{
 		Dialogs: []tg.DialogClass{
-			&tg.Dialog{Peer: &tg.PeerUser{UserID: 7}, TopMessage: f.top[7]},
+			&tg.Dialog{Peer: &tg.PeerUser{UserID: 7}, TopMessage: f.top[7], UnreadCount: 3},
 			&tg.Dialog{Peer: &tg.PeerChat{ChatID: 5}, TopMessage: f.top[-5]},
 			&tg.Dialog{Peer: &tg.PeerChannel{ChannelID: 9}, TopMessage: f.top[-9]},
 			&tg.Dialog{Peer: &tg.PeerUser{UserID: 8}},
 			&tg.Dialog{Peer: &tg.PeerUser{UserID: 1}},
+			&tg.Dialog{Peer: &tg.PeerChannel{ChannelID: 12}},
+			&tg.Dialog{Peer: &tg.PeerUser{UserID: 13}, TopMessage: 5},
 			&tg.Dialog{Peer: &tg.PeerChannel{ChannelID: 99}}, // forbidden: no entity
 			&tg.DialogFolder{},
 		},
@@ -43,10 +45,12 @@ func (f *fakeAPI) MessagesGetDialogs(context.Context, *tg.MessagesGetDialogsRequ
 			&tg.User{ID: 7, AccessHash: 1, FirstName: "Test", LastName: "Person", Username: "testperson"},
 			&tg.User{ID: 8, AccessHash: 2, Username: "nameless"},
 			&tg.User{ID: 1, Self: true, FirstName: "Me"},
+			&tg.User{ID: 13, Deleted: true},
 		},
 		Chats: []tg.ChatClass{
 			&tg.Chat{ID: 5, Title: "Test Group"},
 			&tg.Channel{ID: 9, AccessHash: 3, Title: "Test Channel", Username: "testchan"},
+			&tg.Channel{ID: 12, AccessHash: 4, Title: "Super Group", Megagroup: true},
 			&tg.ChannelForbidden{ID: 99},
 		},
 	}, nil
@@ -100,17 +104,33 @@ func TestDialogsListsAllWithAliases(t *testing.T) {
 	}
 	got := map[string]string{}
 	for _, c := range chats {
-		got[c.ID] = c.Alias + "|" + c.Title
+		got[c.ID] = c.Name() + "|" + c.Title
 		if c.Service != "telegram" {
 			t.Fatalf("%+v", c)
 		}
+		switch c.ID {
+		case "telegram:7":
+			if c.Unread != 3 {
+				t.Errorf("unread: %+v", c)
+			}
+		case "telegram:13":
+			if !c.Deleted {
+				t.Errorf("deleted flag: %+v", c)
+			}
+		default:
+			if c.Deleted || c.Unread != 0 {
+				t.Errorf("%+v", c)
+			}
+		}
 	}
 	want := map[string]string{
-		"telegram:7":              "testperson|Test Person",
-		"telegram:-5":             "test-group|Test Group",
-		"telegram:-1000000000009": "testchan|Test Channel",
-		"telegram:8":              "nameless|nameless",
-		"telegram:1":              "saved|Saved Messages",
+		"telegram:7":              "@testperson|Test Person",
+		"telegram:-5":             "#test-group|Test Group",
+		"telegram:-1000000000009": "#testchan|Test Channel",
+		"telegram:-1000000000012": "#super-group|Super Group",
+		"telegram:8":              "@nameless|nameless",
+		"telegram:1":              "@saved|Saved Messages",
+		"telegram:13":             "@deleted-13|Deleted Account",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("got %v", got)
@@ -122,7 +142,7 @@ func TestDialogsListsAllWithAliases(t *testing.T) {
 	}
 }
 
-func TestHistoryConvertsAndSkipsServiceMessages(t *testing.T) {
+func TestRecentConvertsAndSkipsServiceMessages(t *testing.T) {
 	f := newFakeAPI()
 	f.msgs[7] = []tg.MessageClass{
 		&tg.Message{ID: 4, Date: int(base.Unix()) + 3, Media: &tg.MessageMediaEmpty{}, FromID: &tg.PeerUser{UserID: 7}},
@@ -131,8 +151,15 @@ func TestHistoryConvertsAndSkipsServiceMessages(t *testing.T) {
 		&tg.Message{ID: 1, Date: int(base.Unix()), Message: "mine", Out: true},
 	}
 	f.top[7] = 4
-	got, err := newService(f).History(context.Background(), time.Time{})
-	if err != nil || len(got) != 3 {
+	s := newService(f)
+	if _, err := s.Recent(context.Background(), "telegram:7", 10); err == nil {
+		t.Fatal("Recent before Dialogs must fail")
+	}
+	if _, err := s.Dialogs(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Recent(context.Background(), "telegram:7", 10)
+	if err != nil || len(got) != 3 || !got[0].Time.Before(got[2].Time) {
 		t.Fatalf("%v %v", got, err)
 	}
 	byID := map[string]string{}
@@ -147,50 +174,46 @@ func TestHistoryConvertsAndSkipsServiceMessages(t *testing.T) {
 	}
 }
 
-func TestHistoryFetchesOnlyChangedChats(t *testing.T) {
+func TestHistoryTakesNoBacklogThenOnlyChangedChats(t *testing.T) {
 	f := newFakeAPI()
 	f.fill(10)
 	s := newService(f)
 
 	first, err := s.History(context.Background(), time.Time{})
-	if err != nil || len(first) != 10 {
-		t.Fatalf("first: %d %v", len(first), err)
-	}
-	// Only the dialog with messages is fetched; empty chats cost nothing.
-	if f.dialogs != 1 || f.history != 1 {
-		t.Fatalf("first: dialogs=%d history=%d", f.dialogs, f.history)
+	if err != nil || len(first) != 0 || f.dialogs != 1 || f.history != 0 {
+		t.Fatalf("first call must only record cursors: n=%d dialogs=%d history=%d err=%v", len(first), f.dialogs, f.history, err)
 	}
 
-	f.history = 0
 	none, _ := s.History(context.Background(), time.Time{})
 	if len(none) != 0 || f.history != 0 {
 		t.Fatalf("unchanged: n=%d history=%d", len(none), f.history)
 	}
 
 	f.fill(12)
-	f.history = 0
 	more, _ := s.History(context.Background(), time.Time{})
 	if len(more) != 2 || f.history != 1 || more[0].ID != "12" {
 		t.Fatalf("changed: n=%d history=%d %+v", len(more), f.history, more)
 	}
-}
-
-func TestHistoryInitialBacklogIsCapped(t *testing.T) {
-	f := newFakeAPI()
-	f.fill(500)
-	got, _ := newService(f).History(context.Background(), time.Time{})
-	if len(got) != initialPerChat {
-		t.Fatalf("empty cache: got %d want %d", len(got), initialPerChat)
+	// The deleted account's dialog (top 5) is never fetched.
+	if f.history != 1 {
+		t.Fatalf("deleted account fetched: history=%d", f.history)
 	}
 }
 
-func TestHistoryAfterRestartStopsAtSince(t *testing.T) {
+func TestRecentIsCappedAndOldestFirst(t *testing.T) {
 	f := newFakeAPI()
-	f.fill(250)
-	s := newService(f) // fresh process: nothing tracked yet
-	got, _ := s.History(context.Background(), base.Add(240*time.Second))
-	if len(got) != 10 || f.history != 1 {
-		t.Fatalf("since: n=%d history=%d", len(got), f.history)
+	f.fill(500)
+	s := newService(f)
+	if _, err := s.Dialogs(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Recent(context.Background(), "telegram:7", 10)
+	if err != nil || len(got) != 10 || got[0].ID != "491" || got[9].ID != "500" || f.history != 1 {
+		t.Fatalf("n=%d first=%s err=%v history=%d", len(got), got[0].ID, err, f.history)
+	}
+	got, _ = s.Recent(context.Background(), "telegram:7", 100000)
+	if len(got) != maxRecent {
+		t.Fatalf("cap: %d", len(got))
 	}
 }
 
@@ -202,8 +225,7 @@ func TestHistoryPagesUntilKnownMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.fill(260) // 259 new messages: three pages
-	f.history = 0
-	got, _ := s.History(context.Background(), base)
+	got, _ := s.History(context.Background(), time.Time{})
 	if len(got) != 259 || f.history != 3 {
 		t.Fatalf("n=%d history=%d", len(got), f.history)
 	}
@@ -228,5 +250,42 @@ func TestFloodWaitRetriesOnce(t *testing.T) {
 	s = newService(floodAPI{api: f, sleep: func(context.Context, time.Duration) error { return context.Canceled }})
 	if _, err := s.Dialogs(context.Background()); !errors.Is(err, context.Canceled) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// failingAPI fails the Nth history request.
+type failingAPI struct {
+	*fakeAPI
+	failAt int
+}
+
+func (f *failingAPI) MessagesGetHistory(ctx context.Context, r *tg.MessagesGetHistoryRequest) (tg.MessagesMessagesClass, error) {
+	if f.history+1 == f.failAt {
+		f.history++
+		return nil, errors.New("network down")
+	}
+	return f.fakeAPI.MessagesGetHistory(ctx, r)
+}
+
+func TestHistoryReturnsPartialResultAndKeepsUnfetchedChatsPending(t *testing.T) {
+	f := newFakeAPI()
+	s := newService(&failingAPI{fakeAPI: f, failAt: 2})
+	if _, err := s.History(context.Background(), time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	// Two chats move: user 7 and group -5.
+	f.fill(3)
+	f.msgs[-5] = []tg.MessageClass{tmsg(2, 2, "g"), tmsg(1, 1, "g")}
+	f.top[-5] = 2
+	got, err := s.History(context.Background(), time.Time{})
+	if err == nil || len(got) != 3 {
+		t.Fatalf("partial: n=%d err=%v", len(got), err)
+	}
+	if s.top["telegram:7"] != 3 || s.top["telegram:-5"] != 0 {
+		t.Fatalf("cursors: %v", s.top)
+	}
+	again, err := s.History(context.Background(), time.Time{})
+	if err != nil || len(again) != 2 || again[0].ChatID != "telegram:-5" {
+		t.Fatalf("retry must fetch the pending chat only: n=%d err=%v", len(again), err)
 	}
 }

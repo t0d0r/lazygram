@@ -10,12 +10,34 @@ import (
 	"time"
 )
 
+// ChatKind says what kind of conversation a chat is. It decides the IRC
+// sigil: people are @alias, groups and channels are #alias.
+type ChatKind int
+
+// Chat kinds.
+const (
+	ChatUser    ChatKind = iota // a person or bot
+	ChatGroup                   // a group conversation
+	ChatChannel                 // a broadcast channel
+)
+
 // Chat is one conversation on some service.
 type Chat struct {
-	ID      string `json:"id"`      // stable, service-scoped identifier
-	Service string `json:"service"` // connector name, e.g. "telegram"
-	Alias   string `json:"alias"`   // short display name used in the feed
-	Title   string `json:"title,omitempty"`
+	ID      string   `json:"id"`      // stable, service-scoped identifier
+	Service string   `json:"service"` // connector name, e.g. "telegram"
+	Alias   string   `json:"alias"`   // short name without sigil
+	Title   string   `json:"title,omitempty"`
+	Kind    ChatKind `json:"kind"`
+	Unread  int      `json:"unread,omitempty"`  // unread count reported by the service
+	Deleted bool     `json:"deleted,omitempty"` // the account behind the chat no longer exists
+}
+
+// Name is the IRC-style name: @alias for people, #alias otherwise.
+func (c Chat) Name() string {
+	if c.Kind == ChatUser {
+		return "@" + c.Alias
+	}
+	return "#" + c.Alias
 }
 
 // Message is one message in a chat.
@@ -113,18 +135,24 @@ var (
 )
 
 // ResolveChat finds one chat by exact ID or alias, then by unique
-// case-insensitive prefix, then by unique substring of alias or title.
+// case-insensitive prefix, then by unique substring of alias or title. A
+// leading @ restricts the search to people, a leading # to groups and
+// channels.
 func ResolveChat(chats []Chat, query string) (Chat, error) {
-	q := strings.ToLower(strings.TrimPrefix(strings.TrimSpace(query), "#"))
+	q := strings.ToLower(strings.TrimSpace(query))
+	switch {
+	case strings.HasPrefix(q, "@"):
+		chats = ofKind(chats, func(c Chat) bool { return c.Kind == ChatUser })
+		q = q[1:]
+	case strings.HasPrefix(q, "#"):
+		chats = ofKind(chats, func(c Chat) bool { return c.Kind != ChatUser })
+		q = q[1:]
+	}
 	if q == "" {
 		return Chat{}, ErrNoChat
 	}
-	for _, c := range chats {
-		if strings.ToLower(c.ID) == q || strings.ToLower(c.Alias) == q {
-			return c, nil
-		}
-	}
 	for _, match := range []func(Chat) bool{
+		func(c Chat) bool { return strings.ToLower(c.ID) == q || strings.ToLower(c.Alias) == q },
 		func(c Chat) bool { return strings.HasPrefix(strings.ToLower(c.Alias), q) },
 		func(c Chat) bool {
 			return strings.Contains(strings.ToLower(c.Alias), q) ||
@@ -146,6 +174,16 @@ func ResolveChat(chats []Chat, query string) (Chat, error) {
 		}
 	}
 	return Chat{}, fmt.Errorf("%w: %q", ErrNoChat, query)
+}
+
+func ofKind(chats []Chat, keep func(Chat) bool) []Chat {
+	var out []Chat
+	for _, c := range chats {
+		if keep(c) {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // FilterChats returns chats whose alias, title, or ID contains text.

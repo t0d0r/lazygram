@@ -30,6 +30,9 @@ func TestInertWithoutClient(t *testing.T) {
 	if _, err := p.Sync(context.Background(), time.Time{}); !errors.Is(err, provider.ErrNotImplemented) {
 		t.Fatalf("sync: %v", err)
 	}
+	if _, err := p.Recent(context.Background(), "x", 5); !errors.Is(err, provider.ErrNotImplemented) {
+		t.Fatalf("recent: %v", err)
+	}
 	var _ provider.Provider = p
 }
 
@@ -53,5 +56,13 @@ func TestLoginRejectsIncompleteConfig(t *testing.T) {
 	_, err := Login(context.Background(), config.Telegram{}, nil, nil)
 	if err == nil {
 		t.Fatal("want error")
+	}
+}
+
+func TestSessionSecretWithoutSession(t *testing.T) {
+	cfg := testCfg
+	cfg.SessionDir = t.TempDir()
+	if _, err := SessionSecret(context.Background(), cfg); !errors.Is(err, ErrNotLoggedIn) {
+		t.Fatalf("got %v", err)
 	}
 }

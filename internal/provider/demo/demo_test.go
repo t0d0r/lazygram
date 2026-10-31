@@ -41,3 +41,20 @@ func TestChatsKnown(t *testing.T) {
 		}
 	}
 }
+
+func TestRecent(t *testing.T) {
+	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	p := newAt(func() time.Time { return clock })
+	got, err := p.Recent(context.Background(), "demo-1", 2)
+	if err != nil || len(got) != 2 || got[0].ChatID != "demo-1" || !got[0].Time.Before(got[1].Time) {
+		t.Fatalf("%v %v", got, err)
+	}
+	for _, m := range got {
+		if m.Time.After(clock) {
+			t.Fatal("future lines must not be revealed")
+		}
+	}
+	if got, _ := p.Recent(context.Background(), "nope", 5); len(got) != 0 {
+		t.Fatal("unknown chat")
+	}
+}

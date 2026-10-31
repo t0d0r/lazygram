@@ -22,6 +22,7 @@ import (
 type Client interface {
 	Dialogs(ctx context.Context) ([]domain.Chat, error)
 	History(ctx context.Context, since time.Time) ([]domain.Message, error)
+	Recent(ctx context.Context, chatID string, limit int) ([]domain.Message, error)
 }
 
 // Provider adapts a Client to provider.Provider.
@@ -63,4 +64,12 @@ func (p *Provider) Sync(ctx context.Context, since time.Time) ([]domain.Message,
 		return nil, fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
 	}
 	return p.client.History(ctx, since)
+}
+
+// Recent implements provider.Provider.
+func (p *Provider) Recent(ctx context.Context, chatID string, limit int) ([]domain.Message, error) {
+	if p.client == nil {
+		return nil, fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
+	}
+	return p.client.Recent(ctx, chatID, limit)
 }

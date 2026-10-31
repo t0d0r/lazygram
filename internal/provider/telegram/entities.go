@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"github.com/gotd/td/tg"
+
+	"lazygram/internal/domain"
 )
 
 // entity is a Telegram peer reduced to what lazygram needs.
@@ -14,6 +16,17 @@ type entity struct {
 	title    string
 	peer     tg.InputPeerClass
 	kind     peerKind
+	deleted  bool // a user account that no longer exists
+}
+
+func (e entity) chatKind() domain.ChatKind {
+	switch e.kind {
+	case kindGroup:
+		return domain.ChatGroup
+	case kindChannel:
+		return domain.ChatChannel
+	}
+	return domain.ChatUser
 }
 
 type peerKind int
@@ -40,10 +53,13 @@ func collect(users []tg.UserClass, chats []tg.ChatClass) entities {
 			continue
 		}
 		e.users[u.ID] = u
-		ent := entity{id: u.ID, kind: kindUser, username: u.Username, title: userName(u),
+		ent := entity{id: u.ID, kind: kindUser, username: u.Username, title: userName(u), deleted: u.Deleted,
 			peer: &tg.InputPeerUser{UserID: u.ID, AccessHash: u.AccessHash}}
-		if u.Self {
+		switch {
+		case u.Self:
 			ent.username, ent.title = "saved", "Saved Messages"
+		case u.Deleted:
+			ent.username = "deleted-" + strconv.FormatInt(u.ID, 10)
 		}
 		e.byID[u.ID] = ent
 	}
@@ -54,7 +70,11 @@ func collect(users []tg.UserClass, chats []tg.ChatClass) entities {
 				peer: &tg.InputPeerChat{ChatID: c.ID}}
 		case *tg.Channel:
 			id := channelBase - c.ID
-			e.byID[id] = entity{id: id, kind: kindChannel, username: c.Username, title: c.Title,
+			kind := kindChannel
+			if c.Megagroup || c.Gigagroup {
+				kind = kindGroup // supergroups are conversations, not broadcasts
+			}
+			e.byID[id] = entity{id: id, kind: kind, username: c.Username, title: c.Title,
 				peer: &tg.InputPeerChannel{ChannelID: c.ID, AccessHash: c.AccessHash}}
 		}
 	}

@@ -25,14 +25,22 @@
 - [ ] first real-service login and smoke test by the operator
 - [ ] reconnect after a dropped connection
 - [ ] dialogs beyond the 100 most recent; per-chat include/exclude list
-- [ ] persist the per-chat cursor so a restart costs no history requests
+- [ ] persist the per-chat cursor so a restart shows what arrived meanwhile
+- [ ] remember open windows across restarts
+- [ ] cache size cap or compaction (specs/storage.md)
 - [ ] `lazygram logout` (delete session file)
+
+## v0.3 windows and encrypted cache (done)
+
+- [x] BitchX-style windows: server window 1, auto-open per chat, /win, /close, Act (specs/ui.md)
+- [x] @people and #channels, Tab completion of names and commands (specs/ui.md)
+- [x] selectable /list, deleted accounts hidden unless --show-deleted
+- [x] no backlog: first sync records cursors; Recent on window open and /last (specs/providers.md)
+- [x] encrypted SQLite cache keyed from the session auth key (specs/storage.md)
 
 ## Next
 
-- [ ] load older history on demand from the service when the cache lacks it
 - [ ] sending messages (post-v0.1)
 - [ ] unread markers and mention highlight
-- [ ] store size cap or compaction (specs/storage.md)
 - [ ] cmd/lazygram tests for provider selection
 - [ ] gitleaks pre-commit hook

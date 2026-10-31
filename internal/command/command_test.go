@@ -11,17 +11,18 @@ func TestParse(t *testing.T) {
 		{"/help", Command{Help, ""}, false},
 		{"  /Q ", Command{Quit, ""}, false},
 		{"/sync", Command{Refresh, ""}, false},
-		{"/chats dev", Command{Chats, "dev"}, false},
-		{"/ls", Command{Chats, ""}, false},
-		{"/join  #dev team ", Command{Select, "#dev team"}, false},
-		{"/filter", Command{Filter, ""}, false},
-		{"/filter foo bar", Command{Filter, "foo bar"}, false},
-		{"/all", Command{All, ""}, false},
-		{"/history", Command{History, ""}, false},
-		{"/open dev", Command{History, "dev"}, false},
+		{"/list dev", Command{List, "dev"}, false},
+		{"/ls", Command{List, ""}, false},
+		{"/win", Command{Win, ""}, false},
+		{"/win 2", Command{Win, "2"}, false},
+		{"/w  @linus ", Command{Win, "@linus"}, false},
+		{"/join #dev", Command{Win, "#dev"}, false},
+		{"/close", Command{Close, ""}, false},
+		{"/close 3", Command{Close, "3"}, false},
+		{"/last", Command{Last, ""}, false},
+		{"/history 20", Command{Last, "20"}, false},
+		{"/search", Command{Search, ""}, false},
 		{"/search needle", Command{Search, "needle"}, false},
-		{"/select", Command{}, true},
-		{"/search", Command{}, true},
 		{"/bogus", Command{}, true},
 		{"/", Command{}, true},
 		{"hello", Command{}, true},
@@ -35,6 +36,18 @@ func TestParse(t *testing.T) {
 		}
 		if !c.err && got != c.want {
 			t.Errorf("%q: got %+v want %+v", c.in, got, c.want)
+		}
+	}
+}
+
+func TestNamesSortedWithSlash(t *testing.T) {
+	n := Names()
+	if len(n) != len(table) || n[0][0] != '/' {
+		t.Fatal(n)
+	}
+	for i := 1; i < len(n); i++ {
+		if n[i-1] >= n[i] {
+			t.Fatal("not sorted")
 		}
 	}
 }

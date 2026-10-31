@@ -11,7 +11,8 @@ import (
 )
 
 // Provider serves a scripted conversation. Early lines are already in the
-// past; the rest "arrive" over the next minutes so refresh shows new lines.
+// past; the rest "arrive" over the next minutes so new windows open while
+// you watch.
 type Provider struct {
 	chats []domain.Chat
 	msgs  []domain.Message
@@ -26,10 +27,10 @@ type line struct {
 }
 
 var chats = []domain.Chat{
-	{ID: "demo-1", Service: "demo", Alias: "dev", Title: "Demo Developers"},
-	{ID: "demo-2", Service: "demo", Alias: "ops", Title: "Demo Operations"},
-	{ID: "demo-3", Service: "demo", Alias: "friends", Title: "Demo Friends"},
-	{ID: "demo-4", Service: "demo", Alias: "news", Title: "Demo Newsroom"},
+	{ID: "demo-1", Service: "demo", Alias: "dev", Title: "Demo Developers", Kind: domain.ChatGroup},
+	{ID: "demo-2", Service: "demo", Alias: "ops", Title: "Demo Operations", Kind: domain.ChatGroup},
+	{ID: "demo-3", Service: "demo", Alias: "linus", Title: "Linus Demo", Kind: domain.ChatUser},
+	{ID: "demo-4", Service: "demo", Alias: "news", Title: "Demo Newsroom", Kind: domain.ChatChannel, Unread: 2},
 }
 
 var script = []line{
@@ -39,7 +40,7 @@ var script = []line{
 	{0, -88 * time.Minute, "alan", "I will review the parser change after standup"},
 	{3, -85 * time.Minute, "wire", "Demo headline: local terminal clients make a comeback"},
 	{1, -80 * time.Minute, "ken", "disk usage on the demo host is at 71%"},
-	{2, -78 * time.Minute, "margaret", "yes, 12:30 at the usual place"},
+	{2, -78 * time.Minute, "me", "yes, 12:30 at the usual place"},
 	{0, -70 * time.Minute, "ada", "pushed a fix for the scrollback off-by-one"},
 	{0, -69 * time.Minute, "grace", "nice, tests pass here too"},
 	{1, -60 * time.Minute, "dennis", "rotating the demo logs now"},
@@ -49,15 +50,15 @@ var script = []line{
 	{1, -35 * time.Minute, "grace", "alert: demo queue depth above threshold"},
 	{1, -34 * time.Minute, "ken", "looking into the queue depth alert"},
 	{1, -30 * time.Minute, "ken", "false alarm, a batch job finished late"},
-	{2, -25 * time.Minute, "margaret", "photos from the weekend are in the shared album"},
+	{2, -25 * time.Minute, "me", "no problem, ordering for you"},
 	{0, -20 * time.Minute, "ada", "who owns the history pager spec?"},
 	{0, -19 * time.Minute, "alan", "I do, draft is in specs/"},
 	{3, -12 * time.Minute, "wire", "Demo headline: terminal UIs gain search-first pagers"},
 	{2, -8 * time.Minute, "linus", "back from lunch, what did I miss"},
 	{0, -5 * time.Minute, "grace", "release candidate tagged"},
 	{1, -2 * time.Minute, "dennis", "deploy window opens in 30 minutes"},
-	{0, 20 * time.Second, "ada", "tip: press Tab to cycle through chats"},
-	{2, 45 * time.Second, "margaret", "try /history to page through everything"},
+	{0, 20 * time.Second, "ada", "tip: /win 2 switches windows, Tab completes names"},
+	{2, 45 * time.Second, "linus", "try /win @linus to open my window"},
 	{3, 90 * time.Second, "wire", "Demo headline: new lines keep arriving while you read"},
 	{1, 150 * time.Second, "ken", "all quiet on the demo host"},
 	{0, 210 * time.Second, "alan", "try /search release to find a line in history"},
@@ -89,7 +90,9 @@ func (p *Provider) Chats(context.Context) ([]domain.Chat, error) {
 	return append([]domain.Chat(nil), p.chats...), nil
 }
 
-// Sync implements provider.Provider: messages after since and not in the future.
+// Sync implements provider.Provider: messages after since and not in the
+// future. The demo replays its past on the first call so the server window
+// has something to show.
 func (p *Provider) Sync(_ context.Context, since time.Time) ([]domain.Message, error) {
 	now := p.now()
 	var out []domain.Message
@@ -100,4 +103,16 @@ func (p *Provider) Sync(_ context.Context, since time.Time) ([]domain.Message, e
 		out = append(out, m)
 	}
 	return out, nil
+}
+
+// Recent implements provider.Provider.
+func (p *Provider) Recent(_ context.Context, chatID string, limit int) ([]domain.Message, error) {
+	now := p.now()
+	var out []domain.Message
+	for _, m := range p.msgs {
+		if m.ChatID == chatID && !m.Time.After(now) {
+			out = append(out, m)
+		}
+	}
+	return domain.Tail(out, limit), nil
 }

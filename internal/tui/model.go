@@ -1,11 +1,15 @@
-// Package tui is the terminal front end: one chronological feed across all
-// chats, a history pager, a chat list, and a slash-command input line.
+// Package tui is the terminal front end, laid out like BitchX/irssi: window
+// 1 is the server window with every message and client notices, and a
+// window per chat opens when that chat gets a message. A slash-command
+// input line with Tab completion drives it.
 package tui
 
 import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -21,10 +25,17 @@ import (
 type mode int
 
 const (
-	modeFeed mode = iota
-	modeHistory
-	modeChats
+	modeWin   mode = iota // a window's scrollback
+	modeList              // selectable chat list (/list)
+	modePager             // searchable local history of the current window's chat
 	modeHelp
+)
+
+const (
+	defaultBacklog = 2000 // cached messages loaded at start
+	recentOnOpen   = 10   // messages fetched when a chat window first opens
+	maxRecent      = 100
+	maxNotes       = 500
 )
 
 // Options configures the model.
@@ -32,29 +43,43 @@ type Options struct {
 	Store    *store.Store
 	Provider provider.Provider
 	Poll     time.Duration // background sync interval; zero disables
+	Backlog  int           // cached messages loaded at start; zero means defaultBacklog
+}
+
+// win is one virtual window. wins[0] is the server window (chatID empty).
+type win struct {
+	chatID string
+	unread int
+	scroll int // lines above the bottom
+	notes  []note
+	loaded bool // recent history fetched once
 }
 
 // Model is the bubbletea model.
 type Model struct {
 	opt   Options
 	chats []domain.Chat
+	msgs  []domain.Message // in-memory mirror of the cache, chronological
 
-	mode     mode
-	sel      domain.Chat // selected chat; zero ID means all chats
-	filter   string      // feed text filter
-	histChat string      // chat ID scoping the history pager; empty means all
-	input    []rune
-	cursor   int // chat list cursor
-	scroll   int // lines above the bottom
-	width    int
-	height   int
+	wins []*win
+	cur  int
+	mode mode
 
-	lastLines int // pager/feed line count at the last render
-	syncing   bool
-	lastSync  time.Time
-	status    string
-	isErr     bool
-	quitting  bool
+	input []rune
+	comp  *completion
+
+	listCur     int  // selected row in the chat list
+	showDeleted bool // /list --show-deleted
+
+	width, height int
+	lastLines     int // rendered line count of the current window at the last View
+
+	syncing  bool
+	loading  map[string]bool // chat ids with a Recent fetch in flight
+	lastSync time.Time
+	status   string
+	isErr    bool
+	quitting bool
 }
 
 type (
@@ -63,17 +88,30 @@ type (
 		err   error
 	}
 	syncedMsg struct {
-		added int
+		fresh []domain.Message
 		err   error
 		at    time.Time
+	}
+	recentMsg struct {
+		chatID string
+		fresh  []domain.Message
+		err    error
 	}
 	tickMsg time.Time
 )
 
-// New builds a model. Chats cached in the store are available immediately.
+// New builds a model. Chats and messages cached in the store are available
+// immediately.
 func New(opt Options) *Model {
-	return &Model{opt: opt, chats: opt.Store.Chats(), width: 100, height: 30,
-		status: "type /help for commands"}
+	if opt.Backlog <= 0 {
+		opt.Backlog = defaultBacklog
+	}
+	m := &Model{opt: opt, width: 100, height: 30, loading: map[string]bool{},
+		wins: []*win{{}}, status: "type /help for commands"}
+	m.chats, _ = opt.Store.Chats()
+	m.msgs, _ = opt.Store.Messages("", opt.Backlog)
+	m.note(m.wins[0], "lazygram started; /help lists commands, /list the chats")
+	return m
 }
 
 // Init starts the first chat fetch, sync, and poll timer.
@@ -105,16 +143,33 @@ func (m *Model) chatsCmd() tea.Cmd {
 
 func (m *Model) syncCmd() tea.Cmd {
 	p, st := m.opt.Provider, m.opt.Store
-	since := domain.Latest(st.Messages())
+	since := domain.Latest(m.msgs)
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 		msgs, err := p.Sync(ctx, since)
-		if err != nil {
-			return syncedMsg{err: err, at: time.Now()}
+		// A provider may return what it fetched before failing part-way, and
+		// its cursors already cover those messages: store them regardless.
+		fresh, addErr := st.Add(msgs)
+		if err == nil {
+			err = addErr
 		}
-		n, err := st.Add(msgs)
-		return syncedMsg{added: n, err: err, at: time.Now()}
+		return syncedMsg{fresh: fresh, err: err, at: time.Now()}
+	}
+}
+
+func (m *Model) recentCmd(chatID string, n int) tea.Cmd {
+	p, st := m.opt.Provider, m.opt.Store
+	m.loading[chatID] = true
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		defer cancel()
+		msgs, err := p.Recent(ctx, chatID, n)
+		if err != nil {
+			return recentMsg{chatID: chatID, err: err}
+		}
+		fresh, err := st.Add(msgs)
+		return recentMsg{chatID: chatID, fresh: fresh, err: err}
 	}
 }
 
@@ -126,20 +181,41 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case chatsMsg:
 		if msg.err != nil {
 			m.setErr("chats: " + errText(msg.err))
-		} else {
-			m.chats = msg.chats
+			m.note(m.wins[0], "chats: "+errText(msg.err))
+			break
+		}
+		first := len(m.chats) == 0
+		m.chats = msg.chats
+		if first {
+			m.openUnread()
 		}
 	case syncedMsg:
 		m.syncing = false
 		m.lastSync = msg.at
+		if len(msg.fresh) > 0 {
+			m.arrived(msg.fresh)
+		}
 		switch {
 		case msg.err != nil:
 			m.setErr("sync: " + errText(msg.err))
-		case msg.added > 0:
-			m.afterNewMessages(msg.added)
-		default:
+			m.note(m.wins[0], "sync: "+errText(msg.err))
+		case len(msg.fresh) == 0:
 			m.setInfo("synced, nothing new")
 		}
+	case recentMsg:
+		delete(m.loading, msg.chatID)
+		_, w := m.winFor(msg.chatID)
+		if w == nil {
+			w = m.wins[0]
+		}
+		if msg.err != nil {
+			m.setErr("history: " + errText(msg.err))
+			m.note(w, "history: "+errText(msg.err))
+			break
+		}
+		w.loaded = true
+		m.absorb(msg.fresh)
+		m.note(w, fmt.Sprintf("fetched %d older message(s)", len(msg.fresh)))
 	case tickMsg:
 		cmds := []tea.Cmd{m.tickCmd()}
 		if !m.syncing {
@@ -153,29 +229,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// afterNewMessages keeps a scrolled-back view anchored on the same lines.
-func (m *Model) afterNewMessages(n int) {
-	m.setInfo(fmt.Sprintf("%d new message(s)", n))
-	if m.scroll > 0 && (m.mode == modeFeed || m.mode == modeHistory) {
-		m.scroll += max(len(m.pagerLines(m.opt.Store.Messages()))-m.lastLines, 0)
-	}
-}
-
-// pagerLines renders the lines of the feed or the history pager.
-func (m *Model) pagerLines(all []domain.Message) []string {
-	o := lineOpts{width: m.width, aliasOf: m.aliasOf, aliasW: m.aliasWidth()}
-	if m.mode == modeHistory {
-		q := m.listText()
-		o.fullDate, o.highlight = true, q
-		return renderLines(domain.Filter(all, domain.Query{ChatID: m.histChat, Text: q}), o)
-	}
-	o.highlight = m.filter
-	return renderLines(domain.Filter(all, domain.Query{ChatID: m.sel.ID, Text: m.filter}), o)
-}
-
 func errText(err error) string {
 	if errors.Is(err, provider.ErrNotImplemented) {
-		return "live connector not available in this build; run with LAZYGRAM_PROVIDER=demo"
+		return "live connector not available; run lazygram demo"
 	}
 	return err.Error()
 }
@@ -183,85 +239,128 @@ func errText(err error) string {
 func (m *Model) setInfo(s string) { m.status, m.isErr = s, false }
 func (m *Model) setErr(s string)  { m.status, m.isErr = s, true }
 
-func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
-	page := max(m.contentHeight()-1, 1)
-	switch k.Type {
-	case tea.KeyCtrlC:
-		m.quitting = true
-		return m, tea.Quit
-	case tea.KeyEsc:
-		if m.mode != modeFeed {
-			m.mode, m.input, m.scroll = modeFeed, nil, 0
-		} else {
-			m.input = nil
-		}
-	case tea.KeyEnter:
-		return m.enter()
-	case tea.KeyBackspace:
-		if len(m.input) > 0 {
-			m.input = m.input[:len(m.input)-1]
-			m.cursor = 0
-		}
-	case tea.KeyCtrlU:
-		m.input, m.cursor = nil, 0
-	case tea.KeyCtrlW:
-		s := strings.TrimRight(string(m.input), " ")
-		if i := strings.LastIndex(s, " "); i >= 0 {
-			m.input = []rune(s[:i+1])
-		} else {
-			m.input = nil
-		}
-	case tea.KeyPgUp:
-		m.scroll += page
-	case tea.KeyPgDown:
-		m.scroll = max(m.scroll-page, 0)
-	case tea.KeyHome:
-		m.scroll = 1 << 30
-	case tea.KeyEnd:
-		m.scroll = 0
-	case tea.KeyUp:
-		if m.mode == modeChats {
-			m.cursor = max(m.cursor-1, 0)
-		} else {
-			m.scroll++
-		}
-	case tea.KeyDown:
-		if m.mode == modeChats {
-			m.cursor++
-		} else {
-			m.scroll = max(m.scroll-1, 0)
-		}
-	case tea.KeyTab:
-		if m.mode == modeChats {
-			m.cursor++
-		} else {
-			m.cycleChat(1)
-		}
-	case tea.KeyShiftTab:
-		if m.mode == modeChats {
-			m.cursor = max(m.cursor-1, 0)
-		} else {
-			m.cycleChat(-1)
-		}
-	case tea.KeyCtrlR:
-		return m, m.refresh()
-	case tea.KeyCtrlO:
-		m.openHistory(m.sel.ID)
-	case tea.KeyCtrlL:
-		m.openChats("")
-	case tea.KeyF1:
-		m.mode = modeHelp
-	case tea.KeySpace:
-		m.input = append(m.input, ' ')
-	case tea.KeyRunes:
-		for _, r := range k.Runes {
-			if r >= ' ' && r != 0x7f {
-				m.input = append(m.input, r)
-			}
-		}
-		m.cursor = 0
+// note appends a client line to a window.
+func (m *Model) note(w *win, text string) {
+	w.notes = append(w.notes, note{at: time.Now(), text: text})
+	if len(w.notes) > maxNotes {
+		w.notes = w.notes[len(w.notes)-maxNotes:]
 	}
-	return m, nil
+}
+
+// absorb merges messages into the in-memory mirror.
+func (m *Model) absorb(fresh []domain.Message) {
+	if len(fresh) == 0 {
+		return
+	}
+	before := len(m.lines())
+	m.msgs = domain.Merge(m.msgs, fresh)
+	if w := m.wins[m.cur]; w.scroll > 0 && m.mode == modeWin {
+		w.scroll += max(len(m.lines())-before, 0) // stay anchored while scrolled back
+	}
+}
+
+// arrived handles messages that just came in: windows open for their chats
+// and activity is counted.
+func (m *Model) arrived(fresh []domain.Message) {
+	m.absorb(fresh)
+	for _, msg := range fresh {
+		i, w := m.winFor(msg.ChatID)
+		if w == nil {
+			if c, ok := m.chat(msg.ChatID); ok && c.Deleted {
+				continue
+			}
+			i, w = m.openWin(msg.ChatID)
+		}
+		if i != m.cur {
+			w.unread++
+		}
+	}
+	m.setInfo(fmt.Sprintf("%d new message(s)", len(fresh)))
+}
+
+// openUnread opens windows for chats the service reports as unread.
+func (m *Model) openUnread() {
+	n := 0
+	for _, c := range m.chats {
+		if c.Unread == 0 || c.Deleted {
+			continue
+		}
+		if _, w := m.winFor(c.ID); w == nil {
+			_, w = m.openWin(c.ID)
+			w.unread = c.Unread
+			n++
+		}
+	}
+	m.note(m.wins[0], fmt.Sprintf("%d chats, %d with unread messages", len(m.chats), n))
+}
+
+func (m *Model) chat(chatID string) (domain.Chat, bool) {
+	for _, c := range m.chats {
+		if c.ID == chatID {
+			return c, true
+		}
+	}
+	return domain.Chat{}, false
+}
+
+// nameOf is the chat's IRC-style name, or its id when the chat is unknown.
+func (m *Model) nameOf(chatID string) string {
+	if c, ok := m.chat(chatID); ok {
+		return c.Name()
+	}
+	return chatID
+}
+
+func (m *Model) winFor(chatID string) (int, *win) {
+	for i, w := range m.wins {
+		if i > 0 && w.chatID == chatID {
+			return i, w
+		}
+	}
+	return -1, nil
+}
+
+func (m *Model) openWin(chatID string) (int, *win) {
+	w := &win{chatID: chatID}
+	m.wins = append(m.wins, w)
+	i := len(m.wins) - 1
+	m.note(m.wins[0], fmt.Sprintf("window %d opened for %s", i+1, m.nameOf(chatID)))
+	return i, w
+}
+
+// switchTo makes window i current and fetches its recent history once.
+func (m *Model) switchTo(i int) tea.Cmd {
+	i = min(max(i, 0), len(m.wins)-1)
+	m.cur, m.mode = i, modeWin
+	w := m.wins[i]
+	w.unread = 0
+	m.setInfo("window " + strconv.Itoa(i+1) + ": " + m.winName(i))
+	if w.chatID != "" && !w.loaded && !m.loading[w.chatID] {
+		m.note(w, fmt.Sprintf("fetching the last %d messages", recentOnOpen))
+		return m.recentCmd(w.chatID, recentOnOpen)
+	}
+	return nil
+}
+
+func (m *Model) winName(i int) string {
+	if i == 0 {
+		return "server"
+	}
+	return m.nameOf(m.wins[i].chatID)
+}
+
+func (m *Model) closeWin(i int) {
+	if i <= 0 || i >= len(m.wins) {
+		m.setErr("cannot close that window")
+		return
+	}
+	name := m.winName(i)
+	m.wins = append(m.wins[:i], m.wins[i+1:]...)
+	if m.cur >= i {
+		m.cur = max(m.cur-1, 0)
+	}
+	m.note(m.wins[0], "window closed: "+name)
+	m.setInfo("closed " + name)
 }
 
 func (m *Model) refresh() tea.Cmd {
@@ -274,53 +373,120 @@ func (m *Model) refresh() tea.Cmd {
 	return tea.Batch(m.chatsCmd(), m.syncCmd())
 }
 
-// cycleChat moves the selection through all, chat1, chat2, ...
-func (m *Model) cycleChat(d int) {
-	n := len(m.chats) + 1
-	cur := 0
-	for i, c := range m.chats {
-		if c.ID == m.sel.ID {
-			cur = i + 1
+func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if k.Type != tea.KeyTab {
+		m.comp = nil
+	}
+	page := max(m.contentHeight()-1, 1)
+	w := m.wins[m.cur]
+	switch {
+	case k.Type == tea.KeyCtrlC:
+		m.quitting = true
+		return m, tea.Quit
+	case k.Alt && k.Type == tea.KeyRunes && len(k.Runes) == 1 && k.Runes[0] >= '0' && k.Runes[0] <= '9':
+		n := int(k.Runes[0] - '0')
+		if n == 0 {
+			n = 10
+		}
+		if n <= len(m.wins) {
+			return m, m.switchTo(n - 1)
+		}
+		m.setErr("no window " + strconv.Itoa(n))
+		return m, nil
+	case k.Alt && k.Type == tea.KeyRight, k.Type == tea.KeyCtrlN:
+		return m, m.switchTo((m.cur + 1) % len(m.wins))
+	case k.Alt && k.Type == tea.KeyLeft, k.Type == tea.KeyCtrlP:
+		return m, m.switchTo((m.cur + len(m.wins) - 1) % len(m.wins))
+	}
+	switch k.Type {
+	case tea.KeyEsc:
+		if m.mode != modeWin {
+			m.mode, m.input = modeWin, nil
+		} else {
+			m.input = nil
+		}
+	case tea.KeyEnter:
+		return m.enter()
+	case tea.KeyTab:
+		if m.mode == modeList {
+			m.listCur++
+		} else {
+			m.complete()
+		}
+	case tea.KeyShiftTab:
+		if m.mode == modeList {
+			m.listCur = max(m.listCur-1, 0)
+		}
+	case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
+		if len(m.input) > 0 {
+			m.input = m.input[:len(m.input)-1]
+		}
+	case tea.KeyCtrlU:
+		m.input = nil
+	case tea.KeyCtrlW:
+		s := strings.TrimRight(string(m.input), " ")
+		if i := strings.LastIndex(s, " "); i >= 0 {
+			m.input = []rune(s[:i+1])
+		} else {
+			m.input = nil
+		}
+	case tea.KeyPgUp:
+		w.scroll += page
+	case tea.KeyPgDown:
+		w.scroll = max(w.scroll-page, 0)
+	case tea.KeyHome:
+		w.scroll = 1 << 30
+	case tea.KeyEnd:
+		w.scroll = 0
+	case tea.KeyUp:
+		if m.mode == modeList {
+			m.listCur = max(m.listCur-1, 0)
+		} else {
+			w.scroll++
+		}
+	case tea.KeyDown:
+		if m.mode == modeList {
+			m.listCur++
+		} else {
+			w.scroll = max(w.scroll-1, 0)
+		}
+	case tea.KeyCtrlR:
+		return m, m.refresh()
+	case tea.KeyF1:
+		m.mode = modeHelp
+	case tea.KeySpace:
+		m.input = append(m.input, ' ')
+	case tea.KeyRunes:
+		for _, r := range k.Runes {
+			if r >= ' ' && r != 0x7f {
+				m.input = append(m.input, r)
+			}
+		}
+		if m.mode == modeList {
+			m.listCur = 0
 		}
 	}
-	next := ((cur+d)%n + n) % n
-	m.selectChat(chatAt(m.chats, next))
-}
-
-func chatAt(chats []domain.Chat, i int) domain.Chat {
-	if i <= 0 || i > len(chats) {
-		return domain.Chat{}
-	}
-	return chats[i-1]
-}
-
-func (m *Model) selectChat(c domain.Chat) {
-	m.sel, m.scroll = c, 0
-	if c.ID == "" {
-		m.setInfo("showing all chats")
-	} else {
-		m.setInfo("showing #" + c.Alias)
-	}
-}
-
-func (m *Model) openHistory(chatID string) {
-	m.mode, m.histChat, m.scroll, m.input = modeHistory, chatID, 0, nil
-}
-
-func (m *Model) openChats(filter string) {
-	m.mode, m.input, m.cursor = modeChats, []rune(filter), 0
+	return m, nil
 }
 
 func (m *Model) enter() (tea.Model, tea.Cmd) {
 	line := strings.TrimSpace(string(m.input))
+	if m.mode == modeList && !strings.HasPrefix(line, "/") {
+		items := m.listItems()
+		m.input = nil
+		if len(items) == 0 {
+			m.mode = modeWin
+			return m, nil
+		}
+		c := items[min(m.listCur, len(items)-1)]
+		i, w := m.winFor(c.ID)
+		if w == nil {
+			i, _ = m.openWin(c.ID)
+		}
+		return m, m.switchTo(i)
+	}
 	if !strings.HasPrefix(line, "/") {
-		if m.mode == modeChats {
-			items := m.chatItems()
-			if len(items) > 0 {
-				m.selectChat(items[min(m.cursor, len(items)-1)])
-			}
-			m.mode, m.input = modeFeed, nil
-		} else if line != "" {
+		if line != "" {
 			m.input = nil
 			m.setErr("not a command (start with /): sending is not supported yet")
 		}
@@ -336,6 +502,7 @@ func (m *Model) enter() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
+	w := m.wins[m.cur]
 	switch c.Kind {
 	case command.Help:
 		m.mode = modeHelp
@@ -344,75 +511,189 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	case command.Refresh:
 		return m, m.refresh()
-	case command.Chats:
-		m.openChats(c.Arg)
-	case command.Filter:
-		m.filter, m.scroll = c.Arg, 0
-		if c.Arg == "" {
-			m.setInfo("filter cleared")
-		} else {
-			m.setInfo("filter: " + c.Arg)
+	case command.List:
+		m.showDeleted = false
+		var words []string
+		for _, f := range strings.Fields(c.Arg) {
+			if f == "--show-deleted" || f == "-a" {
+				m.showDeleted = true
+			} else {
+				words = append(words, f)
+			}
 		}
-	case command.Select:
-		ch, err := domain.ResolveChat(m.chats, c.Arg)
-		if err != nil {
-			m.setErr(err.Error())
-			break
-		}
-		m.mode = modeFeed
-		m.selectChat(ch)
-	case command.All:
-		m.mode, m.filter = modeFeed, ""
-		m.selectChat(domain.Chat{})
-	case command.History:
-		id := m.sel.ID
+		m.mode, m.listCur, m.input = modeList, 0, []rune(strings.Join(words, " "))
+	case command.Win:
+		return m.winCommand(c.Arg)
+	case command.Close:
+		i := m.cur
 		if c.Arg != "" {
-			ch, err := domain.ResolveChat(m.chats, c.Arg)
+			n, err := strconv.Atoi(c.Arg)
 			if err != nil {
-				m.setErr(err.Error())
+				m.setErr("/close takes a window number")
 				break
 			}
-			id = ch.ID
+			i = n - 1
 		}
-		m.openHistory(id)
+		m.closeWin(i)
+	case command.Last:
+		if w.chatID == "" {
+			m.setErr("the server window has no chat; use /win first")
+			break
+		}
+		n := recentOnOpen
+		if c.Arg != "" {
+			v, err := strconv.Atoi(c.Arg)
+			if err != nil || v <= 0 {
+				m.setErr("/last takes a number of messages")
+				break
+			}
+			n = min(v, maxRecent)
+		}
+		if m.loading[w.chatID] {
+			m.setInfo("already fetching")
+			break
+		}
+		m.note(w, fmt.Sprintf("fetching the last %d messages", n))
+		return m, m.recentCmd(w.chatID, n)
 	case command.Search:
-		m.openHistory(m.sel.ID)
-		m.input = []rune(c.Arg)
+		m.mode, m.input = modePager, []rune(c.Arg)
+		w.scroll = 0
 	}
 	return m, nil
 }
 
-// chatItems is the chat list: an "all" row followed by filtered chats.
-func (m *Model) chatItems() []domain.Chat {
-	return append([]domain.Chat{{}}, domain.FilterChats(m.chats, m.listText())...)
+// winCommand implements /win: no argument prints the windows, a number
+// switches, a name opens or switches to that chat's window.
+func (m *Model) winCommand(arg string) (tea.Model, tea.Cmd) {
+	if arg == "" {
+		w := m.wins[m.cur]
+		m.note(w, fmt.Sprintf("%d windows:", len(m.wins)))
+		for i := range m.wins {
+			line := fmt.Sprintf("  %d: %s", i+1, m.winName(i))
+			if c, ok := m.chat(m.wins[i].chatID); ok && c.Title != "" {
+				line += " (" + c.Title + ")"
+			}
+			if u := m.wins[i].unread; u > 0 {
+				line += fmt.Sprintf(" %d unread", u)
+			}
+			m.note(w, line)
+		}
+		return m, nil
+	}
+	if n, err := strconv.Atoi(arg); err == nil {
+		if n < 1 || n > len(m.wins) {
+			m.setErr("no window " + arg)
+			return m, nil
+		}
+		return m, m.switchTo(n - 1)
+	}
+	c, err := domain.ResolveChat(m.chats, arg)
+	if err != nil {
+		m.setErr(err.Error())
+		return m, nil
+	}
+	i, w := m.winFor(c.ID)
+	if w == nil {
+		i, _ = m.openWin(c.ID)
+	}
+	return m, m.switchTo(i)
 }
 
-// listText is the typed text when it is not a slash command.
-func (m *Model) listText() string {
-	s := string(m.input)
-	if strings.HasPrefix(s, "/") {
-		return ""
+// completion is an in-progress Tab completion of the last word.
+type completion struct {
+	start int // rune index where the word begins
+	cands []string
+	idx   int
+}
+
+// complete expands the word at the end of the input: a command name when
+// the line starts with one, else a chat name (@user or #channel). Repeated
+// Tab cycles through the candidates.
+func (m *Model) complete() {
+	if m.comp != nil {
+		m.comp.idx = (m.comp.idx + 1) % len(m.comp.cands)
+		m.input = append(m.input[:m.comp.start], []rune(m.comp.cands[m.comp.idx])...)
+		return
 	}
-	return s
+	start := 0
+	for i := len(m.input) - 1; i >= 0; i-- {
+		if m.input[i] == ' ' {
+			start = i + 1
+			break
+		}
+	}
+	word := strings.ToLower(string(m.input[start:]))
+	var cands []string
+	if start == 0 && strings.HasPrefix(word, "/") {
+		for _, n := range command.Names() {
+			if strings.HasPrefix(n, word) {
+				cands = append(cands, n)
+			}
+		}
+	} else {
+		bare := strings.TrimLeft(word, "@#")
+		seen := map[string]bool{}
+		for _, c := range m.chats {
+			if c.Deleted {
+				continue
+			}
+			n := c.Name()
+			ok := strings.HasPrefix(strings.ToLower(n), word) ||
+				(word == bare && bare != "" && strings.HasPrefix(strings.ToLower(c.Alias), bare))
+			if ok && !seen[n] {
+				seen[n] = true
+				cands = append(cands, n)
+			}
+		}
+		sort.Strings(cands)
+	}
+	if len(cands) == 0 {
+		return
+	}
+	m.input = append(m.input[:start], []rune(cands[0])...)
+	if len(cands) == 1 {
+		m.input = append(m.input, ' ')
+		return
+	}
+	m.comp = &completion{start: start, cands: cands}
+}
+
+// listItems is the chat list for /list: deleted accounts hidden unless
+// asked for, narrowed by the typed text.
+func (m *Model) listItems() []domain.Chat {
+	var out []domain.Chat
+	q := strings.TrimLeft(strings.ToLower(strings.TrimSpace(string(m.input))), "@#")
+	for _, c := range m.chats {
+		if c.Deleted && !m.showDeleted {
+			continue
+		}
+		if q != "" && !strings.Contains(strings.ToLower(c.Alias), q) && !strings.Contains(strings.ToLower(c.Title), q) {
+			continue
+		}
+		out = append(out, c)
+	}
+	return out
 }
 
 func (m *Model) contentHeight() int { return max(m.height-3, 1) }
 
-func (m *Model) aliasOf(chatID string) string {
-	for _, c := range m.chats {
-		if c.ID == chatID {
-			return c.Alias
-		}
-	}
-	return chatID
-}
-
-func (m *Model) aliasWidth() int {
+func (m *Model) nameWidth() int {
 	w := 4
 	for _, c := range m.chats {
-		w = max(w, lipgloss.Width(c.Alias))
+		w = max(w, lipgloss.Width(c.Name()))
 	}
-	return min(w, 14)
+	return min(w, 15)
+}
+
+// lines renders the current window's scrollback.
+func (m *Model) lines() []string {
+	w := m.wins[m.cur]
+	o := lineOpts{width: m.width, nameOf: m.nameOf, nameW: m.nameWidth(), showChat: w.chatID == ""}
+	msgs := m.msgs
+	if w.chatID != "" {
+		msgs = domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})
+	}
+	return renderLines(msgs, w.notes, o)
 }
 
 // Quitting reports whether the user asked to leave.
@@ -423,103 +704,107 @@ func (m *Model) View() string {
 	if m.quitting {
 		return ""
 	}
+	h := m.contentHeight()
+	w := m.wins[m.cur]
 	var topic, prompt string
 	var body []string
-	h := m.contentHeight()
-	all := m.opt.Store.Messages()
 
 	switch m.mode {
 	case modeHelp:
-		topic = "help"
+		topic = "help - Esc returns"
 		body = strings.Split(command.HelpText+"\n\n"+keyHelp, "\n")
-		body, _ = window(body, h, 0)
-		prompt = "press Esc to return > "
-	case modeChats:
-		items := m.chatItems()
-		m.cursor = min(max(m.cursor, 0), len(items)-1)
-		topic = fmt.Sprintf("chats (%d) - Up/Down, Enter selects, Esc cancels", len(m.chats))
-		body = m.chatLines(items, all)
-		body, _ = window(body, h, 0)
-		prompt = "filter chats > "
-	case modeHistory:
-		scope := "all chats"
-		if m.histChat != "" {
-			scope = "#" + m.aliasOf(m.histChat)
-		}
-		q := m.listText()
-		hits := domain.Filter(all, domain.Query{ChatID: m.histChat, Text: q})
-		lines := m.pagerLines(all)
-		m.lastLines = len(lines)
-		body, m.scroll = window(lines, h, m.scroll)
-		topic = fmt.Sprintf("history: %s - %d of %d messages - PgUp/PgDn scroll, type to search, Esc closes",
-			scope, len(hits), len(domain.Filter(all, domain.Query{ChatID: m.histChat})))
+		body, _ = window(body, h, 1<<30) // from the top
+		prompt = "help > "
+	case modeList:
+		items := m.listItems()
+		m.listCur = min(max(m.listCur, 0), max(len(items)-1, 0))
+		topic = fmt.Sprintf("chats (%d) - Up/Down moves, Enter opens the window, Esc returns, type to narrow", len(items))
+		body = topWindow(m.listLines(items), h, m.listCur)
+		prompt = "list > "
+	case modePager:
+		q := string(m.input)
+		hits := domain.Filter(m.msgs, domain.Query{ChatID: w.chatID, Text: q})
+		lines := renderLines(hits, nil, lineOpts{width: m.width, nameOf: m.nameOf, nameW: m.nameWidth(),
+			showChat: w.chatID == "", fullDate: true, highlight: q})
+		body, w.scroll = window(lines, h, w.scroll)
+		topic = fmt.Sprintf("history of %s - %d of %d messages - type to search, PgUp/PgDn, Esc returns",
+			m.winName(m.cur), len(hits), len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})))
 		prompt = "search > "
 	default:
-		lines := m.pagerLines(all)
+		lines := m.lines()
 		m.lastLines = len(lines)
-		body, m.scroll = window(lines, h, m.scroll)
-		topic = "lazygram - " + m.opt.Provider.Name() + " - " + m.scopeLabel()
-		prompt = m.scopeLabel() + " > "
+		body, w.scroll = window(lines, h, w.scroll)
+		topic = m.topic()
+		prompt = "[" + m.winName(m.cur) + "] "
 	}
 
 	var b strings.Builder
-	b.WriteString(barStyle.Width(m.width).MaxWidth(m.width).Render(topic))
+	b.WriteString(barStyle.Render(fitLine(topic, m.width)))
 	b.WriteByte('\n')
 	for _, l := range body {
 		b.WriteString(lipgloss.NewStyle().MaxWidth(m.width).Render(l))
 		b.WriteByte('\n')
 	}
-	b.WriteString(m.statusLine(len(all)))
+	b.WriteString(m.statusLine())
 	b.WriteByte('\n')
 	b.WriteString(m.inputLine(prompt))
 	return b.String()
 }
 
-func (m *Model) scopeLabel() string {
-	s := "#all"
-	if m.sel.ID != "" {
-		s = "#" + m.sel.Alias
+func (m *Model) topic() string {
+	w := m.wins[m.cur]
+	if w.chatID == "" {
+		return fmt.Sprintf("lazygram - window 1: server - all chats - %d messages - %d windows", len(m.msgs), len(m.wins))
 	}
-	if m.filter != "" {
-		s += " /" + m.filter
+	n := len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID}))
+	s := fmt.Sprintf("lazygram - window %d: %s", m.cur+1, m.nameOf(w.chatID))
+	if c, ok := m.chat(w.chatID); ok && c.Title != "" && c.Title != c.Alias {
+		s += " - " + sanitize(c.Title, false)
 	}
-	return s
+	return fmt.Sprintf("%s - %d messages", s, n)
 }
 
-func (m *Model) chatLines(items []domain.Chat, all []domain.Message) []string {
-	counts := map[string]int{}
-	last := map[string]time.Time{}
-	for _, msg := range all {
-		counts[msg.ChatID]++
-		last[msg.ChatID] = msg.Time
-	}
+// listLines renders the /list rows: window number, name, title, unread.
+func (m *Model) listLines(items []domain.Chat) []string {
 	var out []string
 	for i, c := range items {
-		name, title, n, seen := "all chats", "everything, interleaved", len(all), domain.Latest(all)
-		if c.ID != "" {
-			name, title, n, seen = "#"+c.Alias, c.Title, counts[c.ID], last[c.ID]
+		mark := "   "
+		if wi, _ := m.winFor(c.ID); wi > 0 {
+			mark = fmt.Sprintf("%2d ", wi+1)
 		}
-		when := "-"
-		if !seen.IsZero() {
-			when = seen.Local().Format("2006-01-02 15:04")
+		row := fmt.Sprintf("%s %-16s %-30s", mark, c.Name(), sanitize(c.Title, false))
+		if c.Unread > 0 {
+			row += fmt.Sprintf("  %d unread", c.Unread)
 		}
-		mark := " "
-		if c.ID == m.sel.ID {
-			mark = "*"
+		if c.Deleted {
+			row += "  (deleted)"
 		}
-		row := fmt.Sprintf("%s %-16s %-28s %6d msgs  last %s", mark, name, title, n, when)
-		if i == m.cursor {
+		if i == m.listCur {
 			row = hiStyle.Render(row)
 		}
 		out = append(out, row)
 	}
-	if len(items) == 1 && len(m.chats) > 0 {
-		out = append(out, dimStyle.Render("  no chat matches the filter"))
+	if len(out) == 0 {
+		out = append(out, dimStyle.Render("  no chat matches"))
 	}
 	return out
 }
 
-func (m *Model) statusLine(total int) string {
+// activity lists the windows with unread messages, irssi style.
+func (m *Model) activity() string {
+	var act []string
+	for i, w := range m.wins {
+		if w.unread > 0 {
+			act = append(act, strconv.Itoa(i+1))
+		}
+	}
+	if len(act) == 0 {
+		return ""
+	}
+	return "[Act: " + strings.Join(act, ",") + "] "
+}
+
+func (m *Model) statusLine() string {
 	sync := "never synced"
 	if !m.lastSync.IsZero() {
 		sync = "synced " + m.lastSync.Format("15:04:05")
@@ -527,12 +812,12 @@ func (m *Model) statusLine(total int) string {
 	if m.syncing {
 		sync = "syncing"
 	}
-	left := fmt.Sprintf(" [%s] [%s] [%d msgs] [%d chats] [%s] ",
-		time.Now().Format("15:04"), m.opt.Provider.Name(), total, len(m.chats), sync)
-	if m.scroll > 0 {
-		left += fmt.Sprintf("[-%d lines] ", m.scroll)
+	left := fmt.Sprintf(" [%s] [%s] [%d:%s] ", time.Now().Format("15:04"), m.opt.Provider.Name(), m.cur+1, m.winName(m.cur))
+	text := infoStyle.Render(left) + actStyle.Render(m.activity()) +
+		infoStyle.Render(fmt.Sprintf("[%d msgs] [%s] ", len(m.msgs), sync))
+	if w := m.wins[m.cur]; w.scroll > 0 && m.mode == modeWin {
+		text += infoStyle.Render(fmt.Sprintf("[-%d lines] ", w.scroll))
 	}
-	text := infoStyle.Render(left)
 	if m.status != "" {
 		st := lipgloss.NewStyle().Background(lipgloss.Color("236"))
 		if m.isErr {
@@ -542,7 +827,7 @@ func (m *Model) statusLine(total int) string {
 		}
 		text += st.Render(m.status)
 	}
-	return lipgloss.NewStyle().Background(lipgloss.Color("236")).Width(m.width).MaxWidth(m.width).Render(text)
+	return lipgloss.NewStyle().Background(lipgloss.Color("236")).Render(fitLine(text, m.width))
 }
 
 func (m *Model) inputLine(prompt string) string {
@@ -555,16 +840,16 @@ func (m *Model) inputLine(prompt string) string {
 }
 
 const keyHelp = `Keys
-  Tab / Shift-Tab   cycle through chats (all, chat1, chat2, ...)
-  PgUp / PgDn       scroll the feed or pager one page
-  Up / Down         scroll one line (move in the chat list)
-  Home / End        jump to oldest / newest
-  Ctrl-O            open history for the selected chat
-  Ctrl-L            chat list
+  Tab               complete a command or a @user / #channel name; again cycles
+  Ctrl-N / Ctrl-P   next / previous window (also Alt-Right / Alt-Left)
+  Alt-1 .. Alt-0    window 1 .. 10
+  PgUp / PgDn       scroll a page; Up / Down a line; Home / End oldest / newest
   Ctrl-R            sync now
   F1                this help
-  Esc               close view / clear input
+  Esc               close a view / clear the input
   Ctrl-C            quit
 
-The feed is one IRC-style channel: all chats interleaved by time.
-History is the full local cache; type in it to search.`
+Window 1 is the server window: every chat interleaved, plus client notices.
+A window opens for a chat when it gets a message or has unread messages;
+[Act: 2,3] in the status line lists windows with unread messages.
+People are @name, groups and channels are #name.`

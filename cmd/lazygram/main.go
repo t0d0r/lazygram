@@ -8,6 +8,7 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"flag"
 	"fmt"
@@ -99,7 +100,15 @@ func run(args []string) error {
 	case "":
 		return runTelegram(o)
 	case "demo":
-		return runTUI(o, demo.New(), 5*time.Second)
+		secret := make([]byte, 32)
+		if _, err := rand.Read(secret); err != nil {
+			return err
+		}
+		st, err := store.Open(store.Memory, secret) // the demo keeps nothing on disk
+		if err != nil {
+			return err
+		}
+		return runTUI(o, demo.New(), st, 5*time.Second)
 	case "login":
 		return runLogin(o)
 	default:
@@ -178,24 +187,57 @@ func runTelegram(o options) error {
 	if err != nil {
 		return err
 	}
-	return runTUI(o, prov, 10*time.Second)
+	st, err := openCache(cfg)
+	if err != nil {
+		_ = prov.Close()
+		return err
+	}
+	return runTUI(o, prov, st, 10*time.Second)
 }
 
-func runTUI(o options, prov provider.Provider, poll time.Duration) error {
+// openCache opens the encrypted message cache next to the session. Its key
+// derives from the session's auth key, so a cache left by an earlier login
+// cannot be read and is discarded. Plain-text caches from older versions are
+// removed.
+func openCache(cfg config.Telegram) (*store.Store, error) {
+	secret, err := telegram.SessionSecret(context.Background(), cfg)
+	if err != nil {
+		return nil, err
+	}
+	removeLegacyCache(cfg.SessionDir)
+	path := filepath.Join(cfg.SessionDir, "cache.sqlite")
+	st, err := store.Open(path, secret)
+	if errors.Is(err, store.ErrWrongKey) {
+		fmt.Fprintln(os.Stderr, "lazygram: the message cache belongs to an earlier login; starting a fresh one")
+		for _, f := range []string{path, path + "-journal"} {
+			_ = os.Remove(f)
+		}
+		st, err = store.Open(path, secret)
+	}
+	return st, err
+}
+
+// removeLegacyCache deletes the unencrypted cache files of earlier versions.
+func removeLegacyCache(dir string) {
+	for _, f := range []string{"messages.jsonl", "chats.json"} {
+		if err := os.Remove(filepath.Join(dir, f)); err == nil {
+			fmt.Fprintf(os.Stderr, "lazygram: removed unencrypted %s from an earlier version\n", f)
+		}
+	}
+}
+
+func runTUI(o options, prov provider.Provider, st *store.Store, poll time.Duration) error {
 	if c, ok := prov.(io.Closer); ok {
 		defer func() { _ = c.Close() }()
 	}
-	st, err := store.Open(filepath.Join(o.dataDir, prov.Name()))
-	if err != nil {
-		return err
-	}
+	defer func() { _ = st.Close() }()
 	opt := tui.Options{Store: st, Provider: prov, Poll: poll}
 	if o.smoke || !isTerminal(os.Stdout) || !isTerminal(os.Stdin) {
 		fmt.Print(tui.Snapshot(opt, 100, 24))
 		fmt.Println()
 		return nil
 	}
-	_, err = tea.NewProgram(tui.New(opt), tea.WithAltScreen()).Run()
+	_, err := tea.NewProgram(tui.New(opt), tea.WithAltScreen()).Run()
 	return err
 }
 

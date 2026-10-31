@@ -11,7 +11,10 @@
 - The tree must contain no secrets, session files, phone numbers, user ids,
   real chat titles or messages. Demo data is invented. `.gitignore` covers
   `.env*`, `*.pem`, `*.key`, session files and `.state/`.
-- Cache files are owner-only.
+- The message cache is encrypted: AES-256-GCM per row, keys derived from the
+  session's auth key with HKDF and a random salt, chat ids as HMACs; only
+  message ids, timestamps and counts are in clear (specs/storage.md). Cache
+  files are owner-only. Earlier plain-text caches are deleted at start.
 - lazygram does not log message content.
 - No interactive Telegram login is performed by the project's tooling; the
   connector fails closed when no authorized session exists.

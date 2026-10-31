@@ -86,11 +86,37 @@ func TestTailAndLatest(t *testing.T) {
 	}
 }
 
+func TestChatName(t *testing.T) {
+	if (Chat{Alias: "ada", Kind: ChatUser}).Name() != "@ada" || (Chat{Alias: "dev", Kind: ChatGroup}).Name() != "#dev" ||
+		(Chat{Alias: "news", Kind: ChatChannel}).Name() != "#news" {
+		t.Fatal("names")
+	}
+}
+
+func TestResolveChatSigils(t *testing.T) {
+	chats := []Chat{
+		{ID: "u", Alias: "dev", Kind: ChatUser, Title: "Dev Person"},
+		{ID: "g", Alias: "dev", Kind: ChatGroup, Title: "Dev Group"},
+	}
+	if _, err := ResolveChat(chats, "dev"); !errors.Is(err, ErrAmbiguous) {
+		t.Fatalf("no sigil: %v", err)
+	}
+	if c, err := ResolveChat(chats, "@dev"); err != nil || c.ID != "u" {
+		t.Fatalf("@: %v %v", c, err)
+	}
+	if c, err := ResolveChat(chats, "#DEV"); err != nil || c.ID != "g" {
+		t.Fatalf("#: %v %v", c, err)
+	}
+	if _, err := ResolveChat(chats, "@"); !errors.Is(err, ErrNoChat) {
+		t.Fatalf("bare sigil: %v", err)
+	}
+}
+
 func TestResolveChat(t *testing.T) {
 	chats := []Chat{
-		{ID: "1", Alias: "dev", Title: "Dev Talk"},
-		{ID: "2", Alias: "devops", Title: "Ops"},
-		{ID: "3", Alias: "family", Title: "Home"},
+		{ID: "1", Alias: "dev", Title: "Dev Talk", Kind: ChatGroup},
+		{ID: "2", Alias: "devops", Title: "Ops", Kind: ChatGroup},
+		{ID: "3", Alias: "family", Title: "Home", Kind: ChatGroup},
 	}
 	ok := map[string]string{"dev": "1", "#DEVOPS": "2", "3": "3", "fam": "family", "home": "family"}
 	for q, want := range ok {

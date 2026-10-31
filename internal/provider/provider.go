@@ -19,6 +19,9 @@ type Provider interface {
 	Name() string
 	// Chats lists the configured chats.
 	Chats(ctx context.Context) ([]domain.Chat, error)
-	// Sync returns messages newer than since (zero means full backlog).
+	// Sync returns messages that arrived since the last call. since is the
+	// newest time already cached; a provider may use it or ignore it.
 	Sync(ctx context.Context, since time.Time) ([]domain.Message, error)
+	// Recent returns the last limit messages of one chat, oldest first.
+	Recent(ctx context.Context, chatID string, limit int) ([]domain.Message, error)
 }

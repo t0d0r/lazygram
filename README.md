@@ -49,25 +49,35 @@ one; delete `<state>/telegram/app.json` to switch. Never commit these values:
 
 ## Using it
 
-The main view is one feed: `HH:MM #chat <sender> text`, all chats interleaved
-by time, with a day separator, a topic bar, a status line and an input line.
-Chats are named after their Telegram username, or a slug of their title.
+It works like BitchX/irssi. Window 1 is the server window: every chat
+interleaved by time as `HH:MM #chat <sender> text`, plus `-!-` notices.
+When a chat gets a message (or has unread messages at start) a window opens
+for it; the status line shows `[Act: 2,3]` for windows with unread. People
+are `@name`, groups and channels are `#name`. lazygram shows what arrives
+while it runs; opening a chat's window fetches its last 10 messages, and
+`/last N` fetches more.
 
-| key              | action                                          |
-|------------------|-------------------------------------------------|
-| Tab / Shift-Tab  | cycle chats: all, chat1, chat2, ...             |
-| PgUp / PgDn      | scroll a page; Up / Down scroll a line          |
-| Home / End       | oldest / newest                                 |
-| Ctrl-O           | open history for the selected chat              |
-| Ctrl-L           | chat list (type to filter, Enter selects)       |
-| Ctrl-R           | sync now                                        |
-| F1               | help                                            |
-| Esc              | close view / clear input                        |
-| Ctrl-C           | quit                                            |
+| command                    | action                                        |
+|----------------------------|-----------------------------------------------|
+| `/list [text]`             | selectable chat list; Enter opens the window; `--show-deleted` includes deleted accounts |
+| `/win N`                   | switch to window N (1 is the server window)   |
+| `/win @user`, `/win #chan` | open or switch to that chat's window          |
+| `/win`                     | print the open windows                        |
+| `/close [N]`               | close a window                                |
+| `/last [N]`                | fetch the last N messages of this chat        |
+| `/search [text]`           | page through this chat's local history        |
+| `/refresh`, `/help`, `/quit` |                                             |
 
-Commands: `/help /quit /refresh /chats [text] /select <chat> /all
-/filter [text] /history [chat] /search <text>`. Short forms: `/q /r /ls /j /f
-/open`. In the history pager, plain typing searches live.
+| key                 | action                                             |
+|---------------------|----------------------------------------------------|
+| Tab                 | complete a command or a `@`/`#` name; again cycles |
+| Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
+| Alt-1 .. Alt-0      | window 1 .. 10                                     |
+| PgUp / PgDn         | scroll a page; Up / Down a line; Home / End ends   |
+| Ctrl-R              | sync now                                           |
+| F1                  | help                                               |
+| Esc                 | close list / pager / help, else clear the input    |
+| Ctrl-C              | quit                                               |
 
 ## Development
 
@@ -82,7 +92,7 @@ make help     # all targets
 ```
 cmd/lazygram            subcommands (login, demo, default), wiring, smoke mode
 internal/domain         Chat, Message, Merge, Filter, ResolveChat (pure)
-internal/store          JSONL history cache + chats.json (owner-only files)
+internal/store          encrypted SQLite message cache (AES-256-GCM per row)
 internal/provider       Provider interface (Name, Chats, Sync)
 internal/provider/demo  offline scripted provider
 internal/provider/telegram  read-only Telegram connector (gotd/td MTProto), QR login
@@ -99,8 +109,9 @@ The core never imports a connector; adding a service means implementing
 
 Read-only: it lists your 100 most recent dialogs and polls every 10 seconds
 with one request, fetching history only for chats whose newest message
-changed. The first run takes a short backlog per chat. Short FLOOD_WAIT
-replies are honoured automatically. Details and limits: specs/providers.md.
+changed. Nothing older than the start is fetched unless you open a window
+or run `/last`. Short FLOOD_WAIT replies are honoured automatically.
+Details and limits: specs/providers.md.
 
 ## Security constraints
 
@@ -109,7 +120,12 @@ replies are honoured automatically. Details and limits: specs/providers.md.
   `.env*`, keys, session files and `.state/`.
 - The state directory holds `telegram/session.json` (account access: treat it
   like a password), `telegram/app.json` (your application registration) and
-  the message cache. Directories are 0700, files 0600.
+  `telegram/cache.sqlite`, the message cache. Directories are 0700, files
+  0600.
+- The cache is encrypted per row with AES-256-GCM; the key is derived from
+  the session's auth key, so the cache is unreadable without `session.json`
+  and a new login starts a fresh one. Only message ids, timestamps and
+  counts are stored in clear (specs/storage.md).
 - Nothing typed at `lazygram login` is echoed or stored except the
   application registration; the session file is the only login artifact.
 - Control characters (including ESC) are stripped from sender and text before

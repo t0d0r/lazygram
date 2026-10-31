@@ -5,19 +5,28 @@ type Provider interface {
     Name() string
     Chats(ctx) ([]domain.Chat, error)
     Sync(ctx, since time.Time) ([]domain.Message, error)
+    Recent(ctx, chatID string, limit int) ([]domain.Message, error)
 }
 ```
 
-`Sync` returns messages newer than `since` (zero means the cache is empty).
-The store de-duplicates by (chat id, message id), so providers may overlap.
-Message times are absolute; the UI converts to local time.
+`Chats` returns every chat with its kind (user, group, channel), alias,
+title, unread count and deleted flag. `Sync` returns what arrived since the
+last call (`since` is the newest cached time; a provider may ignore it).
+`Recent` returns the last `limit` messages of one chat, oldest first, for
+`/win` and `/last`. `Sync` may return messages together with an error
+(a batch that failed part-way); the caller stores them before showing the
+error. The store de-duplicates by (chat id, message id), so calls may
+overlap. Message times are absolute; the UI converts to local
+time.
 
 ## demo
 
-Offline, synthetic, no network. Anchored to start time: older lines are
-already in the past, later lines "arrive" over about 4 minutes. Message ids
-are fixed, so a cached run keeps its first-run timestamps (known quirk).
-Started with `lazygram demo`; state under `<data>/demo/`.
+Offline, synthetic, no network. Two groups (`#dev`, `#ops`), one person
+(`@linus`) and one channel (`#news`, reported with 2 unread so a window
+opens at start). Anchored to start time: older lines are already in the
+past and replayed by the first Sync, later lines "arrive" over about 4
+minutes. `Recent` serves the chat's past lines. Started with
+`lazygram demo`; nothing is kept on disk.
 
 ## telegram
 
@@ -82,28 +91,36 @@ callbacks, config gating and QR rendering are covered by tests.
 
 ### Chats
 
-All dialogs are shown, up to the 100 most recent (no per-chat selection yet).
-Chat id: `telegram:<Bot-API style id>` (users positive, groups `-id`,
-channels `-100<id>`). Alias: the username, else a slug of the title (lower
-case, letters and digits, dashes, at most 14 characters); clashes get `-2`,
-`-3`, ... in dialog order. The own "Saved Messages" chat is `saved`.
-Forbidden peers and folders are skipped.
+All dialogs are listed, up to the 100 most recent. Kind: users and bots are
+people (`@`), basic groups and supergroups (megagroups) are groups (`#`),
+broadcast channels are channels (`#`). Chat id: `telegram:<Bot-API style
+id>` (users positive, groups `-id`, channels `-100<id>`). Alias: the
+username, else a slug of the title (lower case, letters and digits, dashes,
+at most 14 characters); clashes get `-2`, `-3`, ... in dialog order. The own
+"Saved Messages" chat is `@saved`. Deleted accounts are returned with
+`Deleted` set and alias `deleted-<id>`; the UI hides them, never opens
+windows for them, and the connector never fetches their history. The
+dialog's unread count is passed through. Forbidden peers and folders are
+skipped.
 
 ### Sync
 
-Each poll (10s) costs one `messages.getDialogs`. History is fetched only for
-chats whose top message id changed since the last poll, paging backwards
-(100 per page) until the previously seen id, at most 300 messages per chat
-per poll. After a restart nothing is tracked yet, so each chat with messages
-costs one page bounded by `since`; with an empty cache a backlog of 50 per
-chat is taken. Service messages are skipped; media-only messages show as
-`[media]`. Sender: user name, else post author, else `me` for own messages,
-else the peer's name in private chats, else `channel`. A FLOOD_WAIT of up to
-60s is slept once and the request retried; longer waits surface as errors.
+Like an IRC client, lazygram shows what arrives after it connected. The
+first `Sync` records each chat's top message id and returns nothing; every
+later poll (10s) costs one `messages.getDialogs` and fetches history only
+for chats whose top message id moved, paging backwards (100 per page) until
+the previously seen id, at most 300 messages per chat per poll. `Recent`
+is one `messages.getHistory` for the last N (max 100) messages of a chat,
+used when a window opens and for `/last`. Service messages are skipped;
+media-only messages show as `[media]`. Sender: user name, else post author,
+else `me` for own messages, else the peer's name in private chats, else
+`channel`. A FLOOD_WAIT of up to 60s is slept once and the request retried;
+longer waits surface as errors.
 
 Limits: no update stream (polling only), no topics/forums, no edit/delete
 tracking, no reconnect, chats beyond the 100 most recent are not shown, the
-per-chat cursor is in memory only.
+per-chat cursor is in memory only (a restart shows nothing until a chat
+gets a new message; `/last` fills in).
 
 ## Adding a service
 

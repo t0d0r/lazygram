@@ -13,11 +13,11 @@ import (
 )
 
 const (
-	maxDialogs     = 100 // most recent dialogs listed
-	pageSize       = 100
-	initialPerChat = 50  // backlog per chat when the cache is empty
-	maxPerChat     = 300 // messages fetched per chat per Sync call
-	maxFloodWait   = 60 * time.Second
+	maxDialogs   = 100 // most recent dialogs listed
+	pageSize     = 100
+	maxPerChat   = 300 // messages fetched per chat per Sync call
+	maxRecent    = 100 // cap for Recent
+	maxFloodWait = 60 * time.Second
 )
 
 // api is the subset of *tg.Client lazygram uses; tests substitute a fake.
@@ -28,7 +28,9 @@ type api interface {
 
 // service implements Client on top of api. It is read-only. Every History
 // call costs one getDialogs request plus one history page per chat whose top
-// message changed, so polling stays cheap.
+// message changed, so polling stays cheap. The first call only records where
+// each chat stands: like an IRC client, lazygram shows what arrives after it
+// connected, and older messages come through Recent on demand.
 type service struct {
 	api api
 
@@ -77,8 +79,9 @@ func (s *service) dialogs(ctx context.Context) ([]dialog, error) {
 		}
 		id := chatID(ent)
 		out = append(out, dialog{
-			chat: domain.Chat{ID: id, Service: "telegram", Alias: aliasFor(ent, taken), Title: ent.title},
-			ent:  ent, top: d.TopMessage,
+			chat: domain.Chat{ID: id, Service: "telegram", Alias: aliasFor(ent, taken), Title: ent.title,
+				Kind: ent.chatKind(), Unread: d.UnreadCount, Deleted: ent.deleted},
+			ent: ent, top: d.TopMessage,
 		})
 	}
 	return out, nil
@@ -98,26 +101,31 @@ func (s *service) Dialogs(ctx context.Context) ([]domain.Chat, error) {
 	return chats, nil
 }
 
-// History fetches new messages. Chats whose top message is unchanged since
-// the last call are skipped. since bounds the first fetch of a chat after
-// start; zero means the cache is empty and a short backlog is taken.
-func (s *service) History(ctx context.Context, since time.Time) ([]domain.Message, error) {
+// History fetches messages that arrived since the last call. The first call
+// records each chat's top message and returns nothing. Chats whose top
+// message is unchanged, deleted accounts and empty chats cost no request.
+// since is ignored: the cursor is the message id. On error it returns the
+// messages fetched so far together with the error; cursors advanced only
+// for the chats whose messages are returned, so callers must store a
+// partial result.
+func (s *service) History(ctx context.Context, _ time.Time) ([]domain.Message, error) {
 	rows, err := s.dialogs(ctx)
 	if err != nil {
 		return nil, err
 	}
+	first := len(s.top) == 0
 	var out []domain.Message
 	for _, d := range rows {
 		s.known[d.chat.ID] = d.ent
 		seen, tracked := s.top[d.chat.ID]
-		if d.top == 0 || (tracked && d.top <= seen) {
-			continue // empty chat, or nothing new since the last call
+		if first || !tracked {
+			s.top[d.chat.ID] = d.top // a chat seen for the first time: start from here
+			continue
 		}
-		limit := maxPerChat
-		if !tracked && since.IsZero() {
-			limit = initialPerChat
+		if d.top == 0 || d.top <= seen || d.ent.deleted {
+			continue
 		}
-		msgs, err := s.chatHistory(ctx, d.chat.ID, d.ent, seen, since, limit)
+		msgs, err := s.chatHistory(ctx, d.chat.ID, d.ent, seen, maxPerChat)
 		if err != nil {
 			return out, err
 		}
@@ -127,9 +135,23 @@ func (s *service) History(ctx context.Context, since time.Time) ([]domain.Messag
 	return out, nil
 }
 
+// Recent returns the last limit messages of a chat, oldest first.
+func (s *service) Recent(ctx context.Context, chatID string, limit int) ([]domain.Message, error) {
+	ent, ok := s.known[chatID]
+	if !ok {
+		return nil, fmt.Errorf("telegram: unknown chat %s", chatID)
+	}
+	limit = min(max(limit, 1), maxRecent)
+	msgs, err := s.chatHistory(ctx, chatID, ent, 0, limit)
+	if err != nil {
+		return nil, err
+	}
+	return domain.Merge(msgs), nil
+}
+
 // chatHistory pages backwards from the newest message and stops at a message
-// already fetched (id <= stopID), at one not newer than since, or at limit.
-func (s *service) chatHistory(ctx context.Context, id string, ent entity, stopID int, since time.Time, limit int) ([]domain.Message, error) {
+// already fetched (id <= stopID) or at limit. Messages come newest first.
+func (s *service) chatHistory(ctx context.Context, id string, ent entity, stopID int, limit int) ([]domain.Message, error) {
 	var out []domain.Message
 	offsetID := 0
 	for len(out) < limit {
@@ -155,11 +177,6 @@ func (s *service) chatHistory(ctx context.Context, id string, ent entity, stopID
 			m, ok := mc.(*tg.Message)
 			if !ok {
 				continue // service messages and empty placeholders
-			}
-			t := time.Unix(int64(m.Date), 0).UTC()
-			if !since.IsZero() && !t.After(since) {
-				done = true
-				break
 			}
 			out = append(out, convert(id, ent, m, ents))
 		}

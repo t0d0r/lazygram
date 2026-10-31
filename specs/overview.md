@@ -3,20 +3,25 @@
 lazygram is a local terminal chat client with an IRC feel (BitchX / irssi),
 Telegram first, feature goals inspired by nchat.
 
-## Single-channel model
+## Window model
 
-All configured chats are merged into ONE chronological timeline, displayed
-like a single IRC channel. Each line shows time, chat alias, sender and text.
-The chat is a label on a line, not a separate window. The user may narrow the
-view to one chat (select) or by text (filter) and can open the full persisted
-history of a chat in a pager with search. Decision: one feed by default because
-the goal is monitoring many chats at once with low context switching.
+The UI follows BitchX/irssi. Window 1 is the server window: every chat
+merged into ONE chronological timeline, each line with time, chat name,
+sender and text, plus client notices. A window opens for a chat when a
+message arrives for it or it has unread messages, and `/win` switches
+between windows; people are `@name`, groups and channels `#name`; Tab
+completes names and commands. Like an IRC client, lazygram shows what
+arrives while it runs; older messages are fetched per window on demand
+(`/last`). Decision: the merged server window is the default view because
+the goal is to monitor many chats at once with little context switching;
+per-chat windows give focus when a conversation needs it.
 
-## Scope v0.1
+## Scope
 
-Bubbletea TUI, slash commands, key bindings, chat list, history pager with
-search, JSONL cache, demo provider, config validation, inert Telegram stub.
-Read-only: sending messages is out of scope.
+Bubbletea TUI with windows, slash commands, Tab completion, selectable chat
+list, searchable local history, encrypted SQLite cache, demo provider,
+read-only Telegram connector with QR login. Sending messages is out of
+scope.
 
 ## Live Telegram limitations
 
@@ -34,12 +39,18 @@ dialogs; no per-chat selection yet.
 2. `lazygram demo` starts with no account; `lazygram` without a linked
    account exits with status 2 and names `lazygram login` and
    `lazygram demo`; `make smoke` prints one screen non-interactively.
-3. Feed lines from different chats interleave in time order and show time,
-   alias, sender and text.
-4. Commands help, quit, refresh, chats, select, filter, history, search work;
-   Tab cycles chats; PgUp/PgDn scroll.
-5. History view shows every cached message for the chat (or all) and narrows
-   live while typing a search.
-6. History survives restart (cache reload).
-7. Core packages do not import a connector package.
-8. Nothing sensitive is committed.
+3. The server window interleaves chats in time order with time, chat name,
+   sender and text; people show as `@name`, groups and channels as `#name`.
+4. A window opens for a chat with a new message or with unread messages;
+   `[Act: ...]` lists windows with unread; `/win N`, `/win @user`, Ctrl-N/P
+   and Alt-digits switch; opening a chat window fetches its last 10
+   messages; `/last N` fetches more.
+5. `/list` is a selectable list; Enter opens the chat's window; deleted
+   accounts are hidden unless `--show-deleted`.
+6. Tab completes commands and `@`/`#` names and cycles on repeat.
+7. `/search` pages through the local history of the current chat and
+   narrows live while typing.
+8. The on-disk cache holds no readable message text, sender, chat id or
+   title, and cannot be read with another session's key (tested).
+9. Core packages do not import a connector package.
+10. Nothing sensitive is committed.
