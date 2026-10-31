@@ -163,8 +163,12 @@ at the hidden password prompt takes effect only after Enter.
 - Up/Down walk a per-session input history (commands and sent lines, 200
   max, duplicates collapsed); line scrolling stays on PgUp/PgDn and the
   wheel; the pager keeps Up/Down for scrolling.
-- v0.4.0 released; v0.4.1 (with /msg, /about, statistics, history) to
-  follow the same steps.
+- v0.4.0 released. Tag v0.4.1 exists on GitHub without a release (it was
+  superseded before publishing; remote tags are not deleted from here).
+  v0.4.2 released from d5b4ef5 with /msg, /about, statistics, input
+  history, the double Ctrl-X change and the coloured bars; assets
+  verified, no registration inside; Homebrew formula at 0.4.2, brew
+  upgrade and brew test passed, tap pushed.
 - Ctrl-X holds the text for 600 ms before sending so a fast second Ctrl-X
   cancels the send, restores the text and only toggles "Enter sends".
 - Status bar segments in distinct palette colours; window bar tags in each

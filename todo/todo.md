@@ -44,7 +44,7 @@
 
 - [x] LICENSE (BSD-2-Clause), git-describe version, make dist/release (specs/release.md)
 - [x] lazygram update: brew or binary, SHA256SUMS-checked (specs/release.md)
-- [x] GitHub repository (github.com/t0d0r/lazygram), v0.3.0 release, Homebrew formula in t0d0r/homebrew-tap
+- [x] GitHub repository (github.com/t0d0r/lazygram), releases v0.3.0, v0.4.0, v0.4.2, Homebrew formula in t0d0r/homebrew-tap
 - [x] figlet banners at start and exit (specs/ui.md)
 - [x] /theme with nine colour schemes, persisted (specs/ui.md)
 - [x] Up/Down walk the input history (specs/ui.md)
