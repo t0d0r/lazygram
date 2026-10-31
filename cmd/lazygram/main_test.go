@@ -124,3 +124,19 @@ func TestRemoveLegacyCache(t *testing.T) {
 	}
 	removeLegacyCache(dir) // idempotent
 }
+
+func TestFlagsAfterSubcommand(t *testing.T) {
+	clearEnv(t)
+	if err := run([]string{"demo", "-data", t.TempDir(), "-smoke"}); err != nil {
+		t.Fatalf("flags after the subcommand: %v", err)
+	}
+	err := run([]string{"-data", t.TempDir(), "demo", "extra"})
+	var ec exitError
+	if !errors.As(err, &ec) || ec.code != 2 || !strings.Contains(ec.msg, "unexpected argument") {
+		t.Fatalf("got %v", err)
+	}
+	err = run([]string{"-data", t.TempDir(), "demo", "-bogus"})
+	if !errors.As(err, &ec) || ec.code != 2 {
+		t.Fatalf("unknown flag after subcommand: %v", err)
+	}
+}

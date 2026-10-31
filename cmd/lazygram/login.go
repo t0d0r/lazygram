@@ -37,22 +37,9 @@ func runLogin(o options) error {
 	if err != nil {
 		return err
 	}
-	switch src {
-	case appNone:
-		app, err := askApp(p)
-		if err != nil {
-			return err
-		}
-		if err := config.SaveApp(cfg.SessionDir, app); err != nil {
-			return err
-		}
-		cfg.App = app
-	case appEnv:
-		// Store it so later starts work without the environment.
-		if err := config.SaveApp(cfg.SessionDir, cfg.App); err != nil {
-			return err
-		}
-		p.say("using the application registration from the environment; stored in the state directory\n")
+	cfg, err = loginApp(cfg, src, func() (config.App, error) { return askApp(p) }, p.say)
+	if err != nil {
+		return err
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
@@ -77,6 +64,7 @@ func runLogin(o options) error {
 	password := func(context.Context) (string, error) {
 		return p.secret("Two-step verification password (hidden): ")
 	}
+	p.say("connecting to Telegram... (Ctrl-C cancels)\n")
 	already, err := telegram.Login(ctx, cfg, show, password)
 	if err != nil {
 		if errors.Is(err, context.Canceled) {
@@ -92,6 +80,30 @@ func runLogin(o options) error {
 	return nil
 }
 
+// loginApp makes sure a registration is in place before the QR login:
+// stored and built-in values are used as they are, a value from the
+// environment is stored so later starts need no environment, and when there
+// is none ask supplies one, which is stored too.
+func loginApp(cfg config.Telegram, src appSource, ask func() (config.App, error), say func(string)) (config.Telegram, error) {
+	switch src {
+	case appNone:
+		app, err := ask()
+		if err != nil {
+			return cfg, err
+		}
+		if err := config.SaveApp(cfg.SessionDir, app); err != nil {
+			return cfg, err
+		}
+		cfg.App = app
+	case appEnv:
+		if err := config.SaveApp(cfg.SessionDir, cfg.App); err != nil {
+			return cfg, err
+		}
+		say("using the application registration from the environment; stored in the state directory\n")
+	}
+	return cfg, nil
+}
+
 func askApp(p *ttyPrompter) (config.App, error) {
 	p.say(appHelp)
 	id, err := p.line("Application id: ")
@@ -102,7 +114,7 @@ func askApp(p *ttyPrompter) (config.App, error) {
 	if err != nil {
 		return config.App{}, err
 	}
-	return config.ParseApp(id, hash)
+	return config.ParseApp(id, strings.TrimSpace(hash))
 }
 
 // ttyPrompter asks on the terminal. Secrets are read without echo.
@@ -122,9 +134,11 @@ func (t *ttyPrompter) line(prompt string) (string, error) {
 	return strings.TrimSpace(s), nil
 }
 
+// secret reads without echo and returns the input untouched: a password
+// may begin or end with spaces.
 func (t *ttyPrompter) secret(prompt string) (string, error) {
 	t.say(prompt)
 	b, err := term.ReadPassword(int(os.Stdin.Fd()))
 	t.say("\n")
-	return strings.TrimSpace(string(b)), err
+	return string(b), err
 }

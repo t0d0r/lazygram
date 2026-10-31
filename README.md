@@ -15,7 +15,7 @@ make build
 ```
 
 Started without a linked account, lazygram exits and says how to link one or
-how to start the demo. No environment variables are involved. Everything
+how to start the demo. No environment variables are required. Everything
 lazygram keeps lives in one state directory, `~/.local/state/lazygram` (or
 `-data DIR`), which is private to you and never committed. `make run`,
 `make demo`, `make login` and `make smoke` use `.state/` inside the project.
@@ -39,9 +39,9 @@ forks not to reuse theirs). Get yours once from https://my.telegram.org under
   nchat's names `TG_APIID` / `TG_APIHASH` are accepted too.
 - Type them at the first `lazygram login`; they are stored the same way.
 - Bake them into the binary like nchat: `make embed` writes the git-ignored
-  `cmd/lazygram/app_local.go` from `TG_API_ID`/`TG_API_HASH` (direnv), and
-  every `make build` after that carries them. No environment, no prompt.
-  (`make build TG_API_ID=... TG_API_HASH=...` embeds for one build only.)
+  `cmd/lazygram/app_local.go` from `TG_API_ID`/`TG_API_HASH` in the
+  environment (direnv), and every `make build` after that carries them. No
+  environment at run time, no prompt.
 
 A stored registration wins over the environment, which wins over the baked-in
 one; delete `<state>/telegram/app.json` to switch. Never commit these values:

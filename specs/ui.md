@@ -129,13 +129,17 @@ messages. When scrolled back, arriving messages keep the view anchored.
 ## Status line
 
 `[time] [provider] [N:name] [Act: ...] [M msgs] [sync state] [-K lines] message`.
-A background sync runs every 5s (demo) or 10s (telegram).
+A background sync runs every 5s (demo) or 10s (telegram) with a 90s
+budget (enough for a FLOOD_WAIT retry); polls skip while a sync runs.
 
 ## Subcommands and flags
 
 `lazygram` (linked Telegram account), `lazygram demo`, `lazygram login`.
 Flags: `-data DIR` (state directory, default `~/.local/state/lazygram`),
-`-smoke`, `-ascii` (login QR code with `#`), `-version`.
+`-smoke`, `-ascii` (login QR code with `#`), `-version`. Flags may come
+before or after the subcommand (`lazygram login -ascii`); any other extra
+argument is an error. A session file that cannot be used is reported with
+the hint to remove it and log in again.
 
 ## Non-interactive mode
 

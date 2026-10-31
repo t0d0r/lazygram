@@ -71,7 +71,6 @@ func (s *service) dialogs(ctx context.Context) ([]dialog, error) {
 	default:
 		return nil, fmt.Errorf("telegram: unexpected dialogs response %T", res)
 	}
-	taken := map[string]bool{}
 	var out []dialog
 	for _, dc := range rows {
 		d, ok := dc.(*tg.Dialog)
@@ -82,12 +81,21 @@ func (s *service) dialogs(ctx context.Context) ([]dialog, error) {
 		if !ok {
 			continue // forbidden or unknown peer
 		}
-		id := chatID(ent)
 		out = append(out, dialog{
-			chat: domain.Chat{ID: id, Service: "telegram", Alias: aliasFor(ent, taken), Title: ent.title,
+			chat: domain.Chat{ID: chatID(ent), Service: "telegram", Title: ent.title,
 				Kind: ent.chatKind(), Unread: d.UnreadCount, Deleted: ent.deleted},
 			ent: ent, top: d.TopMessage,
 		})
+	}
+	// Usernames are unique on Telegram and claim their names first, so a
+	// chat whose title merely slugs to someone's username can never take it.
+	taken := map[string]bool{}
+	for pass := 0; pass < 2; pass++ {
+		for i := range out {
+			if (out[i].ent.username != "") == (pass == 0) {
+				out[i].chat.Alias = aliasFor(out[i].ent, taken)
+			}
+		}
 	}
 	return out, nil
 }

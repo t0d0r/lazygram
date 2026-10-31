@@ -38,6 +38,7 @@ func Login(ctx context.Context, cfg config.Telegram,
 	if err != nil {
 		return false, err
 	}
+	linked := false
 	err = cl.Run(ctx, func(ctx context.Context) error {
 		st, err := cl.Auth().Status(ctx)
 		if err != nil {
@@ -52,7 +53,6 @@ func Login(ctx context.Context, cfg config.Telegram,
 		})
 		switch {
 		case err == nil:
-			return nil
 		case tgerr.Is(err, "SESSION_PASSWORD_NEEDED"):
 			pw, err := password(ctx)
 			if err != nil {
@@ -61,13 +61,22 @@ func Login(ctx context.Context, cfg config.Telegram,
 			if _, err := cl.Auth().Password(ctx, pw); err != nil {
 				return fmt.Errorf("telegram: two-step verification: %w", err)
 			}
-			return nil
 		default:
 			return fmt.Errorf("telegram: qr login: %w", err)
 		}
+		linked = true
+		return nil
 	})
+	// gotd's Run reports nil when the context was cancelled, so a Ctrl-C
+	// must not read as success.
+	if ctx.Err() != nil {
+		return false, ctx.Err()
+	}
 	if err != nil {
 		return false, err
+	}
+	if !already && !linked {
+		return false, errors.New("telegram: login did not complete")
 	}
 	// gotd writes 0600 already; enforce it in case an older file was looser.
 	if err := os.Chmod(filepath.Join(cfg.SessionDir, sessionFile), 0o600); err != nil && !os.IsNotExist(err) {

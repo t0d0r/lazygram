@@ -157,7 +157,8 @@ func (m *Model) syncCmd() tea.Cmd {
 	p, st := m.opt.Provider, m.opt.Store
 	since := domain.Latest(m.msgs)
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		// Long enough for a FLOOD_WAIT retry; polls skip while a sync runs.
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
 		msgs, err := p.Sync(ctx, since)
 		// A provider may return what it fetched before failing part-way, and
@@ -174,7 +175,7 @@ func (m *Model) recentCmd(chatID string, n int) tea.Cmd {
 	p, st := m.opt.Provider, m.opt.Store
 	m.loading[chatID] = true
 	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
 		msgs, err := p.Recent(ctx, chatID, n)
 		if err != nil {

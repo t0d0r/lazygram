@@ -25,7 +25,8 @@
   stored. The only login artifact is the session file.
 - The session file grants account access: the state directory (default
   `~/.local/state/lazygram`, or `.state/` for make targets, git-ignored) is
-  0700 and must be treated like a password store.
+  0700 and must be treated like a password store. `make clean` leaves it
+  alone; only `make purge` removes it.
 - Unlinking is done from the phone (Settings -> Devices -> terminate); the
   next start then exits with the "not linked" hint.
 - Third-party dependency: github.com/gotd/td; review upgrades before bumping.

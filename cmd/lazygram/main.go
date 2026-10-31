@@ -32,8 +32,8 @@ var version = "0.2.0"
 
 // buildAppID and buildAppHash carry a Telegram application registration in
 // the binary, like nchat's built-in one, so a personal build never asks for
-// it. They are set by the git-ignored app_local.go that "make embed" writes,
-// or by -ldflags -X. They are empty in a plain build.
+// it. They are set by the git-ignored app_local.go that "make embed" writes.
+// They are empty in a plain build.
 var buildAppID, buildAppHash string
 
 const notLinked = `lazygram is not linked to a Telegram account yet.
@@ -84,6 +84,20 @@ func run(args []string) error {
 	}
 	if err := fs.Parse(args); err != nil {
 		return exitError{"", 2}
+	}
+	if fs.NArg() > 1 { // flags may follow the subcommand: lazygram login -ascii
+		rest := fs.Args()[1:]
+		cmd := fs.Arg(0)
+		if err := fs.Parse(rest); err != nil {
+			return exitError{"", 2}
+		}
+		if fs.NArg() > 0 {
+			fs.Usage()
+			return exitError{fmt.Sprintf("lazygram: unexpected argument %q\n", fs.Arg(0)), 2}
+		}
+		if err := fs.Parse([]string{cmd}); err != nil {
+			return exitError{"", 2}
+		}
 	}
 	if *showVersion {
 		fmt.Println("lazygram", version)
@@ -181,7 +195,7 @@ func runTelegram(o options) error {
 		return errors.New("could not reach Telegram within 45s; check the network and try again")
 	case err != nil:
 		_ = client.Close()
-		return err
+		return sessionHint(cfg, err)
 	}
 	prov, err := telegram.New(cfg, client)
 	if err != nil {
@@ -195,6 +209,12 @@ func runTelegram(o options) error {
 	return runTUI(o, prov, st, 10*time.Second)
 }
 
+// sessionHint adds the way out of a session file that cannot be used.
+func sessionHint(cfg config.Telegram, err error) error {
+	return fmt.Errorf("%w\n  if this persists, remove %s and run lazygram login again",
+		err, filepath.Join(cfg.SessionDir, "session.json"))
+}
+
 // openCache opens the encrypted message cache next to the session. Its key
 // derives from the session's auth key, so a cache left by an earlier login
 // cannot be read and is discarded. Plain-text caches from older versions are
@@ -202,7 +222,7 @@ func runTelegram(o options) error {
 func openCache(cfg config.Telegram) (*store.Store, error) {
 	secret, err := telegram.SessionSecret(context.Background(), cfg)
 	if err != nil {
-		return nil, err
+		return nil, sessionHint(cfg, err)
 	}
 	removeLegacyCache(cfg.SessionDir)
 	path := filepath.Join(cfg.SessionDir, "cache.sqlite")

@@ -60,3 +60,20 @@ make demo                  # interactive: /win 2, Tab, /list, /search
 
 Triage the review findings, then persist per-chat cursors and open windows
 across restarts.
+
+## Review triage
+
+An adversarial review (5 lenses, 3 skeptics per finding, 71 agents)
+confirmed 18 findings on the previous version. Already gone in the
+rewrite: the time-based since cut-off, unsanitized titles in the chat list,
+the 5s doc. Applied: partial sync results kept on error; cancelled QR
+login no longer reported as success (gotd swallows context cancellation);
+flags accepted after the subcommand; `make build` no longer echoes the
+hash (ldflags embedding removed, `make embed` is the way); `make clean`
+keeps `.state/`, `make purge` removes it; usernames claim aliases before
+title slugs; `make embed` reads values from the shell environment and
+validates digits/hex (no injection); the two-step password is sent as
+typed; sync budget 90s so a FLOOD_WAIT retry fits; unusable session files
+get a recovery hint; "no environment variables" wording corrected; login
+registration resolution extracted and tested. Known and documented: Ctrl-C
+at the hidden password prompt takes effect only after Enter.

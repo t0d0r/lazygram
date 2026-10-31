@@ -50,10 +50,12 @@ No environment variables. Everything is under `<data>/telegram/`:
   Resolution order at every start: `app.json`, then the environment
   (`TG_API_ID`/`TG_API_HASH`, or nchat's `TG_APIID`/`TG_APIHASH`), then the
   value carried by the binary: the git-ignored `cmd/lazygram/app_local.go`
-  that `make embed` generates from `TG_API_ID`/`TG_API_HASH` (nchat keeps
-  its registration in source the same way, but committed; lazygram's file
-  is ignored because the registration is personal), or `-ldflags -X
-  main.buildAppID=... -X main.buildAppHash=...` for one build.
+  that `make embed` generates from `TG_API_ID`/`TG_API_HASH` in the
+  environment (nchat keeps its registration in source the same way, but
+  committed; lazygram's file is ignored because the registration is
+  personal). `make embed` reads the values through the shell environment,
+  never expands them into the recipe, requires digits and hex, and refuses
+  to write a file git would track.
   `lazygram login` stores whatever it resolved from the environment, or asks
   (hash hidden) when nothing is found, so later starts need no environment.
   A variable set without its partner, or with a bad value, is an error that
@@ -82,7 +84,12 @@ Link Desktop Device. No phone number, SMS code or sign-up. When the token
 expires before it is scanned a fresh code is shown. If the account has
 two-step verification the password is asked once, hidden. An already
 authorized session prints "already linked" and changes nothing. Needs a
-terminal on stdin; Ctrl-C cancels. Only the session file is written.
+terminal on stdin; it prints "connecting to Telegram" first since the
+connection can take a while. Ctrl-C cancels and is reported as
+"login cancelled", never as success (gotd's Run swallows cancellation, so
+Login checks the context itself); Ctrl-C at the hidden password prompt
+takes effect after Enter. A two-step password is sent exactly as typed.
+Only the session file is written.
 
 The QR code is drawn as nchat draws it: two modules per character row with
 half-block characters, light modules as foreground, so it reads on a dark

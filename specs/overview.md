@@ -30,7 +30,7 @@ Ctrl-X or /me only, sends. It
 needs a one-time QR login (`lazygram login`) and the user's own Telegram
 application registration, asked once and stored locally; without them
 lazygram exits and says how to link an account or start the demo. No
-environment variables. The live path has only been tested against fakes,
+environment variables are required. The live path has only been tested against fakes,
 never against the real service. Polling, not push updates; 100 most recent
 dialogs; no per-chat selection yet.
 

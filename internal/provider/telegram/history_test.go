@@ -18,6 +18,9 @@ type fakeAPI struct {
 	history int
 	flood   int // FLOOD_WAIT errors still to return
 	sent    []string
+
+	extraDialogs []tg.DialogClass // listed before the fixed dialogs
+	extraChats   []tg.ChatClass
 }
 
 func newFakeAPI() *fakeAPI {
@@ -31,7 +34,7 @@ func (f *fakeAPI) MessagesGetDialogs(context.Context, *tg.MessagesGetDialogsRequ
 		return nil, tgerr.New(420, "FLOOD_WAIT_2")
 	}
 	return &tg.MessagesDialogsSlice{
-		Dialogs: []tg.DialogClass{
+		Dialogs: append(append([]tg.DialogClass{}, f.extraDialogs...), []tg.DialogClass{
 			&tg.Dialog{Peer: &tg.PeerUser{UserID: 7}, TopMessage: f.top[7], UnreadCount: 3},
 			&tg.Dialog{Peer: &tg.PeerChat{ChatID: 5}, TopMessage: f.top[-5]},
 			&tg.Dialog{Peer: &tg.PeerChannel{ChannelID: 9}, TopMessage: f.top[-9]},
@@ -41,19 +44,19 @@ func (f *fakeAPI) MessagesGetDialogs(context.Context, *tg.MessagesGetDialogsRequ
 			&tg.Dialog{Peer: &tg.PeerUser{UserID: 13}, TopMessage: 5},
 			&tg.Dialog{Peer: &tg.PeerChannel{ChannelID: 99}}, // forbidden: no entity
 			&tg.DialogFolder{},
-		},
+		}...),
 		Users: []tg.UserClass{
 			&tg.User{ID: 7, AccessHash: 1, FirstName: "Test", LastName: "Person", Username: "testperson"},
 			&tg.User{ID: 8, AccessHash: 2, Username: "nameless"},
 			&tg.User{ID: 1, Self: true, FirstName: "Me"},
 			&tg.User{ID: 13, Deleted: true},
 		},
-		Chats: []tg.ChatClass{
+		Chats: append(append([]tg.ChatClass{}, f.extraChats...), []tg.ChatClass{
 			&tg.Chat{ID: 5, Title: "Test Group"},
 			&tg.Channel{ID: 9, AccessHash: 3, Title: "Test Channel", Username: "testchan"},
 			&tg.Channel{ID: 12, AccessHash: 4, Title: "Super Group", Megagroup: true},
 			&tg.ChannelForbidden{ID: 99},
-		},
+		}...),
 	}, nil
 }
 
@@ -321,5 +324,23 @@ func TestOwnMessagesAreFromMe(t *testing.T) {
 	m := &tg.Message{ID: 1, Out: true, FromID: &tg.PeerUser{UserID: 7}, Message: "x"}
 	if got := sender(entity{kind: kindGroup}, m, ents); got != "me" {
 		t.Fatal(got)
+	}
+}
+
+func TestUsernamesClaimNamesBeforeTitles(t *testing.T) {
+	f := newFakeAPI()
+	// A group titled "testperson" is listed before the person @testperson.
+	f.extraChats = []tg.ChatClass{&tg.Chat{ID: 50, Title: "testperson"}}
+	f.extraDialogs = []tg.DialogClass{&tg.Dialog{Peer: &tg.PeerChat{ChatID: 50}, TopMessage: 1}}
+	chats, err := newService(f).Dialogs(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]string{}
+	for _, c := range chats {
+		names[c.ID] = c.Name()
+	}
+	if names["telegram:7"] != "@testperson" || names["telegram:-50"] != "#testperson-2" {
+		t.Fatalf("%v", names)
 	}
 }
