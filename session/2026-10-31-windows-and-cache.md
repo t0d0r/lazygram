@@ -228,3 +228,5 @@ at the hidden password prompt takes effect only after Enter.
   status line and window bar below it.
 - Layout: content, rule with the send hint, status line, window bar,
   input (one rule only).
+- Status messages (errors in red, notices, list/pager summaries) are shown
+  on the rule line, left; the status line keeps only its segments.

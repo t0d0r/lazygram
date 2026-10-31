@@ -1,8 +1,11 @@
 # UI
 
-Layout, top to bottom: content, a thin rule carrying the send hint
-(`ctrl-x: to send` or `enter: to send`) at its right end, the status
-line, the window bar, the input line. There is no header: the status line carries the
+Layout, top to bottom: content, a thin rule, the status line, the window
+bar, the input line. The rule carries the message at its left (what the
+list or pager holds, an error in the error colour, or the last notice,
+truncated with "..." when long) and the send hint (`ctrl-x: to send` or
+`enter: to send`) at its right end; the status line holds only the
+segments, so it never truncates. There is no header: the status line carries the
 window tag, and in the list and pager views it shows what the view holds
 in place of the status message. The window bar lists every window as
 `[N:name]`; the current window is highlighted and windows with unread
@@ -261,9 +264,9 @@ and the status line shows `[scrolled up N lines]` in the same colour.
 
 ## Status line
 
-`time  provider  [N:name]  Act: ...  M msgs  sync state  scrolled up K lines  message`
+`time  provider  [N:name]  Act: ...  M msgs  sync state  scrolled up K lines`
 (brackets only around the window tag; two spaces between segments; the
-send hint lives on the rule above the status line). The
+message and the send hint live on the rule above). The
 sync segment keeps a fixed width and colour (`synced: HH:MM:SS` or
 `syncing HH:MM:SS` with the last completion time) and a poll that brings
 nothing changes no status text, so the line does not flicker every ten

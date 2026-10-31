@@ -18,6 +18,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"lazygram/internal/command"
 	"lazygram/internal/domain"
@@ -1907,17 +1908,8 @@ func (m *Model) statusLine() string {
 	if w.scroll > 0 && m.mode == modeWin {
 		text += actStyle.Render(fmt.Sprintf("scrolled up %d lines", w.scroll)) + gap
 	}
-	switch {
-	case m.modeInfo != "":
-		text += infoStyle.Render(m.modeInfo) + gap
-	case m.status != "":
-		if m.isErr {
-			text += errStyle.Render(m.status)
-		} else {
-			text += infoStyle.Render(m.status)
-		}
-		text += gap
-	}
+	// The message itself is shown on the rule above, so this line never
+	// has to truncate it.
 	return lipgloss.NewStyle().Background(statusBG()).Render(fitLine(text, m.width))
 }
 
@@ -1949,14 +1941,29 @@ func (m *Model) windowBar() (string, []span) {
 	return lipgloss.NewStyle().Background(statusBG()).Render(fitLine(" "+b.String(), m.width)), spans
 }
 
-// rule is a thin horizontal line across the screen, with an optional label
-// at its right end.
+// rule is the thin line above the status rows. It carries the status
+// message (what a view holds, an error in the error colour, or the last
+// notice) at its left and a label at its right end.
 func (m *Model) rule(label string) string {
-	line := strings.Repeat("\u2500", max(m.width, 1))
-	if label != "" && lipgloss.Width(label)+4 <= m.width {
-		line = strings.Repeat("\u2500", m.width-lipgloss.Width(label)-3) + " " + label + " \u2500"
+	dash := func(n int) string { return dimStyle.Render(strings.Repeat("\u2500", max(n, 0))) }
+	right := ""
+	if label != "" {
+		right = " " + label + " \u2500"
 	}
-	return dimStyle.Render(line)
+	msg, msgStyle := m.modeInfo, infoStyle.Background(lipgloss.NoColor{})
+	if msg == "" {
+		msg = m.status
+		if m.isErr {
+			msgStyle = errStyle.Background(lipgloss.NoColor{})
+		}
+	}
+	room := m.width - lipgloss.Width(right) - 4
+	if msg == "" || room < 8 {
+		return dash(m.width-lipgloss.Width(right)) + dimStyle.Render(right)
+	}
+	msg = ansi.Truncate(msg, room, "...")
+	fill := m.width - lipgloss.Width(right) - lipgloss.Width(msg) - 4
+	return dash(2) + " " + msgStyle.Render(msg) + " " + dash(fill) + dimStyle.Render(right)
 }
 
 // inputLine shows the input with line breaks as a return mark, the tail

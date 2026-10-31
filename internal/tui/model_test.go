@@ -648,6 +648,11 @@ func TestWindowBarListsEveryWindow(t *testing.T) {
 	if !strings.Contains(lines[16], "\u2500") || !strings.Contains(lines[17], "fake") {
 		t.Fatalf("the rule precedes the status line:\n%s", strings.Join(lines[16:20], "\n"))
 	}
+	m.setErr("boom happened")
+	lines = strings.Split(m.View(), "\n")
+	if !strings.Contains(lines[16], "boom happened") || strings.Contains(lines[17], "boom happened") {
+		t.Fatalf("the message sits on the rule, not in the status line:\n%s", strings.Join(lines[16:18], "\n"))
+	}
 }
 
 func TestEscThenDigitSwitchesWindows(t *testing.T) {
