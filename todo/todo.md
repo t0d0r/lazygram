@@ -95,3 +95,6 @@
 - [ ] gitleaks pre-commit hook
 - [x] CI: Linux and macOS workflows with README badges (specs/ci.md)
 - [x] input cursor: Left/Right, Ctrl-A/E, Delete, Ctrl-K, Ctrl-W before the cursor; completion at the cursor (specs/ui.md)
+- [x] mouse drag selects text and copies it on release: OSC 52 in the frame plus a system tool, /clip modes kept, clicks act on release (specs/ui.md, docs/clipboard.md)
+- [ ] double click selects a word, triple a row; Shift-click extends (specs/ui.md)
+- [ ] release v0.4.15 with the mouse selection and the self-update refusal
