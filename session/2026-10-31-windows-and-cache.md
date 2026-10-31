@@ -299,3 +299,7 @@ at the hidden password prompt takes effect only after Enter.
 - CI: `.github/workflows/linux.yml` and `macos.yml` run `make check` and
   `make smoke` on push to master and on pull requests; README carries
   the Linux, macOS and release badges (specs/ci.md).
+- The first macOS CI run failed on TestStartBannerAndTagline, which
+  required six lines of exit banner and so failed whenever the random
+  face was the two-line wordmark (the same flake seen once locally);
+  the assertion now checks the surrounding text only.

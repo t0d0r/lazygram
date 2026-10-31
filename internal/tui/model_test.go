@@ -819,7 +819,9 @@ func TestStartBannerAndTagline(t *testing.T) {
 	if a, b := strings.Index(v, "######## ##    ##"), strings.Index(v, "first dev line"); a < 0 || b < 0 || a > b {
 		t.Fatal("banner must precede the messages")
 	}
-	if out := ExitBanner("v9.9.9", 100, "up 1s"); !strings.Contains(out, "lazygram v9.9.9") || !strings.Contains(out, "thanks") || !strings.Contains(out, "up 1s") || strings.Count(out, "\n") < 6 {
+	// The face is random (the wordmark is two lines), so only the text
+	// around it is checked here; the loop below checks the art itself.
+	if out := ExitBanner("v9.9.9", 100, "up 1s"); !strings.Contains(out, "lazygram v9.9.9") || !strings.Contains(out, "thanks") || !strings.Contains(out, "up 1s") || !strings.HasSuffix(out, "  up 1s\n") {
 		t.Fatalf("exit banner:\n%s", out)
 	}
 	for _, width := range []int{120, 60, 20} {
