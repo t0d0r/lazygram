@@ -17,17 +17,27 @@ import (
 )
 
 type fake struct {
-	chats  []domain.Chat
-	msgs   []domain.Message            // returned by Sync
-	recent map[string][]domain.Message // returned by Recent
-	err    error
-	calls  []string // Recent calls as "chat:limit"
-	sent   []string // Send calls as "chat:text"
+	chats   []domain.Chat
+	msgs    []domain.Message            // returned by Sync
+	recent  map[string][]domain.Message // returned by Recent
+	err     error
+	calls   []string // Recent calls as "chat:limit"
+	sent    []string // Send calls as "chat:text"
+	pressed []string // Press calls as "chat:msg:label"
 }
 
 func (f *fake) Send(_ context.Context, chatID, text string) error {
 	f.sent = append(f.sent, chatID+":"+text)
 	return f.err
+}
+
+func (f *fake) Press(_ context.Context, chatID, msgID string, b domain.Button) (domain.PressAnswer, error) {
+	f.pressed = append(f.pressed, chatID+":"+msgID+":"+b.Label)
+	if f.err != nil {
+		return domain.PressAnswer{}, f.err
+	}
+	edited := domain.Message{ID: msgID, ChatID: chatID, Sender: "bot", Text: "you chose " + b.Label, Time: base.Add(3 * time.Minute)}
+	return domain.PressAnswer{Text: "ack " + b.Label, Updated: &edited}, nil
 }
 
 func (f *fake) Name() string                                 { return "fake" }
@@ -60,12 +70,23 @@ func newFake() *fake {
 			mk("c1", "1", "ada", "first dev line", 0),
 			mk("c2", "1", "alice", "hi there", 1),
 			mk("c1", "2", "alan", "second dev line", 2),
+			withBtns(mk("c2", "7", "bot", "deploy?", 3)),
 		},
 		recent: map[string][]domain.Message{
 			"c2": {mk("c2", "0", "alice", "older hello", -30), mk("c2", "1", "alice", "hi there", 1)},
 			"c3": {mk("c3", "7", "wire", "headline", -10)},
 		},
 	}
+}
+
+func withBtns(m domain.Message) domain.Message {
+	m.Buttons = []domain.Button{
+		{Label: "Yes", Kind: domain.ButtonCallback, Data: []byte("y")},
+		{Label: "Docs", Kind: domain.ButtonURL, URL: "https://example.invalid/d"},
+		{Label: "Ping", Kind: domain.ButtonText},
+		{Label: "Pay", Kind: domain.ButtonOther},
+	}
+	return m
 }
 
 func setup(t *testing.T, f *fake) *Model {
@@ -108,7 +129,7 @@ func TestServerWindowInterleavesChats(t *testing.T) {
 	if a < 0 || a >= b || b >= c {
 		t.Fatalf("expected interleaved chronological order:\n%s", v)
 	}
-	for _, want := range []string{"#dev", "@alice", "<ada>", "[fake]", "[1:server]", "3 msgs"} {
+	for _, want := range []string{"#dev", "@alice", "<ada>", "[fake]", "[1:server]", "4 msgs"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("view lacks %q", want)
 		}
@@ -123,7 +144,7 @@ func TestWindowsOpenForNewMessagesAndUnreadChats(t *testing.T) {
 	if m.wins[1].chatID != "c3" || m.wins[1].unread != 4 {
 		t.Fatalf("unread chat should open first with its count: %+v", m.wins[1])
 	}
-	if m.wins[2].unread != 2 || m.wins[3].unread != 1 {
+	if m.wins[2].unread != 2 || m.wins[3].unread != 2 {
 		t.Fatalf("activity counts: %+v %+v", m.wins[2], m.wins[3])
 	}
 	if !strings.Contains(m.View(), "[Act: 2,3,4]") {
@@ -481,7 +502,7 @@ func TestStatsWhoisMe(t *testing.T) {
 	m := setup(t, f)
 	enter(m, "/stats")
 	v := m.View()
-	for _, want := range []string{"stats: fake", "chats: 4 (1 people, 1 groups, 1 channels, 1 deleted)", "windows: 4 open", "3 in this session, 3 cached"} {
+	for _, want := range []string{"stats: fake", "chats: 4 (1 people, 1 groups, 1 channels, 1 deleted)", "windows: 4 open", "4 in this session, 4 cached"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("stats lacks %q:\n%s", want, v)
 		}
@@ -492,7 +513,7 @@ func TestStatsWhoisMe(t *testing.T) {
 	}
 	enter(m, "/whois @alice")
 	v = m.View()
-	for _, want := range []string{"whois @alice: Alice Smith", "person on", "id c2", "1 messages this session"} {
+	for _, want := range []string{"whois @alice: Alice Smith", "person on", "id c2", "2 messages this session"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("whois lacks %q:\n%s", want, v)
 		}
@@ -643,5 +664,78 @@ func TestStartBannerAndTagline(t *testing.T) {
 	}
 	if Tagline("") != Tagline("dev") {
 		t.Fatal("empty version reads dev")
+	}
+}
+
+func TestPressCallbackURLTextAndErrors(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	enter(m, "/press 1")
+	if !m.isErr || !strings.Contains(m.status, "server window") {
+		t.Fatalf("server window: %q", m.status)
+	}
+	enter(m, "/win #dev")
+	enter(m, "/press 1")
+	if !m.isErr || !strings.Contains(m.status, "no message with buttons") {
+		t.Fatalf("no buttons: %q", m.status)
+	}
+	enter(m, "/win @alice")
+	if v := body(m); !strings.Contains(v, "[1] Yes  [2] Docs (link)  [3] Ping (reply)  [4] Pay (unsupported)  (msg 7)") {
+		t.Fatalf("button line:\n%s", v)
+	}
+	enter(m, "/press 9")
+	if !m.isErr || !strings.Contains(m.status, "pick 1..4") {
+		t.Fatalf("range: %q", m.status)
+	}
+	enter(m, "/press 2") // url: printed, nothing sent
+	if v := body(m); !strings.Contains(v, "-!- Docs: open https://example.invalid/d") || len(f.pressed) != 0 {
+		t.Fatalf("url button:\n%s", v)
+	}
+	cmd := enter(m, "/press 3") // reply keyboard: sends the label
+	if cmd == nil {
+		t.Fatal("text button must send")
+	}
+	cmd()
+	if len(f.sent) != 1 || f.sent[0] != "c2:Ping" {
+		t.Fatalf("sent=%v", f.sent)
+	}
+	enter(m, "/press 4")
+	if !m.isErr {
+		t.Fatal("unsupported kind")
+	}
+	cmd = enter(m, "/press 1") // callback: answer shown, message replaced
+	if cmd == nil {
+		t.Fatal("callback must press")
+	}
+	m.Update(cmd())
+	if len(f.pressed) != 1 || f.pressed[0] != "c2:7:Yes" {
+		t.Fatalf("pressed=%v", f.pressed)
+	}
+	v := body(m)
+	if !strings.Contains(v, "-!- pressed Yes: ack Yes") || !strings.Contains(v, "you chose Yes") || strings.Contains(v, "[1] Yes") {
+		t.Fatalf("after press:\n%s", v)
+	}
+	if got, _ := m.opt.Store.Messages("c2", 0); len(got) != 2 || got[1].Text != "you chose Yes" {
+		t.Fatalf("store must hold the edited message: %+v", got)
+	}
+	cmd = enter(m, "/press 7 1") // explicit message id, now without buttons
+	if !m.isErr || cmd != nil {
+		t.Fatalf("buttons gone: %q", m.status)
+	}
+	enter(m, "/press 1 2 3")
+	if !m.isErr || !strings.Contains(m.status, "usage") {
+		t.Fatalf("usage: %q", m.status)
+	}
+}
+
+func TestPressErrorLandsInWindow(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	enter(m, "/win @alice")
+	f.err = errors.New("BOT_RESPONSE_TIMEOUT")
+	cmd := enter(m, "/press 1")
+	m.Update(cmd())
+	if !m.isErr || !strings.Contains(body(m), "-!- press Yes: BOT_RESPONSE_TIMEOUT") {
+		t.Fatalf("%q\n%s", m.status, body(m))
 	}
 }

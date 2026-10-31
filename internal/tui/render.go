@@ -22,13 +22,14 @@ func colorFor(s string) lipgloss.Color {
 }
 
 var (
-	dimStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	dayStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Italic(true)
-	noteStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("110"))
-	hiStyle   = lipgloss.NewStyle().Reverse(true).Bold(true)
-	barStyle  = lipgloss.NewStyle().Background(lipgloss.Color("24")).Foreground(lipgloss.Color("255")).Bold(true)
-	infoStyle = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("252"))
-	actStyle  = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("220")).Bold(true)
+	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
+	dayStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Italic(true)
+	noteStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("110"))
+	buttonStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
+	hiStyle     = lipgloss.NewStyle().Reverse(true).Bold(true)
+	barStyle    = lipgloss.NewStyle().Background(lipgloss.Color("24")).Foreground(lipgloss.Color("255")).Bold(true)
+	infoStyle   = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("252"))
+	actStyle    = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("220")).Bold(true)
 )
 
 // note is a client-side line in a window: "-!- connected", /list output, ...
@@ -137,8 +138,35 @@ func renderLines(msgs []domain.Message, notes []note, o lineOpts) []string {
 				out = append(out, indent+l)
 			}
 		}
+		if len(m.Buttons) > 0 {
+			for _, l := range wrapText(buttonLine(m), max(o.width-len(indent), 10), max(o.width-len(indent), 10)) {
+				out = append(out, indent+buttonStyle.Render(l))
+			}
+		}
 	}
 	return out
+}
+
+// buttonLine lists a message's buttons as "[1] OK  [2] Docs (link)  (msg 42)"
+// so /press can refer to them.
+func buttonLine(m domain.Message) string {
+	var b strings.Builder
+	for i, btn := range m.Buttons {
+		if i > 0 {
+			b.WriteString("  ")
+		}
+		fmt.Fprintf(&b, "[%d] %s", i+1, sanitize(btn.Label, false))
+		switch btn.Kind {
+		case domain.ButtonURL:
+			b.WriteString(" (link)")
+		case domain.ButtonText:
+			b.WriteString(" (reply)")
+		case domain.ButtonOther:
+			b.WriteString(" (unsupported)")
+		}
+	}
+	fmt.Fprintf(&b, "  (msg %s)", m.ID)
+	return b.String()
 }
 
 // highlight marks case-insensitive occurrences of needle in s.

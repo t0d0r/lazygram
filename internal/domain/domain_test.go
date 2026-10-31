@@ -142,3 +142,24 @@ func TestFilterChats(t *testing.T) {
 		t.Fatal("FilterChats")
 	}
 }
+
+func TestReplaceAndLatestWithButtons(t *testing.T) {
+	ms := []Message{msg("a", "1", 0, "bot", "pick"), msg("b", "1", 1, "x", "")}
+	ms[0].Buttons = []Button{{Label: "OK", Kind: ButtonCallback}}
+	got, ok := LatestWithButtons(ms, "a")
+	if !ok || got.ID != "1" {
+		t.Fatal("latest with buttons")
+	}
+	if _, ok := LatestWithButtons(ms, "b"); ok {
+		t.Fatal("chat b has none")
+	}
+	edited := msg("a", "1", 0, "bot", "done")
+	ms = Replace(ms, edited)
+	if len(ms) != 2 || ms[0].Text != "done" || len(ms[0].Buttons) != 0 {
+		t.Fatalf("replace: %+v", ms)
+	}
+	ms = Replace(ms, msg("c", "9", 5, "y", "new"))
+	if len(ms) != 3 || ms[2].ChatID != "c" {
+		t.Fatalf("replace appends unknown: %+v", ms)
+	}
+}

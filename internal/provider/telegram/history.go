@@ -29,6 +29,9 @@ type api interface {
 	MessagesGetDialogs(ctx context.Context, req *tg.MessagesGetDialogsRequest) (tg.MessagesDialogsClass, error)
 	MessagesGetHistory(ctx context.Context, req *tg.MessagesGetHistoryRequest) (tg.MessagesMessagesClass, error)
 	MessagesSendMessage(ctx context.Context, req *tg.MessagesSendMessageRequest) (tg.UpdatesClass, error)
+	MessagesGetBotCallbackAnswer(ctx context.Context, req *tg.MessagesGetBotCallbackAnswerRequest) (*tg.MessagesBotCallbackAnswer, error)
+	MessagesGetMessages(ctx context.Context, id []tg.InputMessageClass) (tg.MessagesMessagesClass, error)
+	ChannelsGetMessages(ctx context.Context, req *tg.ChannelsGetMessagesRequest) (tg.MessagesMessagesClass, error)
 }
 
 // service implements Client on top of api. It is read-only. Every History
@@ -185,6 +188,100 @@ func (s *service) Send(ctx context.Context, chatID, text string) error {
 	return nil
 }
 
+// Press presses a callback button: messages.getBotCallbackAnswer, then the
+// message is fetched again because bots usually edit it in response.
+func (s *service) Press(ctx context.Context, chatID, msgID string, b domain.Button) (domain.PressAnswer, error) {
+	ent, ok := s.known[chatID]
+	if !ok {
+		return domain.PressAnswer{}, fmt.Errorf("telegram: unknown chat %s", chatID)
+	}
+	id, err := strconv.Atoi(msgID)
+	if err != nil {
+		return domain.PressAnswer{}, fmt.Errorf("telegram: bad message id %q", msgID)
+	}
+	if b.Kind != domain.ButtonCallback {
+		return domain.PressAnswer{}, errors.New("telegram: only callback buttons can be pressed")
+	}
+	req := &tg.MessagesGetBotCallbackAnswerRequest{Peer: ent.peer, MsgID: id}
+	req.SetData(b.Data)
+	res, err := s.api.MessagesGetBotCallbackAnswer(ctx, req)
+	if err != nil {
+		return domain.PressAnswer{}, fmt.Errorf("telegram: press: %w", err)
+	}
+	var a domain.PressAnswer
+	if res != nil {
+		a.Text, _ = res.GetMessage()
+		a.URL, _ = res.GetURL()
+	}
+	a.Updated, err = s.message(ctx, chatID, ent, id)
+	if err != nil {
+		return a, fmt.Errorf("telegram: pressed, but could not refetch the message: %w", err)
+	}
+	return a, nil
+}
+
+// message fetches one message by id as it is now.
+func (s *service) message(ctx context.Context, chatID string, ent entity, id int) (*domain.Message, error) {
+	ids := []tg.InputMessageClass{&tg.InputMessageID{ID: id}}
+	var res tg.MessagesMessagesClass
+	var err error
+	if ent.channel != nil {
+		res, err = s.api.ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{Channel: ent.channel, ID: ids})
+	} else {
+		res, err = s.api.MessagesGetMessages(ctx, ids)
+	}
+	if err != nil {
+		return nil, err
+	}
+	raw, users := historyParts(res)
+	ents := collect(users, nil)
+	for _, mc := range raw {
+		if m, ok := mc.(*tg.Message); ok && m.ID == id {
+			out := convert(chatID, ent, m, ents)
+			return &out, nil
+		}
+	}
+	return nil, errors.New("message not found")
+}
+
+// buttons flattens a message's inline keyboard (or reply keyboard) into the
+// domain form, row by row, left to right. Callback buttons that require the
+// account password are reported as unsupported.
+func buttons(markup tg.ReplyMarkupClass) []domain.Button {
+	var out []domain.Button
+	switch mk := markup.(type) {
+	case *tg.ReplyInlineMarkup:
+		for _, row := range mk.Rows {
+			for _, b := range row.Buttons {
+				switch t := b.Type.(type) {
+				case *tg.InlineButtonTypeCallback:
+					if t.RequiresPassword {
+						out = append(out, domain.Button{Label: b.Text, Kind: domain.ButtonOther})
+						continue
+					}
+					out = append(out, domain.Button{Label: b.Text, Kind: domain.ButtonCallback, Data: t.Data})
+				case *tg.InlineButtonTypeURL:
+					out = append(out, domain.Button{Label: b.Text, Kind: domain.ButtonURL, URL: t.URL})
+				default:
+					out = append(out, domain.Button{Label: b.Text, Kind: domain.ButtonOther})
+				}
+			}
+		}
+	case *tg.ReplyKeyboardMarkup:
+		for _, row := range mk.Rows {
+			for _, b := range row.Buttons {
+				switch b.Type.(type) {
+				case *tg.ButtonTypeDefault, nil:
+					out = append(out, domain.Button{Label: b.Text, Kind: domain.ButtonText})
+				default:
+					out = append(out, domain.Button{Label: b.Text, Kind: domain.ButtonOther})
+				}
+			}
+		}
+	}
+	return out
+}
+
 // chatHistory pages backwards from the newest message and stops at a message
 // already fetched (id <= stopID) or at limit. Messages come newest first.
 func (s *service) chatHistory(ctx context.Context, id string, ent entity, stopID int, limit int) ([]domain.Message, error) {
@@ -242,13 +339,17 @@ func convert(chatID string, chat entity, m *tg.Message, ents entities) domain.Me
 	if text == "" && m.Media != nil {
 		text = "[media]"
 	}
-	return domain.Message{
+	out := domain.Message{
 		ID:     strconv.Itoa(m.ID),
 		ChatID: chatID,
 		Sender: sender(chat, m, ents),
 		Text:   text,
 		Time:   time.Unix(int64(m.Date), 0).UTC(),
 	}
+	if mk, ok := m.GetReplyMarkup(); ok {
+		out.Buttons = buttons(mk)
+	}
+	return out
 }
 
 func sender(chat entity, m *tg.Message, ents entities) string {
@@ -286,6 +387,18 @@ func (f floodAPI) MessagesGetHistory(ctx context.Context, req *tg.MessagesGetHis
 
 func (f floodAPI) MessagesSendMessage(ctx context.Context, req *tg.MessagesSendMessageRequest) (tg.UpdatesClass, error) {
 	return retryFlood(ctx, f.sleep, func() (tg.UpdatesClass, error) { return f.api.MessagesSendMessage(ctx, req) })
+}
+
+func (f floodAPI) MessagesGetBotCallbackAnswer(ctx context.Context, req *tg.MessagesGetBotCallbackAnswerRequest) (*tg.MessagesBotCallbackAnswer, error) {
+	return retryFlood(ctx, f.sleep, func() (*tg.MessagesBotCallbackAnswer, error) { return f.api.MessagesGetBotCallbackAnswer(ctx, req) })
+}
+
+func (f floodAPI) MessagesGetMessages(ctx context.Context, id []tg.InputMessageClass) (tg.MessagesMessagesClass, error) {
+	return retryFlood(ctx, f.sleep, func() (tg.MessagesMessagesClass, error) { return f.api.MessagesGetMessages(ctx, id) })
+}
+
+func (f floodAPI) ChannelsGetMessages(ctx context.Context, req *tg.ChannelsGetMessagesRequest) (tg.MessagesMessagesClass, error) {
+	return retryFlood(ctx, f.sleep, func() (tg.MessagesMessagesClass, error) { return f.api.ChannelsGetMessages(ctx, req) })
 }
 
 func retryFlood[T any](ctx context.Context, sleep func(context.Context, time.Duration) error, call func() (T, error)) (T, error) {

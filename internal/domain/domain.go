@@ -40,13 +40,40 @@ func (c Chat) Name() string {
 	return "#" + c.Alias
 }
 
+// ButtonKind says what pressing a button does.
+type ButtonKind int
+
+// Button kinds.
+const (
+	ButtonCallback ButtonKind = iota // sends Data to the bot, which answers
+	ButtonURL                        // opens URL; lazygram only prints it
+	ButtonText                       // a reply-keyboard button: sends Label as a message
+	ButtonOther                      // games, payments, web apps, ...: not supported
+)
+
+// Button is a button a bot attached to a message.
+type Button struct {
+	Label string     `json:"label"`
+	Kind  ButtonKind `json:"kind"`
+	Data  []byte     `json:"data,omitempty"`
+	URL   string     `json:"url,omitempty"`
+}
+
 // Message is one message in a chat.
 type Message struct {
-	ID     string    `json:"id"` // unique within the chat
-	ChatID string    `json:"chat_id"`
-	Sender string    `json:"sender"`
-	Text   string    `json:"text"`
-	Time   time.Time `json:"time"`
+	ID      string    `json:"id"` // unique within the chat
+	ChatID  string    `json:"chat_id"`
+	Sender  string    `json:"sender"`
+	Text    string    `json:"text"`
+	Time    time.Time `json:"time"`
+	Buttons []Button  `json:"buttons,omitempty"` // numbered from 1 in this order
+}
+
+// PressAnswer is what a provider reports after a button was pressed.
+type PressAnswer struct {
+	Text    string   // the bot's answer, if any
+	URL     string   // a URL the bot asked to open, if any
+	Updated *Message // the message as it is after the press, when it changed
 }
 
 // Key identifies a message across chats, for de-duplication.
@@ -86,6 +113,27 @@ type Query struct {
 	ChatID string    // exact chat; empty means all chats
 	Text   string    // case-insensitive substring of text or sender
 	Since  time.Time // inclusive lower bound; zero means none
+}
+
+// Replace swaps the message with the same key in msgs, or appends it.
+func Replace(msgs []Message, m Message) []Message {
+	for i := range msgs {
+		if msgs[i].Key() == m.Key() {
+			msgs[i] = m
+			return msgs
+		}
+	}
+	return Merge(msgs, []Message{m})
+}
+
+// LatestWithButtons returns the newest message of chatID that has buttons.
+func LatestWithButtons(msgs []Message, chatID string) (Message, bool) {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].ChatID == chatID && len(msgs[i].Buttons) > 0 {
+			return msgs[i], true
+		}
+	}
+	return Message{}, false
 }
 
 // Filter returns the messages matching q, preserving order.

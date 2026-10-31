@@ -25,6 +25,7 @@ type Client interface {
 	History(ctx context.Context, since time.Time) ([]domain.Message, error)
 	Recent(ctx context.Context, chatID string, limit int) ([]domain.Message, error)
 	Send(ctx context.Context, chatID, text string) error
+	Press(ctx context.Context, chatID, msgID string, b domain.Button) (domain.PressAnswer, error)
 }
 
 // Provider adapts a Client to provider.Provider.
@@ -74,6 +75,14 @@ func (p *Provider) Send(ctx context.Context, chatID, text string) error {
 		return fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
 	}
 	return p.client.Send(ctx, chatID, text)
+}
+
+// Press implements provider.Provider.
+func (p *Provider) Press(ctx context.Context, chatID, msgID string, b domain.Button) (domain.PressAnswer, error) {
+	if p.client == nil {
+		return domain.PressAnswer{}, fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
+	}
+	return p.client.Press(ctx, chatID, msgID, b)
 }
 
 // Recent implements provider.Provider.

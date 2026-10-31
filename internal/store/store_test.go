@@ -189,3 +189,25 @@ func TestStateRoundTripIsSealed(t *testing.T) {
 		t.Fatal("state must not be readable in the file")
 	}
 }
+
+func TestReplaceKeepsButtonsRoundTrip(t *testing.T) {
+	s := mustOpen(t, Memory, secret)
+	orig := m("bot", "1", 1, "pick one")
+	orig.Buttons = []domain.Button{{Label: "OK", Kind: domain.ButtonCallback, Data: []byte{1, 2}}, {Label: "Docs", Kind: domain.ButtonURL, URL: "https://example.invalid"}}
+	mustAdd(t, s, orig)
+	got, _ := s.Messages("bot", 0)
+	if len(got) != 1 || len(got[0].Buttons) != 2 || string(got[0].Buttons[0].Data) != "\x01\x02" || got[0].Buttons[1].URL != "https://example.invalid" {
+		t.Fatalf("%+v", got)
+	}
+	edited := m("bot", "1", 1, "confirmed")
+	if err := s.Replace(edited); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = s.Messages("bot", 0)
+	if len(got) != 1 || got[0].Text != "confirmed" || len(got[0].Buttons) != 0 {
+		t.Fatalf("after replace: %+v", got)
+	}
+	if n, _ := s.Count("bot"); n != 1 {
+		t.Fatal("replace must not add a row")
+	}
+}

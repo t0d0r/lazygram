@@ -115,6 +115,12 @@ type (
 		chatID string
 		err    error
 	}
+	pressedMsg struct {
+		chatID string
+		label  string
+		answer domain.PressAnswer
+		err    error
+	}
 	tickMsg time.Time
 )
 
@@ -256,6 +262,19 @@ func (m *Model) sendCmd(chatID, text string) tea.Cmd {
 	}
 }
 
+func (m *Model) pressCmd(chatID string, msg domain.Message, b domain.Button) tea.Cmd {
+	p, st := m.opt.Provider, m.opt.Store
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+		defer cancel()
+		a, err := p.Press(ctx, chatID, msg.ID, b)
+		if err == nil && a.Updated != nil {
+			err = st.Replace(*a.Updated)
+		}
+		return pressedMsg{chatID: chatID, label: b.Label, answer: a, err: err}
+	}
+}
+
 // Update handles messages.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -299,6 +318,28 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		w.loaded = true
 		m.absorb(msg.fresh)
 		m.note(w, fmt.Sprintf("fetched %d older message(s)", len(msg.fresh)))
+	case pressedMsg:
+		_, w := m.winFor(msg.chatID)
+		if w == nil {
+			w = m.wins[0]
+		}
+		if msg.err != nil {
+			m.setErr("press: " + errText(msg.err))
+			m.note(w, "press "+msg.label+": "+errText(msg.err))
+			break
+		}
+		if msg.answer.Updated != nil {
+			m.msgs = domain.Replace(m.msgs, *msg.answer.Updated)
+		}
+		text := "pressed " + msg.label
+		if msg.answer.Text != "" {
+			text += ": " + msg.answer.Text
+		}
+		if msg.answer.URL != "" {
+			text += " (open: " + msg.answer.URL + ")"
+		}
+		m.note(w, text)
+		m.setInfo("pressed " + msg.label)
 	case sentMsg:
 		_, w := m.winFor(msg.chatID)
 		if w == nil {
@@ -705,6 +746,8 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.stats()
 	case command.Whois:
 		m.whois(c.Arg)
+	case command.Press:
+		return m.press(c.Arg)
 	case command.Me:
 		if w.chatID == "" {
 			m.setErr("the server window has no chat; /win to a chat first")
@@ -716,6 +759,63 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		}
 		m.setInfo("sending to " + m.nameOf(w.chatID) + "...")
 		return m, m.sendCmd(w.chatID, "* "+strings.TrimSpace(c.Arg))
+	}
+	return m, nil
+}
+
+// press implements /press: "N" presses button N of the latest message with
+// buttons in this window's chat, "<msg> N" that of a given message.
+func (m *Model) press(arg string) (tea.Model, tea.Cmd) {
+	w := m.wins[m.cur]
+	if w.chatID == "" {
+		m.setErr("the server window has no chat; /win to the bot's window first")
+		return m, nil
+	}
+	f := strings.Fields(arg)
+	var msg domain.Message
+	var n int
+	var err error
+	switch len(f) {
+	case 1:
+		var ok bool
+		if msg, ok = domain.LatestWithButtons(m.msgs, w.chatID); !ok {
+			m.setErr("no message with buttons in " + m.nameOf(w.chatID))
+			return m, nil
+		}
+		n, err = strconv.Atoi(f[0])
+	case 2:
+		found := false
+		for _, x := range m.msgs {
+			if x.ChatID == w.chatID && x.ID == f[0] {
+				msg, found = x, true
+			}
+		}
+		if !found {
+			m.setErr("no message " + f[0] + " in " + m.nameOf(w.chatID))
+			return m, nil
+		}
+		n, err = strconv.Atoi(f[1])
+	default:
+		m.setErr("usage: /press N, or /press <msg> N")
+		return m, nil
+	}
+	if err != nil || n < 1 || n > len(msg.Buttons) {
+		m.setErr(fmt.Sprintf("message %s has %d button(s); pick 1..%d", msg.ID, len(msg.Buttons), len(msg.Buttons)))
+		return m, nil
+	}
+	b := msg.Buttons[n-1]
+	switch b.Kind {
+	case domain.ButtonCallback:
+		m.setInfo("pressing " + b.Label + "...")
+		return m, m.pressCmd(w.chatID, msg, b)
+	case domain.ButtonURL:
+		m.note(w, b.Label+": open "+b.URL) // never opened by lazygram itself
+		m.setInfo("link shown")
+	case domain.ButtonText:
+		m.setInfo("sending " + b.Label + "...")
+		return m, m.sendCmd(w.chatID, b.Label)
+	default:
+		m.setErr("button " + b.Label + " is of a kind lazygram cannot press")
 	}
 	return m, nil
 }

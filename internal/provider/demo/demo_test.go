@@ -2,8 +2,11 @@ package demo
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
+
+	"lazygram/internal/domain"
 )
 
 func TestSyncRevealsScriptOverTime(t *testing.T) {
@@ -72,5 +75,27 @@ func TestSendShowsUpOnNextSync(t *testing.T) {
 	got, _ := p.Sync(context.Background(), first[len(first)-1].Time)
 	if len(got) != 1 || got[0].Sender != "me" || got[0].Text != "hello" || got[0].ChatID != "demo-3" {
 		t.Fatalf("%+v", got)
+	}
+}
+
+func TestPressAnswersAndEditsTheMessage(t *testing.T) {
+	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	p := newAt(func() time.Time { return clock })
+	all, _ := p.Sync(context.Background(), time.Time{})
+	var bot domain.Message
+	for _, m := range all {
+		if m.ChatID == "demo-5" {
+			bot = m
+		}
+	}
+	if len(bot.Buttons) != 3 {
+		t.Fatalf("bot message buttons: %+v", bot)
+	}
+	a, err := p.Press(context.Background(), "demo-5", bot.ID, bot.Buttons[0])
+	if err != nil || a.Text == "" || a.Updated == nil || len(a.Updated.Buttons) != 0 || !strings.Contains(a.Updated.Text, "Deploy") {
+		t.Fatalf("%+v %v", a, err)
+	}
+	if _, err := p.Press(context.Background(), "demo-5", bot.ID, bot.Buttons[1]); err == nil {
+		t.Fatal("buttons are gone after the edit")
 	}
 }

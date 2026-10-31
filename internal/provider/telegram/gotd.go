@@ -151,6 +151,16 @@ func (c *MTProto) Send(ctx context.Context, chatID, text string) error {
 	return c.svc.Send(ctx, chatID, text)
 }
 
+// Press implements Client.
+func (c *MTProto) Press(ctx context.Context, chatID, msgID string, b domain.Button) (domain.PressAnswer, error) {
+	if err := c.wait(ctx); err != nil {
+		return domain.PressAnswer{}, err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.svc.Press(ctx, chatID, msgID, b)
+}
+
 // Recent implements Client.
 func (c *MTProto) Recent(ctx context.Context, chatID string, limit int) ([]domain.Message, error) {
 	if err := c.wait(ctx); err != nil {

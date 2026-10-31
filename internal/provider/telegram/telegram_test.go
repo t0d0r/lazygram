@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"lazygram/internal/config"
+	"lazygram/internal/domain"
 	"lazygram/internal/provider"
 )
 
@@ -35,6 +36,9 @@ func TestInertWithoutClient(t *testing.T) {
 	}
 	if err := p.Send(context.Background(), "x", "y"); !errors.Is(err, provider.ErrNotImplemented) {
 		t.Fatalf("send: %v", err)
+	}
+	if _, err := p.Press(context.Background(), "x", "1", domain.Button{}); !errors.Is(err, provider.ErrNotImplemented) {
+		t.Fatalf("press: %v", err)
 	}
 	var _ provider.Provider = p
 }

@@ -119,3 +119,12 @@ at the hidden password prompt takes effect only after Enter.
 - `Formula/lazygram.rb` in t0d0r/homebrew-tap points at the v0.3.0 source
   tarball (sha256 recorded in the formula) and installs with
   `brew install t0d0r/tap/lazygram`.
+
+## Bot buttons
+
+- `domain.Button`/`Message.Buttons`, `Provider.Press` returning the bot's
+  answer and the edited message; `Store.Replace`; buttons rendered under
+  the message; `/press N` and `/press <msg> N`. Telegram: inline and reply
+  keyboards converted; press = getBotCallbackAnswer + a refetch through
+  messages.getMessages or channels.getMessages (entity keeps an
+  InputChannel). Demo: `@demobot` with Deploy/Hold/Runbook.

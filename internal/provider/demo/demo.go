@@ -34,6 +34,14 @@ var chats = []domain.Chat{
 	{ID: "demo-2", Service: "demo", Alias: "ops", Title: "Demo Operations", Kind: domain.ChatGroup},
 	{ID: "demo-3", Service: "demo", Alias: "linus", Title: "Linus Demo", Kind: domain.ChatUser},
 	{ID: "demo-4", Service: "demo", Alias: "news", Title: "Demo Newsroom", Kind: domain.ChatChannel, Unread: 2},
+	{ID: "demo-5", Service: "demo", Alias: "demobot", Title: "Demo Bot", Kind: domain.ChatUser},
+}
+
+// botButtons is the inline keyboard under the demo bot's question.
+var botButtons = []domain.Button{
+	{Label: "Deploy", Kind: domain.ButtonCallback, Data: []byte("deploy")},
+	{Label: "Hold", Kind: domain.ButtonCallback, Data: []byte("hold")},
+	{Label: "Runbook", Kind: domain.ButtonURL, URL: "https://example.invalid/runbook"},
 }
 
 var script = []line{
@@ -60,6 +68,7 @@ var script = []line{
 	{2, -8 * time.Minute, "linus", "back from lunch, what did I miss"},
 	{0, -5 * time.Minute, "grace", "release candidate tagged"},
 	{1, -2 * time.Minute, "dennis", "deploy window opens in 30 minutes"},
+	{4, -90 * time.Second, "demobot", "Release candidate is green. Deploy it now? Use /press 1 or /press 2."},
 	{3, -1 * time.Minute, "wire", "Demo digest: three stories today.\n\n1. Terminal clients keep their users.\n2. Encrypted local caches become the norm.\n3. Nobody misses the gap under the nick.\n\nThat is all for this hour, back at the top of the next one with more invented news for the demo feed."},
 	{0, 20 * time.Second, "ada", "tip: /win 2 switches windows, Tab completes names"},
 	{2, 45 * time.Second, "linus", "try /win @linus to open my window"},
@@ -75,13 +84,17 @@ func newAt(now func() time.Time) *Provider {
 	start := now().Truncate(time.Second)
 	p := &Provider{chats: chats, now: now}
 	for i, l := range script {
-		p.msgs = append(p.msgs, domain.Message{
+		m := domain.Message{
 			ID:     fmt.Sprintf("%d", i+1),
 			ChatID: chats[l.chat].ID,
 			Sender: l.sender,
 			Text:   l.text,
 			Time:   start.Add(l.offset),
-		})
+		}
+		if l.sender == "demobot" {
+			m.Buttons = append([]domain.Button(nil), botButtons...)
+		}
+		p.msgs = append(p.msgs, m)
 	}
 	return p
 }
@@ -142,4 +155,25 @@ func (p *Provider) Send(_ context.Context, chatID, text string) error {
 		ID: fmt.Sprintf("sent-%d", p.sent), ChatID: chatID, Sender: "me", Text: text, Time: p.now(),
 	})
 	return nil
+}
+
+// Press implements provider.Provider: the bot answers and edits its message
+// to show the choice, as real bots do.
+func (p *Provider) Press(_ context.Context, chatID, msgID string, b domain.Button) (domain.PressAnswer, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i := range p.msgs {
+		m := &p.msgs[i]
+		if m.ChatID != chatID || m.ID != msgID {
+			continue
+		}
+		if len(m.Buttons) == 0 {
+			return domain.PressAnswer{}, fmt.Errorf("demo: message %s has no buttons any more", msgID)
+		}
+		m.Text = "Release candidate is green. You chose: " + b.Label + "."
+		m.Buttons = nil
+		updated := *m
+		return domain.PressAnswer{Text: "Got it: " + string(b.Data), Updated: &updated}, nil
+	}
+	return domain.PressAnswer{}, fmt.Errorf("demo: no message %s in %s", msgID, chatID)
 }

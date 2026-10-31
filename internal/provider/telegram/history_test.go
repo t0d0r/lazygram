@@ -8,6 +8,8 @@ import (
 
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
+
+	"lazygram/internal/domain"
 )
 
 // fakeAPI serves invented dialogs and a descending message list per peer.
@@ -18,6 +20,8 @@ type fakeAPI struct {
 	history int
 	flood   int // FLOOD_WAIT errors still to return
 	sent    []string
+	pressed []string // callback data pressed
+	fetched []string // "messages" or "channels" per refetch
 
 	extraDialogs []tg.DialogClass // listed before the fixed dialogs
 	extraChats   []tg.ChatClass
@@ -82,6 +86,62 @@ func (f *fakeAPI) MessagesGetHistory(_ context.Context, r *tg.MessagesGetHistory
 		}
 	}
 	return &tg.MessagesMessages{Messages: page, Users: []tg.UserClass{&tg.User{ID: 7, FirstName: "Test", LastName: "Person"}}}, nil
+}
+
+func (f *fakeAPI) MessagesGetBotCallbackAnswer(_ context.Context, r *tg.MessagesGetBotCallbackAnswerRequest) (*tg.MessagesBotCallbackAnswer, error) {
+	data, _ := r.GetData()
+	f.pressed = append(f.pressed, string(data))
+	if string(data) == "boom" {
+		return nil, errors.New("BOT_RESPONSE_TIMEOUT")
+	}
+	// The bot edits its message in response, as bots do.
+	for key, msgs := range f.msgs {
+		for i, mc := range msgs {
+			if m, ok := mc.(*tg.Message); ok && m.ID == r.MsgID {
+				edited := *m
+				edited.Message = "you pressed " + string(data)
+				edited.ReplyMarkup = nil
+				edited.Flags.Unset(6)
+				f.msgs[key][i] = &edited
+			}
+		}
+	}
+	a := &tg.MessagesBotCallbackAnswer{}
+	a.SetMessage("thanks for " + string(data))
+	return a, nil
+}
+
+func (f *fakeAPI) find(id int) tg.MessageClass {
+	for _, msgs := range f.msgs {
+		for _, mc := range msgs {
+			if mc.GetID() == id {
+				return mc
+			}
+		}
+	}
+	return nil
+}
+
+func (f *fakeAPI) MessagesGetMessages(_ context.Context, ids []tg.InputMessageClass) (tg.MessagesMessagesClass, error) {
+	f.fetched = append(f.fetched, "messages")
+	var out []tg.MessageClass
+	for _, ic := range ids {
+		if m := f.find(ic.(*tg.InputMessageID).ID); m != nil {
+			out = append(out, m)
+		}
+	}
+	return &tg.MessagesMessages{Messages: out, Users: []tg.UserClass{&tg.User{ID: 7, FirstName: "Test", LastName: "Person"}}}, nil
+}
+
+func (f *fakeAPI) ChannelsGetMessages(_ context.Context, r *tg.ChannelsGetMessagesRequest) (tg.MessagesMessagesClass, error) {
+	f.fetched = append(f.fetched, "channels")
+	var out []tg.MessageClass
+	for _, ic := range r.ID {
+		if m := f.find(ic.(*tg.InputMessageID).ID); m != nil {
+			out = append(out, m)
+		}
+	}
+	return &tg.MessagesChannelMessages{Messages: out}, nil
 }
 
 func (f *fakeAPI) MessagesSendMessage(_ context.Context, r *tg.MessagesSendMessageRequest) (tg.UpdatesClass, error) {
@@ -342,5 +402,80 @@ func TestUsernamesClaimNamesBeforeTitles(t *testing.T) {
 	}
 	if names["telegram:7"] != "@testperson" || names["telegram:-50"] != "#testperson-2" {
 		t.Fatalf("%v", names)
+	}
+}
+
+func withButtons(m *tg.Message) *tg.Message {
+	m.SetReplyMarkup(&tg.ReplyInlineMarkup{Rows: []tg.KeyboardInlineButtonRow{
+		{Buttons: []tg.KeyboardInlineButton{
+			{Text: "OK", Type: &tg.InlineButtonTypeCallback{Data: []byte("ok")}},
+			{Text: "Docs", Type: &tg.InlineButtonTypeURL{URL: "https://example.invalid/docs"}},
+		}},
+		{Buttons: []tg.KeyboardInlineButton{
+			{Text: "Share", Type: &tg.InlineButtonTypeSwitchInline{Query: "q"}},
+			{Text: "Secure", Type: &tg.InlineButtonTypeCallback{Data: []byte("x"), RequiresPassword: true}},
+		}},
+	}})
+	return m
+}
+
+func TestButtonsAreConvertedRowByRow(t *testing.T) {
+	m := withButtons(tmsg(1, 0, "pick"))
+	out := convert("telegram:7", entity{kind: kindUser}, m, collect(nil, nil))
+	if len(out.Buttons) != 4 {
+		t.Fatalf("%+v", out.Buttons)
+	}
+	if b := out.Buttons[0]; b.Kind != domain.ButtonCallback || b.Label != "OK" || string(b.Data) != "ok" {
+		t.Fatalf("%+v", b)
+	}
+	if b := out.Buttons[1]; b.Kind != domain.ButtonURL || b.URL != "https://example.invalid/docs" {
+		t.Fatalf("%+v", b)
+	}
+	if b := out.Buttons[2]; b.Kind != domain.ButtonOther || b.Label != "Share" {
+		t.Fatalf("%+v", b)
+	}
+	if b := out.Buttons[3]; b.Kind != domain.ButtonOther {
+		t.Fatalf("password-protected callbacks are unsupported: %+v", b)
+	}
+	reply := tmsg(2, 0, "keyboard")
+	reply.SetReplyMarkup(&tg.ReplyKeyboardMarkup{Rows: []tg.KeyboardButtonRow{{Buttons: []tg.KeyboardButton{{Text: "Yes", Type: &tg.ButtonTypeDefault{}}}}}})
+	if out := convert("telegram:7", entity{}, reply, collect(nil, nil)); len(out.Buttons) != 1 || out.Buttons[0].Kind != domain.ButtonText {
+		t.Fatalf("reply keyboard: %+v", out.Buttons)
+	}
+	if out := convert("telegram:7", entity{}, tmsg(3, 0, "plain"), collect(nil, nil)); len(out.Buttons) != 0 {
+		t.Fatal("no markup, no buttons")
+	}
+}
+
+func TestPressAnswersAndRefetches(t *testing.T) {
+	f := newFakeAPI()
+	f.msgs[7] = []tg.MessageClass{withButtons(tmsg(5, 5, "deploy?"))}
+	f.msgs[-9] = []tg.MessageClass{withButtons(tmsg(8, 8, "channel post"))}
+	s := newService(f)
+	if _, err := s.Press(context.Background(), "telegram:7", "5", domain.Button{Kind: domain.ButtonCallback, Data: []byte("ok")}); err == nil {
+		t.Fatal("press before Dialogs must fail")
+	}
+	if _, err := s.Dialogs(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	a, err := s.Press(context.Background(), "telegram:7", "5", domain.Button{Kind: domain.ButtonCallback, Data: []byte("ok")})
+	if err != nil || a.Text != "thanks for ok" || a.Updated == nil || a.Updated.Text != "you pressed ok" || len(a.Updated.Buttons) != 0 {
+		t.Fatalf("%+v %v", a, err)
+	}
+	if f.pressed[0] != "ok" || f.fetched[0] != "messages" {
+		t.Fatalf("pressed=%v fetched=%v", f.pressed, f.fetched)
+	}
+	// Channels use channels.getMessages for the refetch.
+	if _, err := s.Press(context.Background(), "telegram:-1000000000009", "8", domain.Button{Kind: domain.ButtonCallback, Data: []byte("ok")}); err != nil || f.fetched[1] != "channels" {
+		t.Fatalf("%v %v", err, f.fetched)
+	}
+	if _, err := s.Press(context.Background(), "telegram:7", "5", domain.Button{Kind: domain.ButtonURL}); err == nil {
+		t.Fatal("url buttons are not pressed through the API")
+	}
+	if _, err := s.Press(context.Background(), "telegram:7", "x", domain.Button{Kind: domain.ButtonCallback}); err == nil {
+		t.Fatal("bad id")
+	}
+	if _, err := s.Press(context.Background(), "telegram:7", "5", domain.Button{Kind: domain.ButtonCallback, Data: []byte("boom")}); err == nil {
+		t.Fatal("bot error must surface")
 	}
 }

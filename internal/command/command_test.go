@@ -26,6 +26,8 @@ func TestParse(t *testing.T) {
 		{"/stats", Command{Stats, ""}, false},
 		{"/whois @ada", Command{Whois, "@ada"}, false},
 		{"/me waves", Command{Me, "waves"}, false},
+		{"/press 2", Command{Press, "2"}, false},
+		{"/btn 1234 1", Command{Press, "1234 1"}, false},
 		{"/bogus", Command{}, true},
 		{"/", Command{}, true},
 		{"hello", Command{}, true},

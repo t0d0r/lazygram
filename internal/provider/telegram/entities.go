@@ -15,6 +15,7 @@ type entity struct {
 	username string
 	title    string
 	peer     tg.InputPeerClass
+	channel  *tg.InputChannel // set for channels and supergroups
 	kind     peerKind
 	deleted  bool // a user account that no longer exists
 }
@@ -75,7 +76,8 @@ func collect(users []tg.UserClass, chats []tg.ChatClass) entities {
 				kind = kindGroup // supergroups are conversations, not broadcasts
 			}
 			e.byID[id] = entity{id: id, kind: kind, username: c.Username, title: c.Title,
-				peer: &tg.InputPeerChannel{ChannelID: c.ID, AccessHash: c.AccessHash}}
+				peer:    &tg.InputPeerChannel{ChannelID: c.ID, AccessHash: c.AccessHash},
+				channel: &tg.InputChannel{ChannelID: c.ID, AccessHash: c.AccessHash}}
 		}
 	}
 	return e

@@ -164,3 +164,21 @@ func TestRenderActionLines(t *testing.T) {
 		t.Fatalf("a lone star is not an action: %q", plain)
 	}
 }
+
+func TestRenderButtonsUnderTheMessage(t *testing.T) {
+	msgs := []domain.Message{{ID: "42", ChatID: "c", Sender: "bot", Text: "deploy?", Time: time.Now(), Buttons: []domain.Button{
+		{Label: "Yes", Kind: domain.ButtonCallback}, {Label: "Docs\x1b[2J", Kind: domain.ButtonURL, URL: "https://x"}, {Label: "Pay", Kind: domain.ButtonOther},
+	}}}
+	lines := renderLines(msgs, nil, lineOpts{width: 80, nameW: 4, nameOf: nameX, fullDate: true})
+	if len(lines) != 2 {
+		t.Fatalf("want message plus button line: %q", lines)
+	}
+	for _, want := range []string{"[1] Yes", "[2] Docs", "(link)", "[3] Pay (unsupported)", "(msg 42)"} {
+		if !strings.Contains(lines[1], want) {
+			t.Errorf("button line lacks %q: %q", want, lines[1])
+		}
+	}
+	if strings.Contains(lines[1], "\x1b[2J") {
+		t.Fatal("button labels must be sanitized")
+	}
+}

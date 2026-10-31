@@ -222,6 +222,21 @@ func (s *Store) Add(msgs []domain.Message) ([]domain.Message, error) {
 	return fresh, nil
 }
 
+// Replace stores a message, overwriting the stored one with the same chat
+// and id (an edited bot message after a button press).
+func (s *Store) Replace(m domain.Message) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ck := s.chatKey(m.ChatID)
+	plain, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.Exec(`INSERT OR REPLACE INTO messages (chat_key, id, time, data) VALUES (?, ?, ?, ?)`,
+		ck, m.ID, m.Time.UnixNano(), s.seal(plain, rowAAD(ck, m.ID)))
+	return err
+}
+
 // Messages returns the newest limit messages of a chat (every chat when
 // chatID is empty), oldest first. limit <= 0 means all.
 func (s *Store) Messages(chatID string, limit int) ([]domain.Message, error) {

@@ -7,6 +7,7 @@ type Provider interface {
     Sync(ctx, since time.Time) ([]domain.Message, error)
     Recent(ctx, chatID string, limit int) ([]domain.Message, error)
     Send(ctx, chatID, text string) error
+    Press(ctx, chatID, msgID string, b domain.Button) (domain.PressAnswer, error)
 }
 ```
 
@@ -15,7 +16,10 @@ title, unread count and deleted flag. `Sync` returns what arrived since the
 last call (`since` is the newest cached time; a provider may ignore it).
 `Recent` returns the last `limit` messages of one chat, oldest first, for
 `/win` and `/last`. `Send` posts text to a chat; the sent message is not
-returned, it arrives through `Sync`. `Sync` may return messages together with an error
+returned, it arrives through `Sync`. `Press` presses a callback button and
+returns the bot's answer (text, optional URL) and the message as it is
+afterwards (`Updated`), since bots edit their message in response; the
+caller replaces the message. `Sync` may return messages together with an error
 (a batch that failed part-way); the caller stores them before showing the
 error. The store de-duplicates by (chat id, message id), so calls may
 overlap. Message times are absolute; the UI converts to local
@@ -28,7 +32,9 @@ Offline, synthetic, no network. Two groups (`#dev`, `#ops`), one person
 opens at start). Anchored to start time: older lines are already in the
 past and replayed by the first Sync, later lines "arrive" over about 4
 minutes. `Recent` serves the chat's past lines; `Send` appends a line from
-`me` that the next `Sync` returns. Started with `lazygram demo`; nothing
+`me` that the next `Sync` returns. `@demobot` asks a question with
+`Deploy`, `Hold` and a `Runbook` link; `Press` answers and edits the
+question. Started with `lazygram demo`; nothing
 is kept on disk.
 
 ## telegram
@@ -124,7 +130,15 @@ is one `messages.getHistory` for the last N (max 100) messages of a chat,
 used when a window opens and for `/last`. `Send` is one
 `messages.sendMessage` with a random id; the message then arrives through
 the next poll as the chat's top message moved. Own messages (`out`) show
-as `me`. Service messages are skipped;
+as `me`. Inline and reply keyboards are converted to buttons row by row
+(callback, URL, plain text; others unsupported). `Press` is
+`messages.getBotCallbackAnswer` with the button's data, followed by
+`messages.getMessages` (or `channels.getMessages` for channels and
+supergroups) to return the edited message. Message edits are otherwise not
+tracked. The only calls the connector makes: messages.getDialogs,
+messages.getHistory, messages.sendMessage (Ctrl-X, /me, reply buttons),
+messages.getBotCallbackAnswer, messages.getMessages and
+channels.getMessages (/press). Service messages are skipped;
 media-only messages show as `[media]`. Sender: user name, else post author,
 else `me` for own messages, else the peer's name in private chats, else
 `channel`. A FLOOD_WAIT of up to 60s is slept once and the request retried;

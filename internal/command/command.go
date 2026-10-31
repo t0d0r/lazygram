@@ -23,6 +23,7 @@ const (
 	Stats        // print client statistics into the current window
 	Whois        // print what is known about a chat (Arg) or the current window's chat
 	Me           // send an action line ("* text") to the current window's chat
+	Press        // press a bot button: Arg is "N" or "<message id> N"
 )
 
 // Command is a parsed slash command.
@@ -43,6 +44,7 @@ var table = map[string]Kind{
 	"stats": Stats, "uptime": Stats,
 	"whois": Whois, "wi": Whois, "info": Whois,
 	"me": Me, "action": Me,
+	"press": Press, "button": Press, "btn": Press,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -88,4 +90,6 @@ const HelpText = `Commands
   /whois [@user|#chan]      what is known about a chat (default: this window's)
   /stats                    client statistics
   /me <text>                send an action line ("* text") to this window's chat
+  /press N                  press button N of the latest message with buttons here
+  /press <msg> N            press button N of message <msg> (the number shown after it)
   Typing text in a chat window and pressing Ctrl-X sends it to that chat.`

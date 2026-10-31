@@ -46,7 +46,7 @@
 - [x] lazygram update: brew or binary, SHA256SUMS-checked (specs/release.md)
 - [x] GitHub repository (github.com/t0d0r/lazygram), v0.3.0 release, Homebrew formula in t0d0r/homebrew-tap
 - [x] figlet banners at start and exit (specs/ui.md)
-- [ ] bot inline buttons: render under the message, /press to answer callbacks
+- [x] bot inline buttons: rendered under the message, /press answers callbacks, links printed, reply text sent (specs/ui.md)
 
 ## Next
 

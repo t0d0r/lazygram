@@ -19,7 +19,8 @@
 - No interactive Telegram login is performed by the project's tooling; the
   connector fails closed when no authorized session exists.
 - Sending is explicit: only text typed in a chat window and confirmed with
-  Ctrl-X, or given to /me, is sent; Enter never sends.
+  Ctrl-X, or given to /me, is sent; Enter never sends. Bot buttons are
+  pressed only by /press; link buttons are printed, never opened.
 - `lazygram login` links by QR code, so no phone number or SMS code passes
   through lazygram; a two-step password is read without echo and never
   stored. The only login artifact is the session file.

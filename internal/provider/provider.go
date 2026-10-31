@@ -27,4 +27,7 @@ type Provider interface {
 	// Send posts a text message to a chat. The sent message is not returned;
 	// it arrives through Sync like any other.
 	Send(ctx context.Context, chatID, text string) error
+	// Press presses a callback button of a message and returns the bot's
+	// answer, with the message as it is afterwards when it changed.
+	Press(ctx context.Context, chatID, msgID string, b domain.Button) (domain.PressAnswer, error)
 }

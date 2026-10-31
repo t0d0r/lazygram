@@ -88,12 +88,28 @@ as notices; there is no separate help view.
 | `/whois [name]`               | print what is known about a chat (default: this window's) |
 | `/stats`                      | print client statistics                              |
 | `/me <text>`                  | send `* text` to this window's chat (shown as `* you text`) |
+| `/press N`, `/press <msg> N`  | press a bot button (see Buttons)                     |
 
 Short forms: `/w`, `/j`, `/join`, `/query` for `/win`; `/wc`, `/part` for
 `/close`; `/history` for `/last`; `/find`, `/log` for `/search`; `/wi`,
 `/info` for `/whois`; `/uptime` for `/stats`; `/action` for `/me`. Errors
 show in the status line in red; provider errors also land in the server
 window.
+
+## Buttons
+
+A message with buttons (a bot's inline keyboard, or a reply keyboard)
+shows them under its text, numbered in row order:
+`[1] Deploy  [2] Hold  [3] Runbook (link)  (msg 1234)`, where `msg` is the
+service's message id. Kinds: callback, link `(link)`, reply-keyboard text
+`(reply)`, anything else `(unsupported)`. `/press N` acts on the latest
+message with buttons in the current window's chat; `/press <msg> N` on a
+given message; both fail in the server window, on a bad number, or when
+the message has no buttons any more. Callback: `Provider.Press`, the bot's
+answer is a notice (`-!- pressed Deploy: Got it`), and the message is
+fetched again so the bot's edit replaces the old line (in the window, the
+mirror and the cache). Link: the URL is printed as a notice, never opened.
+Reply text: the label is sent like Ctrl-X. Pressing is always explicit.
 
 ## Sending
 
