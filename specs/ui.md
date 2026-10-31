@@ -32,8 +32,13 @@ the kind.
 ## Line format
 
 Server window: `HH:MM #chat <sender> text` with a padded chat column.
-Chat window: `HH:MM <sender> text`. Notices: `HH:MM -!- text`. Long lines
-wrap with a hanging indent. A dim separator marks a change of local day.
+Chat window: `HH:MM <sender> text`. Time, chat and sender always share the
+first line with the start of the text; continuation lines (wrapped or
+from newlines inside the message) start just past the time column, BitchX
+style, and empty lines inside a message are dropped. Notices: `HH:MM -!- text`. A message
+whose text starts with `* ` is an action line (`/me`) and renders as
+`HH:MM * sender text`. Long lines
+wrap as described above. A dim separator marks a change of local day.
 Chat and sender colors derive from a hash so they are stable. Sender, text,
 titles and notices are stripped of control characters before rendering.
 
@@ -44,32 +49,51 @@ titles and notices are stripped of control characters before rendering.
   number when open, name, title, unread count, `(deleted)`. Up/Down (or
   Tab/Shift-Tab) move, Enter opens or focuses that chat's window, typing
   narrows the rows, Esc returns. Deleted accounts are hidden unless asked
-  for.
+  for. `/win` (or `/win list`) shows the same kind of list for the open
+  windows (number, name, title, unread, `(current)`); Enter focuses.
+  Scrolling: the cursor moves down the screen until it reaches the middle,
+  then stays there while the list scrolls under it, and moves on to the
+  bottom only when the list ends; the same on the way up.
 - pager (`/search [text]`): the local history of the current window's chat
   (all chats in window 1) with the full date on every line; typed text is a
   live case-insensitive search over text and sender with matches
   highlighted; topic shows `N of M messages`; Esc returns.
-- help (`/help`, F1).
+`/help` and F1 print the command and key reference into the current window
+as notices; there is no separate help view.
 
 ## Commands
 
 | command                       | action                                               |
 |-------------------------------|------------------------------------------------------|
-| `/help`, `/?`                 | help view                                            |
+| `/help`, `/?`                 | print the help into the current window               |
 | `/quit`, `/q`                 | leave                                                |
 | `/refresh`, `/r`              | sync now                                             |
 | `/list [text]`, `/ls`         | selectable chat list; `--show-deleted` includes deleted accounts |
-| `/win`                        | print the windows into the current window            |
+| `/win`, `/win list`           | selectable list of the open windows; Enter focuses   |
 | `/win N`                      | switch to window N                                   |
 | `/win @user`, `/win #chan`    | open or switch to that chat's window                 |
 | `/close [N]`                  | close window N or the current one                    |
 | `/last [N]`                   | fetch the last N messages (default 10, max 100)      |
 | `/search [text]`              | pager over the current window's local history        |
+| `/whois [name]`               | print what is known about a chat (default: this window's) |
+| `/stats`                      | print client statistics                              |
+| `/me <text>`                  | send `* text` to this window's chat (shown as `* you text`) |
 
 Short forms: `/w`, `/j`, `/join`, `/query` for `/win`; `/wc`, `/part` for
-`/close`; `/history` for `/last`; `/find`, `/log` for `/search`. Plain text
-that is not a command is rejected (sending is not supported). Errors show in
-the status line in red; provider errors also land in the server window.
+`/close`; `/history` for `/last`; `/find`, `/log` for `/search`; `/wi`,
+`/info` for `/whois`; `/uptime` for `/stats`; `/action` for `/me`. Errors
+show in the status line in red; provider errors also land in the server
+window.
+
+## Sending
+
+In a chat window, typed text plus Ctrl-X sends it to that chat through
+`Provider.Send`; the input clears, the status says "sending", and a sync
+is triggered so the line appears as `<me>` as soon as the service has it.
+Enter never sends: on plain text it reminds about Ctrl-X and keeps the
+text. Ctrl-X refuses in the server window, on empty text, and on text that
+starts with `/` (prefix a space to send such text). Send errors go to the
+status line and the window.
 
 ## Keys
 
@@ -81,8 +105,9 @@ the status line in red; provider errors also land in the server window.
 | PgUp / PgDn          | scroll a page; Up / Down one line                 |
 | Home / End           | oldest / newest                                   |
 | Ctrl-R               | sync now                                          |
-| F1                   | help                                              |
-| Esc                  | close list / pager / help, else clear the input   |
+| F1                   | print the help into the window                    |
+| Esc                  | close the list or pager, else clear the input     |
+| Ctrl-X               | send the typed text to this window's chat         |
 | Ctrl-U / Ctrl-W      | clear the input / delete the last word            |
 | Ctrl-C               | quit                                              |
 

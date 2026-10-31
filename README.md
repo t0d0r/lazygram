@@ -62,11 +62,18 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/list [text]`             | selectable chat list; Enter opens the window; `--show-deleted` includes deleted accounts |
 | `/win N`                   | switch to window N (1 is the server window)   |
 | `/win @user`, `/win #chan` | open or switch to that chat's window          |
-| `/win`                     | print the open windows                        |
+| `/win`, `/win list`        | selectable list of the open windows           |
 | `/close [N]`               | close a window                                |
 | `/last [N]`                | fetch the last N messages of this chat        |
 | `/search [text]`           | page through this chat's local history        |
-| `/refresh`, `/help`, `/quit` |                                             |
+| `/whois [name]`            | what is known about a chat                    |
+| `/stats`                   | client statistics                             |
+| `/me <text>`               | send an action line (`* you waves`)           |
+| `/refresh`, `/help`, `/quit` | sync now; print the help into the window; leave |
+
+In a chat window, type text and press **Ctrl-X** to send it to that chat;
+Enter is for commands. The sent line shows up as `<me>` once the service
+has it.
 
 | key                 | action                                             |
 |---------------------|----------------------------------------------------|
@@ -75,8 +82,9 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | Alt-1 .. Alt-0      | window 1 .. 10                                     |
 | PgUp / PgDn         | scroll a page; Up / Down a line; Home / End ends   |
 | Ctrl-R              | sync now                                           |
-| F1                  | help                                               |
-| Esc                 | close list / pager / help, else clear the input    |
+| F1                  | print the help into the window                     |
+| Esc                 | close the list or pager, else clear the input      |
+| Ctrl-X              | send the typed text to this window's chat          |
 | Ctrl-C              | quit                                               |
 
 ## Development
@@ -95,7 +103,7 @@ internal/domain         Chat, Message, Merge, Filter, ResolveChat (pure)
 internal/store          encrypted SQLite message cache (AES-256-GCM per row)
 internal/provider       Provider interface (Name, Chats, Sync)
 internal/provider/demo  offline scripted provider
-internal/provider/telegram  read-only Telegram connector (gotd/td MTProto), QR login
+internal/provider/telegram  Telegram connector (gotd/td MTProto), QR login
 internal/qrcode         QR code to terminal text (half-block or ASCII)
 internal/command        slash-command parser
 internal/config         state directory and stored application registration
@@ -107,11 +115,12 @@ The core never imports a connector; adding a service means implementing
 
 ## Telegram connector
 
-Read-only: it lists your 100 most recent dialogs and polls every 10 seconds
+It lists your 100 most recent dialogs and polls every 10 seconds
 with one request, fetching history only for chats whose newest message
 changed. Nothing older than the start is fetched unless you open a window
 or run `/last`. Short FLOOD_WAIT replies are honoured automatically.
-Details and limits: specs/providers.md.
+Sending happens only on Ctrl-X in a chat window. Details and limits:
+specs/providers.md.
 
 ## Security constraints
 

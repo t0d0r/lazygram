@@ -20,12 +20,13 @@ per-chat windows give focus when a conversation needs it.
 
 Bubbletea TUI with windows, slash commands, Tab completion, selectable chat
 list, searchable local history, encrypted SQLite cache, demo provider,
-read-only Telegram connector with QR login. Sending messages is out of
-scope.
+Telegram connector with QR login that reads and sends (Ctrl-X or /me in a
+chat window).
 
 ## Live Telegram limitations
 
-The live provider uses gotd/td (specs/providers.md) and is read-only. It
+The live provider uses gotd/td (specs/providers.md); it reads and, on
+Ctrl-X or /me only, sends. It
 needs a one-time QR login (`lazygram login`) and the user's own Telegram
 application registration, asked once and stored locally; without them
 lazygram exits and says how to link an account or start the demo. No

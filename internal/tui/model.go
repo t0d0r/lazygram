@@ -26,9 +26,15 @@ type mode int
 
 const (
 	modeWin   mode = iota // a window's scrollback
-	modeList              // selectable chat list (/list)
+	modeList              // selectable list: chats (/list) or windows (/win)
 	modePager             // searchable local history of the current window's chat
-	modeHelp
+)
+
+type listSrc int
+
+const (
+	listChats   listSrc = iota // every chat
+	listWindows                // the open windows
 )
 
 const (
@@ -68,12 +74,14 @@ type Model struct {
 	input []rune
 	comp  *completion
 
-	listCur     int  // selected row in the chat list
-	showDeleted bool // /list --show-deleted
+	listCur     int     // selected row in the list view
+	listSrc     listSrc // what the list view shows
+	showDeleted bool    // /list --show-deleted
 
 	width, height int
 	lastLines     int // rendered line count of the current window at the last View
 
+	started  time.Time
 	syncing  bool
 	loading  map[string]bool // chat ids with a Recent fetch in flight
 	lastSync time.Time
@@ -97,6 +105,10 @@ type (
 		fresh  []domain.Message
 		err    error
 	}
+	sentMsg struct {
+		chatID string
+		err    error
+	}
 	tickMsg time.Time
 )
 
@@ -107,7 +119,7 @@ func New(opt Options) *Model {
 		opt.Backlog = defaultBacklog
 	}
 	m := &Model{opt: opt, width: 100, height: 30, loading: map[string]bool{},
-		wins: []*win{{}}, status: "type /help for commands"}
+		wins: []*win{{}}, status: "type /help for commands", started: time.Now()}
 	m.chats, _ = opt.Store.Chats()
 	m.msgs, _ = opt.Store.Messages("", opt.Backlog)
 	m.note(m.wins[0], "lazygram started; /help lists commands, /list the chats")
@@ -173,6 +185,15 @@ func (m *Model) recentCmd(chatID string, n int) tea.Cmd {
 	}
 }
 
+func (m *Model) sendCmd(chatID, text string) tea.Cmd {
+	p := m.opt.Provider
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		return sentMsg{chatID: chatID, err: p.Send(ctx, chatID, text)}
+	}
+}
+
 // Update handles messages.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
@@ -216,6 +237,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		w.loaded = true
 		m.absorb(msg.fresh)
 		m.note(w, fmt.Sprintf("fetched %d older message(s)", len(msg.fresh)))
+	case sentMsg:
+		_, w := m.winFor(msg.chatID)
+		if w == nil {
+			w = m.wins[0]
+		}
+		if msg.err != nil {
+			m.setErr("send: " + errText(msg.err))
+			m.note(w, "send failed: "+errText(msg.err))
+			break
+		}
+		m.setInfo("sent")
+		if !m.syncing { // show it as soon as the service has it
+			m.syncing = true
+			return m, m.syncCmd()
+		}
 	case tickMsg:
 		cmds := []tea.Cmd{m.tickCmd()}
 		if !m.syncing {
@@ -407,6 +443,8 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case tea.KeyEnter:
 		return m.enter()
+	case tea.KeyCtrlX:
+		return m.send()
 	case tea.KeyTab:
 		if m.mode == modeList {
 			m.listCur++
@@ -453,7 +491,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyCtrlR:
 		return m, m.refresh()
 	case tea.KeyF1:
-		m.mode = modeHelp
+		m.help()
 	case tea.KeySpace:
 		m.input = append(m.input, ' ')
 	case tea.KeyRunes:
@@ -469,11 +507,35 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// send posts the typed text to the current window's chat (Ctrl-X).
+func (m *Model) send() (tea.Model, tea.Cmd) {
+	text := strings.TrimSpace(string(m.input))
+	w := m.wins[m.cur]
+	switch {
+	case m.mode != modeWin:
+		return m, nil
+	case text == "":
+		return m, nil
+	case w.chatID == "":
+		m.setErr("the server window has no chat; /win to a chat first")
+		return m, nil
+	case strings.HasPrefix(text, "/"):
+		m.setErr("that looks like a command: Enter runs it; prefix a space to send it as text")
+		return m, nil
+	}
+	m.input = nil
+	m.setInfo("sending to " + m.nameOf(w.chatID) + "...")
+	return m, m.sendCmd(w.chatID, text)
+}
+
 func (m *Model) enter() (tea.Model, tea.Cmd) {
 	line := strings.TrimSpace(string(m.input))
 	if m.mode == modeList && !strings.HasPrefix(line, "/") {
-		items := m.listItems()
 		m.input = nil
+		if m.listSrc == listWindows {
+			return m, m.switchTo(m.listCur)
+		}
+		items := m.listItems()
 		if len(items) == 0 {
 			m.mode = modeWin
 			return m, nil
@@ -487,8 +549,12 @@ func (m *Model) enter() (tea.Model, tea.Cmd) {
 	}
 	if !strings.HasPrefix(line, "/") {
 		if line != "" {
-			m.input = nil
-			m.setErr("not a command (start with /): sending is not supported yet")
+			if m.wins[m.cur].chatID != "" && m.mode == modeWin {
+				m.setErr("Ctrl-X sends the text to " + m.winName(m.cur) + "; Enter runs /commands")
+			} else {
+				m.input = nil
+				m.setErr("not a command (start with /); Ctrl-X sends text in a chat window")
+			}
 		}
 		return m, nil
 	}
@@ -505,7 +571,7 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 	w := m.wins[m.cur]
 	switch c.Kind {
 	case command.Help:
-		m.mode = modeHelp
+		m.help()
 	case command.Quit:
 		m.quitting = true
 		return m, tea.Quit
@@ -521,7 +587,7 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 				words = append(words, f)
 			}
 		}
-		m.mode, m.listCur, m.input = modeList, 0, []rune(strings.Join(words, " "))
+		m.mode, m.listSrc, m.listCur, m.input = modeList, listChats, 0, []rune(strings.Join(words, " "))
 	case command.Win:
 		return m.winCommand(c.Arg)
 	case command.Close:
@@ -558,26 +624,119 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 	case command.Search:
 		m.mode, m.input = modePager, []rune(c.Arg)
 		w.scroll = 0
+	case command.Stats:
+		m.stats()
+	case command.Whois:
+		m.whois(c.Arg)
+	case command.Me:
+		if w.chatID == "" {
+			m.setErr("the server window has no chat; /win to a chat first")
+			break
+		}
+		if strings.TrimSpace(c.Arg) == "" {
+			m.setErr("/me needs some text")
+			break
+		}
+		m.setInfo("sending to " + m.nameOf(w.chatID) + "...")
+		return m, m.sendCmd(w.chatID, "* "+strings.TrimSpace(c.Arg))
 	}
 	return m, nil
 }
 
-// winCommand implements /win: no argument prints the windows, a number
-// switches, a name opens or switches to that chat's window.
-func (m *Model) winCommand(arg string) (tea.Model, tea.Cmd) {
-	if arg == "" {
-		w := m.wins[m.cur]
-		m.note(w, fmt.Sprintf("%d windows:", len(m.wins)))
-		for i := range m.wins {
-			line := fmt.Sprintf("  %d: %s", i+1, m.winName(i))
-			if c, ok := m.chat(m.wins[i].chatID); ok && c.Title != "" {
-				line += " (" + c.Title + ")"
-			}
-			if u := m.wins[i].unread; u > 0 {
-				line += fmt.Sprintf(" %d unread", u)
-			}
-			m.note(w, line)
+// stats prints client statistics into the current window.
+func (m *Model) stats() {
+	w := m.wins[m.cur]
+	var users, groups, channels, deleted, unread int
+	for _, c := range m.chats {
+		switch {
+		case c.Deleted:
+			deleted++
+		case c.Kind == domain.ChatUser:
+			users++
+		case c.Kind == domain.ChatGroup:
+			groups++
+		default:
+			channels++
 		}
+		unread += c.Unread
+	}
+	cached, _ := m.opt.Store.Count("")
+	act := 0
+	for _, x := range m.wins {
+		if x.unread > 0 {
+			act++
+		}
+	}
+	sync := "never"
+	if !m.lastSync.IsZero() {
+		sync = m.lastSync.Format("15:04:05")
+	}
+	m.note(w, fmt.Sprintf("stats: %s, up %s, last sync %s", m.opt.Provider.Name(),
+		time.Since(m.started).Truncate(time.Second), sync))
+	m.note(w, fmt.Sprintf("  chats: %d (%d people, %d groups, %d channels, %d deleted), %d unread at the service",
+		len(m.chats), users, groups, channels, deleted, unread))
+	m.note(w, fmt.Sprintf("  windows: %d open, %d with activity; messages: %d in this session, %d cached",
+		len(m.wins), act, len(m.msgs), cached))
+}
+
+// whois prints what is known about a chat.
+func (m *Model) whois(arg string) {
+	w := m.wins[m.cur]
+	var c domain.Chat
+	if arg == "" {
+		if w.chatID == "" {
+			m.setErr("/whois needs a name in the server window")
+			return
+		}
+		var ok bool
+		if c, ok = m.chat(w.chatID); !ok {
+			m.setErr("unknown chat " + w.chatID)
+			return
+		}
+	} else {
+		var err error
+		if c, err = domain.ResolveChat(m.chats, arg); err != nil {
+			m.setErr(err.Error())
+			return
+		}
+	}
+	kind := map[domain.ChatKind]string{domain.ChatUser: "person", domain.ChatGroup: "group", domain.ChatChannel: "channel"}[c.Kind]
+	msgs := domain.Filter(m.msgs, domain.Query{ChatID: c.ID})
+	cached, _ := m.opt.Store.Count(c.ID)
+	m.note(w, fmt.Sprintf("whois %s: %s", c.Name(), sanitize(c.Title, false)))
+	line := fmt.Sprintf("  %s on %s, id %s", kind, c.Service, c.ID)
+	if c.Deleted {
+		line += ", deleted account"
+	}
+	if c.Unread > 0 {
+		line += fmt.Sprintf(", %d unread at the service", c.Unread)
+	}
+	m.note(w, line)
+	last := "no messages seen"
+	if t := domain.Latest(msgs); !t.IsZero() {
+		last = "last message " + t.Local().Format("2006-01-02 15:04")
+	}
+	win := "no window"
+	if i, _ := m.winFor(c.ID); i > 0 {
+		win = fmt.Sprintf("window %d", i+1)
+	}
+	m.note(w, fmt.Sprintf("  %s, %d messages this session, %d cached, %s", win, len(msgs), cached, last))
+}
+
+// help prints the command and key reference into the current window.
+func (m *Model) help() {
+	w := m.wins[m.cur]
+	m.note(w, command.HelpText)
+	m.note(w, keyHelp)
+	w.scroll = 0
+}
+
+// winCommand implements /win: no argument (or "list") opens the selectable
+// windows list, a number switches, a name opens or switches to that chat's
+// window.
+func (m *Model) winCommand(arg string) (tea.Model, tea.Cmd) {
+	if arg == "" || strings.EqualFold(arg, "list") {
+		m.mode, m.listSrc, m.listCur, m.input = modeList, listWindows, m.cur, nil
 		return m, nil
 	}
 	if n, err := strconv.Atoi(arg); err == nil {
@@ -710,12 +869,14 @@ func (m *Model) View() string {
 	var body []string
 
 	switch m.mode {
-	case modeHelp:
-		topic = "help - Esc returns"
-		body = strings.Split(command.HelpText+"\n\n"+keyHelp, "\n")
-		body, _ = window(body, h, 1<<30) // from the top
-		prompt = "help > "
 	case modeList:
+		if m.listSrc == listWindows {
+			m.listCur = min(max(m.listCur, 0), len(m.wins)-1)
+			topic = fmt.Sprintf("windows (%d) - Up/Down moves, Enter focuses, Esc returns", len(m.wins))
+			body = topWindow(m.winLines(), h, m.listCur)
+			prompt = "windows > "
+			break
+		}
 		items := m.listItems()
 		m.listCur = min(max(m.listCur, 0), max(len(items)-1, 0))
 		topic = fmt.Sprintf("chats (%d) - Up/Down moves, Enter opens the window, Esc returns, type to narrow", len(items))
@@ -790,6 +951,29 @@ func (m *Model) listLines(items []domain.Chat) []string {
 	return out
 }
 
+// winLines renders the /win rows: number, name, title, unread.
+func (m *Model) winLines() []string {
+	var out []string
+	for i, w := range m.wins {
+		title := "all chats and notices"
+		if c, ok := m.chat(w.chatID); ok {
+			title = sanitize(c.Title, false)
+		}
+		row := fmt.Sprintf(" %2d  %-16s %-30s", i+1, m.winName(i), title)
+		if w.unread > 0 {
+			row += fmt.Sprintf("  %d unread", w.unread)
+		}
+		if i == m.cur {
+			row += "  (current)"
+		}
+		if i == m.listCur {
+			row = hiStyle.Render(row)
+		}
+		out = append(out, row)
+	}
+	return out
+}
+
 // activity lists the windows with unread messages, irssi style.
 func (m *Model) activity() string {
 	var act []string
@@ -845,8 +1029,9 @@ const keyHelp = `Keys
   Alt-1 .. Alt-0    window 1 .. 10
   PgUp / PgDn       scroll a page; Up / Down a line; Home / End oldest / newest
   Ctrl-R            sync now
-  F1                this help
-  Esc               close a view / clear the input
+  F1                print this help
+  Esc               close the list or pager / clear the input
+  Ctrl-X            send the typed text to this window's chat
   Ctrl-C            quit
 
 Window 1 is the server window: every chat interleaved, plus client notices.

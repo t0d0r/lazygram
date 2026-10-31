@@ -24,4 +24,7 @@ type Provider interface {
 	Sync(ctx context.Context, since time.Time) ([]domain.Message, error)
 	// Recent returns the last limit messages of one chat, oldest first.
 	Recent(ctx context.Context, chatID string, limit int) ([]domain.Message, error)
+	// Send posts a text message to a chat. The sent message is not returned;
+	// it arrives through Sync like any other.
+	Send(ctx context.Context, chatID, text string) error
 }

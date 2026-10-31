@@ -18,6 +18,8 @@
 - lazygram does not log message content.
 - No interactive Telegram login is performed by the project's tooling; the
   connector fails closed when no authorized session exists.
+- Sending is explicit: only text typed in a chat window and confirmed with
+  Ctrl-X, or given to /me, is sent; Enter never sends.
 - `lazygram login` links by QR code, so no phone number or SMS code passes
   through lazygram; a two-step password is read without echo and never
   stored. The only login artifact is the session file.

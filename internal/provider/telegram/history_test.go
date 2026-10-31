@@ -17,6 +17,7 @@ type fakeAPI struct {
 	dialogs int
 	history int
 	flood   int // FLOOD_WAIT errors still to return
+	sent    []string
 }
 
 func newFakeAPI() *fakeAPI {
@@ -78,6 +79,14 @@ func (f *fakeAPI) MessagesGetHistory(_ context.Context, r *tg.MessagesGetHistory
 		}
 	}
 	return &tg.MessagesMessages{Messages: page, Users: []tg.UserClass{&tg.User{ID: 7, FirstName: "Test", LastName: "Person"}}}, nil
+}
+
+func (f *fakeAPI) MessagesSendMessage(_ context.Context, r *tg.MessagesSendMessageRequest) (tg.UpdatesClass, error) {
+	f.sent = append(f.sent, r.Message)
+	if r.RandomID == 0 {
+		return nil, errors.New("random id missing")
+	}
+	return &tg.Updates{}, nil
 }
 
 var base = time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
@@ -287,5 +296,30 @@ func TestHistoryReturnsPartialResultAndKeepsUnfetchedChatsPending(t *testing.T) 
 	again, err := s.History(context.Background(), time.Time{})
 	if err != nil || len(again) != 2 || again[0].ChatID != "telegram:-5" {
 		t.Fatalf("retry must fetch the pending chat only: n=%d err=%v", len(again), err)
+	}
+}
+
+func TestSendRequiresKnownChatAndText(t *testing.T) {
+	f := newFakeAPI()
+	s := newService(f)
+	if err := s.Send(context.Background(), "telegram:7", "hi"); err == nil {
+		t.Fatal("unknown chat before Dialogs")
+	}
+	if _, err := s.Dialogs(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Send(context.Background(), "telegram:7", "  "); err == nil {
+		t.Fatal("empty text")
+	}
+	if err := s.Send(context.Background(), "telegram:7", "hello"); err != nil || len(f.sent) != 1 || f.sent[0] != "hello" {
+		t.Fatalf("%v %v", err, f.sent)
+	}
+}
+
+func TestOwnMessagesAreFromMe(t *testing.T) {
+	ents := collect([]tg.UserClass{&tg.User{ID: 7, FirstName: "Test"}}, nil)
+	m := &tg.Message{ID: 1, Out: true, FromID: &tg.PeerUser{UserID: 7}, Message: "x"}
+	if got := sender(entity{kind: kindGroup}, m, ents); got != "me" {
+		t.Fatal(got)
 	}
 }

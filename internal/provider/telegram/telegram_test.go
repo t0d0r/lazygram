@@ -33,6 +33,9 @@ func TestInertWithoutClient(t *testing.T) {
 	if _, err := p.Recent(context.Background(), "x", 5); !errors.Is(err, provider.ErrNotImplemented) {
 		t.Fatalf("recent: %v", err)
 	}
+	if err := p.Send(context.Background(), "x", "y"); !errors.Is(err, provider.ErrNotImplemented) {
+		t.Fatalf("send: %v", err)
+	}
 	var _ provider.Provider = p
 }
 

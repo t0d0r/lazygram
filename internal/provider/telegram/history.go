@@ -2,8 +2,12 @@ package telegram
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/binary"
+	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gotd/td/tg"
@@ -24,6 +28,7 @@ const (
 type api interface {
 	MessagesGetDialogs(ctx context.Context, req *tg.MessagesGetDialogsRequest) (tg.MessagesDialogsClass, error)
 	MessagesGetHistory(ctx context.Context, req *tg.MessagesGetHistoryRequest) (tg.MessagesMessagesClass, error)
+	MessagesSendMessage(ctx context.Context, req *tg.MessagesSendMessageRequest) (tg.UpdatesClass, error)
 }
 
 // service implements Client on top of api. It is read-only. Every History
@@ -149,6 +154,29 @@ func (s *service) Recent(ctx context.Context, chatID string, limit int) ([]domai
 	return domain.Merge(msgs), nil
 }
 
+// Send posts a text message. The sent message is picked up by the next
+// History call because the chat's top message moves.
+func (s *service) Send(ctx context.Context, chatID, text string) error {
+	ent, ok := s.known[chatID]
+	if !ok {
+		return fmt.Errorf("telegram: unknown chat %s", chatID)
+	}
+	if strings.TrimSpace(text) == "" {
+		return errors.New("telegram: empty message")
+	}
+	var b [8]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return err
+	}
+	_, err := s.api.MessagesSendMessage(ctx, &tg.MessagesSendMessageRequest{
+		Peer: ent.peer, Message: text, RandomID: int64(binary.LittleEndian.Uint64(b[:])),
+	})
+	if err != nil {
+		return fmt.Errorf("telegram: send: %w", err)
+	}
+	return nil
+}
+
 // chatHistory pages backwards from the newest message and stops at a message
 // already fetched (id <= stopID) or at limit. Messages come newest first.
 func (s *service) chatHistory(ctx context.Context, id string, ent entity, stopID int, limit int) ([]domain.Message, error) {
@@ -216,6 +244,9 @@ func convert(chatID string, chat entity, m *tg.Message, ents entities) domain.Me
 }
 
 func sender(chat entity, m *tg.Message, ents entities) string {
+	if m.Out {
+		return "me"
+	}
 	if p, ok := m.FromID.(*tg.PeerUser); ok {
 		if u, ok := ents.users[p.UserID]; ok {
 			return userName(u)
@@ -225,8 +256,6 @@ func sender(chat entity, m *tg.Message, ents entities) string {
 	switch {
 	case m.PostAuthor != "":
 		return m.PostAuthor
-	case m.Out:
-		return "me"
 	case chat.kind == kindUser:
 		return chat.title
 	}
@@ -245,6 +274,10 @@ func (f floodAPI) MessagesGetDialogs(ctx context.Context, req *tg.MessagesGetDia
 
 func (f floodAPI) MessagesGetHistory(ctx context.Context, req *tg.MessagesGetHistoryRequest) (tg.MessagesMessagesClass, error) {
 	return retryFlood(ctx, f.sleep, func() (tg.MessagesMessagesClass, error) { return f.api.MessagesGetHistory(ctx, req) })
+}
+
+func (f floodAPI) MessagesSendMessage(ctx context.Context, req *tg.MessagesSendMessageRequest) (tg.UpdatesClass, error) {
+	return retryFlood(ctx, f.sleep, func() (tg.UpdatesClass, error) { return f.api.MessagesSendMessage(ctx, req) })
 }
 
 func retryFlood[T any](ctx context.Context, sleep func(context.Context, time.Duration) error, call func() (T, error)) (T, error) {

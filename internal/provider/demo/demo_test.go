@@ -58,3 +58,19 @@ func TestRecent(t *testing.T) {
 		t.Fatal("unknown chat")
 	}
 }
+
+func TestSendShowsUpOnNextSync(t *testing.T) {
+	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	p := newAt(func() time.Time { return clock })
+	first, _ := p.Sync(context.Background(), time.Time{})
+	if err := p.Send(context.Background(), "demo-3", "hello"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Send(context.Background(), "nope", "x"); err == nil {
+		t.Fatal("unknown chat")
+	}
+	got, _ := p.Sync(context.Background(), first[len(first)-1].Time)
+	if len(got) != 1 || got[0].Sender != "me" || got[0].Text != "hello" || got[0].ChatID != "demo-3" {
+		t.Fatalf("%+v", got)
+	}
+}

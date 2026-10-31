@@ -20,6 +20,9 @@ const (
 	Close        // close window Arg (number), or the current one
 	Last         // fetch the last N messages for the current window's chat
 	Search       // open the local history pager; Arg is the search text
+	Stats        // print client statistics into the current window
+	Whois        // print what is known about a chat (Arg) or the current window's chat
+	Me           // send an action line ("* text") to the current window's chat
 )
 
 // Command is a parsed slash command.
@@ -37,6 +40,9 @@ var table = map[string]Kind{
 	"close": Close, "wc": Close, "part": Close,
 	"last": Last, "history": Last, "hist": Last,
 	"search": Search, "find": Search, "log": Search,
+	"stats": Stats, "uptime": Stats,
+	"whois": Whois, "wi": Whois, "info": Whois,
+	"me": Me, "action": Me,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -73,9 +79,13 @@ const HelpText = `Commands
   /quit, /q                 leave lazygram
   /refresh, /r              sync with the service now
   /list [text], /ls         print the chats: @people and #channels
-  /win                      print the open windows
+  /win, /win list           selectable list of the open windows
   /win N                    switch to window N (1 is the server window)
   /win @user, /win #chan    open or switch to that chat's window (Tab completes)
   /close [N]                close a window
   /last [N]                 fetch the last N messages of this window's chat (default 10)
-  /search [text]            page through this window's local history, searching for text`
+  /search [text]            page through this window's local history, searching for text
+  /whois [@user|#chan]      what is known about a chat (default: this window's)
+  /stats                    client statistics
+  /me <text>                send an action line ("* text") to this window's chat
+  Typing text in a chat window and pressing Ctrl-X sends it to that chat.`

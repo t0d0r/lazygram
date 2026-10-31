@@ -141,6 +141,16 @@ func (c *MTProto) History(ctx context.Context, since time.Time) ([]domain.Messag
 	return c.svc.History(ctx, since)
 }
 
+// Send implements Client.
+func (c *MTProto) Send(ctx context.Context, chatID, text string) error {
+	if err := c.wait(ctx); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.svc.Send(ctx, chatID, text)
+}
+
 // Recent implements Client.
 func (c *MTProto) Recent(ctx context.Context, chatID string, limit int) ([]domain.Message, error) {
 	if err := c.wait(ctx); err != nil {

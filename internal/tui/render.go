@@ -71,7 +71,8 @@ func renderLines(msgs []domain.Message, notes []note, o lineOpts) []string {
 			t := notes[j].at.Local()
 			day(t)
 			prefix := stamp(t) + " "
-			for k, l := range wrapText(sanitize(notes[j].text, true), max(o.width-len(prefix)-4, 10)) {
+			room := max(o.width-len(prefix)-4, 10)
+			for k, l := range wrapText(sanitize(notes[j].text, true), room, room) {
 				if k == 0 {
 					out = append(out, dimStyle.Render(prefix)+noteStyle.Render("-!- "+l))
 				} else {
@@ -93,11 +94,21 @@ func renderLines(msgs []domain.Message, notes []note, o lineOpts) []string {
 			plainPrefix += fmt.Sprintf("%-*s ", o.nameW, name)
 			prefix += lipgloss.NewStyle().Foreground(colorFor(m.ChatID)).Bold(true).Render(fmt.Sprintf("%-*s", o.nameW, name)) + " "
 		}
-		plainPrefix += "<" + m.Sender + "> "
-		prefix += lipgloss.NewStyle().Foreground(colorFor(m.Sender)).Render("<"+m.Sender+">") + " "
+		text := m.Text
+		if action, ok := strings.CutPrefix(m.Text, "* "); ok && strings.TrimSpace(action) != "" {
+			// IRC-style action (/me): "* sender does something"
+			plainPrefix += "* " + m.Sender + " "
+			prefix += lipgloss.NewStyle().Foreground(colorFor(m.Sender)).Italic(true).Render("* "+m.Sender) + " "
+			text = action
+		} else {
+			plainPrefix += "<" + m.Sender + "> "
+			prefix += lipgloss.NewStyle().Foreground(colorFor(m.Sender)).Render("<"+m.Sender+">") + " "
+		}
 		prefixW := lipgloss.Width(plainPrefix)
-		body := wrapText(m.Text, max(o.width-prefixW, 10))
-		indent := strings.Repeat(" ", prefixW)
+		// Continuation lines sit just past the time column, BitchX style,
+		// rather than under the text, so long messages waste no width.
+		indent := strings.Repeat(" ", len(stamp(t))+1)
+		body := wrapText(text, max(o.width-prefixW, 10), max(o.width-len(indent), 10))
 		for k, l := range body {
 			l = highlight(l, o.highlight)
 			if k == 0 {
@@ -131,36 +142,56 @@ func highlight(s, needle string) string {
 	return b.String()
 }
 
-// wrapText wraps text to width columns, honouring embedded newlines and
-// hard-breaking words longer than a line. It always returns at least one line.
-func wrapText(text string, width int) []string {
+// wrapText wraps text: the first output line may use first columns, every
+// later line width columns. Embedded newlines start new lines, empty lines
+// are dropped, lines that fit keep their spacing, and words longer than a
+// line are hard-broken. It always returns at least one line.
+func wrapText(text string, first, width int) []string {
 	var out []string
+	limit := func() int {
+		if len(out) == 0 {
+			return first
+		}
+		return width
+	}
 	for _, para := range strings.Split(strings.ReplaceAll(text, "\r", ""), "\n") {
+		if strings.TrimSpace(para) == "" {
+			continue
+		}
+		if lipgloss.Width(para) <= limit() {
+			out = append(out, strings.TrimRight(para, " ")) // keep internal spacing
+			continue
+		}
 		var cur string
 		flush := func() {
 			out = append(out, cur)
 			cur = ""
 		}
 		for _, w := range strings.Fields(para) {
-			for lipgloss.Width(w) > width {
+			for lipgloss.Width(w) > limit() {
 				if cur != "" {
 					flush()
 				}
-				head, rest := splitAt(w, width)
+				head, rest := splitAt(w, limit())
 				out = append(out, head)
 				w = rest
 			}
 			switch {
 			case cur == "":
 				cur = w
-			case lipgloss.Width(cur)+1+lipgloss.Width(w) <= width:
+			case lipgloss.Width(cur)+1+lipgloss.Width(w) <= limit():
 				cur += " " + w
 			default:
 				flush()
 				cur = w
 			}
 		}
-		flush()
+		if cur != "" {
+			flush()
+		}
+	}
+	if len(out) == 0 {
+		out = append(out, "")
 	}
 	return out
 }
@@ -188,13 +219,16 @@ func fitLine(s string, width int) string {
 	return s
 }
 
-// topWindow returns exactly height lines starting at the top, scrolled just
-// enough to keep line sel visible; short content is padded at the bottom.
+// topWindow returns exactly height lines of a list. The selected line sel
+// moves down the screen until it reaches the middle, then stays there while
+// the list scrolls under it, and moves on to the bottom only when the list
+// ends (the same on the way up). Short content is padded at the bottom.
 func topWindow(lines []string, height, sel int) []string {
 	if height < 1 {
 		return nil
 	}
-	start := max(min(sel, len(lines)-1)-height+1, 0)
+	sel = min(max(sel, 0), max(len(lines)-1, 0))
+	start := min(max(sel-height/2, 0), max(len(lines)-height, 0))
 	end := min(start+height, len(lines))
 	view := append([]string(nil), lines[start:end]...)
 	for len(view) < height {

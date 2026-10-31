@@ -20,13 +20,19 @@ func TestWrapText(t *testing.T) {
 		{"hello world", 5, []string{"hello", "world"}},
 		{"abcdefghij", 4, []string{"abcd", "efgh", "ij"}},
 		{"a\nb", 10, []string{"a", "b"}},
+		{"a\n\n\nb\n", 10, []string{"a", "b"}},
 		{"", 10, []string{""}},
+		{"  /win N    switch", 40, []string{"  /win N    switch"}},
 	}
 	for _, c := range cases {
-		got := wrapText(c.in, c.w)
+		got := wrapText(c.in, c.w, c.w)
 		if strings.Join(got, "|") != strings.Join(c.want, "|") {
 			t.Errorf("wrap(%q,%d)=%q want %q", c.in, c.w, got, c.want)
 		}
+	}
+	got := wrapText("one two three four five six", 9, 20)
+	if strings.Join(got, "|") != "one two|three four five six" {
+		t.Fatalf("first line narrower than the rest: %q", got)
 	}
 }
 
@@ -82,14 +88,19 @@ func TestRenderInterleavesNotesByTime(t *testing.T) {
 	}
 }
 
-func TestRenderWrapsWithHangingIndent(t *testing.T) {
-	msgs := []domain.Message{{ID: "1", ChatID: "c", Sender: "s", Text: strings.Repeat("word ", 20), Time: time.Now()}}
-	lines := renderLines(msgs, nil, lineOpts{width: 40, nameW: 3, nameOf: nameX, fullDate: true})
-	if len(lines) < 3 {
+func TestRenderWrapsPastTheTimeColumn(t *testing.T) {
+	msgs := []domain.Message{{ID: "1", ChatID: "c", Sender: "s", Text: strings.Repeat("word ", 20) + "\n\nsecond paragraph", Time: time.Now()}}
+	lines := renderLines(msgs, nil, lineOpts{width: 40, nameW: 3, nameOf: nameX})
+	if len(lines) < 4 {
 		t.Fatalf("expected wrapping, got %d lines", len(lines))
 	}
-	if !strings.HasPrefix(lines[1], "  ") {
-		t.Fatalf("continuation should be indented: %q", lines[1])
+	for _, l := range lines[2:] {
+		if !strings.HasPrefix(l, "      ") || strings.HasPrefix(l, "       ") {
+			t.Fatalf("continuation should sit just past the time column: %q", l)
+		}
+		if strings.TrimSpace(l) == "" {
+			t.Fatal("blank lines inside a message must be dropped")
+		}
 	}
 }
 
@@ -118,17 +129,38 @@ func TestRenderStripsControlCharacters(t *testing.T) {
 }
 
 func TestTopWindow(t *testing.T) {
-	lines := []string{"1", "2", "3", "4", "5"}
+	lines := []string{"1", "2", "3", "4", "5", "6", "7"}
 	if v := topWindow(lines, 3, 0); strings.Join(v, "") != "123" {
 		t.Fatalf("top: %q", v)
 	}
-	if v := topWindow(lines, 3, 4); strings.Join(v, "") != "345" {
-		t.Fatalf("keep selection visible: %q", v)
+	if v := topWindow(lines, 3, 1); strings.Join(v, "") != "123" {
+		t.Fatalf("cursor moves to the middle first: %q", v)
+	}
+	if v := topWindow(lines, 3, 3); strings.Join(v, "") != "345" {
+		t.Fatalf("then the list scrolls under a centred cursor: %q", v)
+	}
+	if v := topWindow(lines, 3, 6); strings.Join(v, "") != "567" {
+		t.Fatalf("cursor reaches the bottom at the end: %q", v)
+	}
+	if v := topWindow(lines, 3, 5); strings.Join(v, "") != "567" {
+		t.Fatalf("near the end the cursor leaves the middle: %q", v)
 	}
 	if v := topWindow(lines[:2], 4, 0); len(v) != 4 || v[0] != "1" || v[3] != "" {
 		t.Fatalf("pad bottom: %q", v)
 	}
 	if v := topWindow(nil, 2, 0); len(v) != 2 {
 		t.Fatalf("empty: %q", v)
+	}
+}
+
+func TestRenderActionLines(t *testing.T) {
+	msgs := []domain.Message{{ID: "1", ChatID: "c", Sender: "ada", Text: "* waves at everyone", Time: time.Now()}}
+	out := renderLines(msgs, nil, lineOpts{width: 80, nameW: 4, nameOf: nameX, fullDate: true})[0]
+	if !strings.Contains(out, "* ada") || strings.Contains(out, "<ada>") || !strings.Contains(out, "waves at everyone") {
+		t.Fatalf("action line: %q", out)
+	}
+	plain := renderLines([]domain.Message{{ID: "2", ChatID: "c", Sender: "ada", Text: "*", Time: time.Now()}}, nil, lineOpts{width: 80, nameW: 4, nameOf: nameX, fullDate: true})[0]
+	if !strings.Contains(plain, "<ada>") {
+		t.Fatalf("a lone star is not an action: %q", plain)
 	}
 }

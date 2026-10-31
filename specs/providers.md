@@ -6,6 +6,7 @@ type Provider interface {
     Chats(ctx) ([]domain.Chat, error)
     Sync(ctx, since time.Time) ([]domain.Message, error)
     Recent(ctx, chatID string, limit int) ([]domain.Message, error)
+    Send(ctx, chatID, text string) error
 }
 ```
 
@@ -13,7 +14,8 @@ type Provider interface {
 title, unread count and deleted flag. `Sync` returns what arrived since the
 last call (`since` is the newest cached time; a provider may ignore it).
 `Recent` returns the last `limit` messages of one chat, oldest first, for
-`/win` and `/last`. `Sync` may return messages together with an error
+`/win` and `/last`. `Send` posts text to a chat; the sent message is not
+returned, it arrives through `Sync`. `Sync` may return messages together with an error
 (a batch that failed part-way); the caller stores them before showing the
 error. The store de-duplicates by (chat id, message id), so calls may
 overlap. Message times are absolute; the UI converts to local
@@ -25,8 +27,9 @@ Offline, synthetic, no network. Two groups (`#dev`, `#ops`), one person
 (`@linus`) and one channel (`#news`, reported with 2 unread so a window
 opens at start). Anchored to start time: older lines are already in the
 past and replayed by the first Sync, later lines "arrive" over about 4
-minutes. `Recent` serves the chat's past lines. Started with
-`lazygram demo`; nothing is kept on disk.
+minutes. `Recent` serves the chat's past lines; `Send` appends a line from
+`me` that the next `Sync` returns. Started with `lazygram demo`; nothing
+is kept on disk.
 
 ## telegram
 
@@ -111,7 +114,10 @@ later poll (10s) costs one `messages.getDialogs` and fetches history only
 for chats whose top message id moved, paging backwards (100 per page) until
 the previously seen id, at most 300 messages per chat per poll. `Recent`
 is one `messages.getHistory` for the last N (max 100) messages of a chat,
-used when a window opens and for `/last`. Service messages are skipped;
+used when a window opens and for `/last`. `Send` is one
+`messages.sendMessage` with a random id; the message then arrives through
+the next poll as the chat's top message moved. Own messages (`out`) show
+as `me`. Service messages are skipped;
 media-only messages show as `[media]`. Sender: user name, else post author,
 else `me` for own messages, else the peer's name in private chats, else
 `channel`. A FLOOD_WAIT of up to 60s is slept once and the request retried;

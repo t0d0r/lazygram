@@ -22,6 +22,12 @@ type fake struct {
 	recent map[string][]domain.Message // returned by Recent
 	err    error
 	calls  []string // Recent calls as "chat:limit"
+	sent   []string // Send calls as "chat:text"
+}
+
+func (f *fake) Send(_ context.Context, chatID, text string) error {
+	f.sent = append(f.sent, chatID+":"+text)
+	return f.err
 }
 
 func (f *fake) Name() string                                 { return "fake" }
@@ -269,15 +275,6 @@ func TestCloseWindow(t *testing.T) {
 	}
 }
 
-func TestWinListsWindows(t *testing.T) {
-	m := setup(t, newFake())
-	enter(m, "/win")
-	v := m.View()
-	if !strings.Contains(v, "1: server") || !strings.Contains(v, "#news") || !strings.Contains(v, "4 unread") {
-		t.Fatalf("\n%s", v)
-	}
-}
-
 func TestSearchPagerOverCurrentChat(t *testing.T) {
 	m := setup(t, newFake())
 	enter(m, "/win 3")
@@ -324,10 +321,18 @@ func TestUnknownAndPlainInputReportErrors(t *testing.T) {
 func TestQuitAndHelp(t *testing.T) {
 	m := setup(t, newFake())
 	press(m, tea.KeyF1)
-	if !strings.Contains(m.View(), "/win") {
-		t.Fatal("help should list commands")
+	v := m.View()
+	if m.mode != modeWin || !strings.Contains(v, "Ctrl-X") || !strings.Contains(v, "People are @name") {
+		t.Fatalf("help should print into the window:\n%s", v)
 	}
-	press(m, tea.KeyEsc)
+	if !strings.Contains(strings.Join(m.lines(), "\n"), "/win N                    switch") {
+		t.Fatal("help columns must keep their alignment")
+	}
+	enter(m, "/win 2")
+	enter(m, "/help")
+	if !strings.Contains(m.View(), "People are @name") {
+		t.Fatal("/help should print into the current window")
+	}
 	typ(m, "/quit")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil || !m.Quitting() {
@@ -410,5 +415,100 @@ func TestPartialSyncResultsAreKept(t *testing.T) {
 	}
 	if !strings.Contains(m.View(), "kept despite error") {
 		t.Fatal("partial batch must be shown")
+	}
+}
+
+func TestCtrlXSendsInChatWindowOnly(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	typ(m, "hello there")
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if !m.isErr || len(f.sent) != 0 {
+		t.Fatalf("server window must not send: %q %v", m.status, f.sent)
+	}
+	m.input = nil
+	enter(m, "/win @alice")
+	typ(m, "hello there")
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if cmd == nil || len(m.input) != 0 {
+		t.Fatal("expected a send command and a cleared input")
+	}
+	_, next := m.Update(cmd())
+	if len(f.sent) != 1 || f.sent[0] != "c2:hello there" || m.isErr || next == nil {
+		t.Fatalf("sent=%v status=%q", f.sent, m.status)
+	}
+	typ(m, "/quit")
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if !m.isErr || len(f.sent) != 1 {
+		t.Fatal("command-like text must not be sent by Ctrl-X")
+	}
+	m.input = nil
+	typ(m, "plain text")
+	press(m, tea.KeyEnter)
+	if !strings.Contains(m.status, "Ctrl-X") || len(m.input) == 0 {
+		t.Fatalf("Enter on text in a chat window should hint at Ctrl-X and keep the text: %q", m.status)
+	}
+}
+
+func TestWinListIsSelectable(t *testing.T) {
+	m := setup(t, newFake())
+	enter(m, "/win")
+	v := m.View()
+	if m.mode != modeList || m.listSrc != listWindows || !strings.Contains(v, "1  server") || !strings.Contains(v, "#news") || !strings.Contains(v, "(current)") {
+		t.Fatalf("\n%s", v)
+	}
+	press(m, tea.KeyDown)
+	press(m, tea.KeyDown)
+	cmd := press(m, tea.KeyEnter)
+	if m.mode != modeWin || m.cur != 2 || cmd == nil {
+		t.Fatalf("Enter should focus window 3: mode=%v cur=%d", m.mode, m.cur)
+	}
+	enter(m, "/win list")
+	if m.mode != modeList || m.listCur != 2 {
+		t.Fatalf("/win list should open on the current window: %v %d", m.mode, m.listCur)
+	}
+}
+
+func TestStatsWhoisMe(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	enter(m, "/stats")
+	v := m.View()
+	for _, want := range []string{"stats: fake", "chats: 4 (1 people, 1 groups, 1 channels, 1 deleted)", "windows: 4 open", "3 in this session, 3 cached"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("stats lacks %q:\n%s", want, v)
+		}
+	}
+	enter(m, "/whois")
+	if !m.isErr {
+		t.Fatal("whois without a name in the server window")
+	}
+	enter(m, "/whois @alice")
+	v = m.View()
+	for _, want := range []string{"whois @alice: Alice Smith", "person on", "id c2", "1 messages this session"} {
+		if !strings.Contains(v, want) {
+			t.Errorf("whois lacks %q:\n%s", want, v)
+		}
+	}
+	enter(m, "/me waves")
+	if !m.isErr || len(f.sent) != 0 {
+		t.Fatal("/me in the server window must fail")
+	}
+	enter(m, "/win @alice")
+	enter(m, "/whois")
+	if !strings.Contains(m.View(), "whois @alice") {
+		t.Fatal("whois defaults to the window's chat")
+	}
+	cmd := enter(m, "/me waves")
+	if cmd == nil {
+		t.Fatal("expected a send")
+	}
+	cmd()
+	if len(f.sent) != 1 || f.sent[0] != "c2:* waves" {
+		t.Fatalf("sent=%v", f.sent)
+	}
+	enter(m, "/me")
+	if !m.isErr {
+		t.Fatal("/me needs text")
 	}
 }

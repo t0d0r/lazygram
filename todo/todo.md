@@ -37,6 +37,8 @@
 - [x] selectable /list, deleted accounts hidden unless --show-deleted
 - [x] no backlog: first sync records cursors; Recent on window open and /last (specs/providers.md)
 - [x] encrypted SQLite cache keyed from the session auth key (specs/storage.md)
+- [x] centred-cursor list scrolling; selectable /win list; Ctrl-X sends; /help prints in-window (specs/ui.md)
+- [x] /stats, /whois, /me; compact wrapping past the time column (specs/ui.md)
 
 ## Next
 

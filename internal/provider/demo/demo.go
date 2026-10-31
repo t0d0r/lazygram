@@ -5,6 +5,7 @@ package demo
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"lazygram/internal/domain"
@@ -14,9 +15,11 @@ import (
 // past; the rest "arrive" over the next minutes so new windows open while
 // you watch.
 type Provider struct {
+	mu    sync.Mutex
 	chats []domain.Chat
 	msgs  []domain.Message
 	now   func() time.Time
+	sent  int
 }
 
 type line struct {
@@ -57,6 +60,7 @@ var script = []line{
 	{2, -8 * time.Minute, "linus", "back from lunch, what did I miss"},
 	{0, -5 * time.Minute, "grace", "release candidate tagged"},
 	{1, -2 * time.Minute, "dennis", "deploy window opens in 30 minutes"},
+	{3, -1 * time.Minute, "wire", "Demo digest: three stories today.\n\n1. Terminal clients keep their users.\n2. Encrypted local caches become the norm.\n3. Nobody misses the gap under the nick.\n\nThat is all for this hour, back at the top of the next one with more invented news for the demo feed."},
 	{0, 20 * time.Second, "ada", "tip: /win 2 switches windows, Tab completes names"},
 	{2, 45 * time.Second, "linus", "try /win @linus to open my window"},
 	{3, 90 * time.Second, "wire", "Demo headline: new lines keep arriving while you read"},
@@ -94,6 +98,8 @@ func (p *Provider) Chats(context.Context) ([]domain.Chat, error) {
 // future. The demo replays its past on the first call so the server window
 // has something to show.
 func (p *Provider) Sync(_ context.Context, since time.Time) ([]domain.Message, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	now := p.now()
 	var out []domain.Message
 	for _, m := range p.msgs {
@@ -107,6 +113,8 @@ func (p *Provider) Sync(_ context.Context, since time.Time) ([]domain.Message, e
 
 // Recent implements provider.Provider.
 func (p *Provider) Recent(_ context.Context, chatID string, limit int) ([]domain.Message, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
 	now := p.now()
 	var out []domain.Message
 	for _, m := range p.msgs {
@@ -115,4 +123,23 @@ func (p *Provider) Recent(_ context.Context, chatID string, limit int) ([]domain
 		}
 	}
 	return domain.Tail(out, limit), nil
+}
+
+// Send implements provider.Provider: the message shows up on the next Sync
+// as a line from "me".
+func (p *Provider) Send(_ context.Context, chatID, text string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	known := false
+	for _, c := range p.chats {
+		known = known || c.ID == chatID
+	}
+	if !known {
+		return fmt.Errorf("demo: unknown chat %s", chatID)
+	}
+	p.sent++
+	p.msgs = append(p.msgs, domain.Message{
+		ID: fmt.Sprintf("sent-%d", p.sent), ChatID: chatID, Sender: "me", Text: text, Time: p.now(),
+	})
+	return nil
 }
