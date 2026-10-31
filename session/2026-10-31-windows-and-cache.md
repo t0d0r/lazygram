@@ -313,3 +313,5 @@ at the hidden password prompt takes effect only after Enter.
   assignments keep the cursor at the end); Left/Right, Ctrl-A/E, Delete,
   Ctrl-K, Ctrl-W before the cursor; completion works on the text before
   the cursor and re-attaches the rest; the input row scrolls to the cursor.
+- v0.4.14 (input cursor) tagged at the CI-verified head and released;
+  assets checked against SHA256SUMS; formula at 0.4.14.
