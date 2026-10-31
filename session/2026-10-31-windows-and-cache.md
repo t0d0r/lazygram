@@ -272,11 +272,14 @@ at the hidden password prompt takes effect only after Enter.
   when its first history fetch lands; windows with content never do.
 - Tags v0.4.7 .. v0.4.11 pushed; v0.4.8 released on GitHub (tarballs and
   SHA256SUMS); the Homebrew formula builds from the v0.4.11 source
-  tarball. dist/ holds the v0.4.11 tarballs; `make release` at the
-  v0.4.11 tag is the open step (it is refused from the agent session).
+  tarball. v0.4.12 (own messages fix, exact-tag release guard) is
+  released with verified assets; the formula builds from v0.4.12.
 - `make release` now requires `git describe` to be exactly `vX.Y.Z`
   (grep -E), after a run one commit past v0.4.11 created a release and
   tag named `v0.4.11-1-gd0bdc3f` on GitHub; that release and tag are to
   be deleted (`gh release delete v0.4.11-1-gd0bdc3f --cleanup-tag`).
 - Own messages coming back through sync no longer count as news: no
   "new message" status, no unread, no window opened for them.
+- README: one screenshot, a compact Features list; the Architecture,
+  Telegram connector and Security constraints sections are gone (specs/
+  overview.md, providers.md and security.md hold that material).

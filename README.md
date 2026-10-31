@@ -5,15 +5,39 @@ from all your chats as one chronological scrollback, like a single IRC
 channel (BitchX / irssi style), and lets you open the full history of any chat
 in a searchable pager. Feature goals are inspired by nchat.
 
+## Features
+
+- Telegram over MTProto (gotd): QR login like the desktop apps, no phone
+  number typed, the two-step password asked once; a registration ships in
+  the source, your own wins when set
+- IRC-style windows: window 0 is the server window with every chat
+  interleaved, one window per chat, window bar, `Act:` list, `/list`,
+  `/win`, `/move`, `/close`; layout and settings remembered across runs
+- Sending: Ctrl-X sends, a double Ctrl-X makes Enter send per window,
+  `/me`, `/msg`, `/edit` and `/delete` of your last message, input
+  history, bash-style Tab completion (commands, chats, themes, paths)
+- Bots: `/press` answers inline and reply buttons, link buttons are printed
+- Attachments: nothing downloads until you click or `/open`; files land in
+  an encrypted vault, pictures are painted inside the terminal, `/open out`
+  for the system viewer; `/send <path>` uploads photos and files
+- History: `/last`, `/search` pager over the local history, `/whois`,
+  `/stats`, `/about`, `/names` (nicks or titles)
+- Encrypted SQLite cache (AES-256-GCM per row) keyed from the session, so
+  it is unreadable without `session.json`; see specs/security.md for the
+  full list of what is and is not stored
+- Mouse: clickable names, links, window tags, list rows and `[photo]`
+  tokens with running lights under the pointer; `/mouse` and `/fx` toggles
+- Looks: nine colour themes, BitchX-style banners that roll in like a slow
+  serial line, a random parting face and session statistics at exit
+- `lazygram demo` with invented data, `lazygram update` (brew or binary,
+  checked against SHA256SUMS), static binaries for Linux and macOS
+
 ## Screenshots
 
 The demo (`lazygram demo`, invented data), `nord` theme: the server window
-with every chat interleaved, bot buttons and a `[photo]` token, and the
-photo painted inside a chat window from memory.
+with every chat interleaved, bot buttons and a `[photo]` token.
 
 ![lazygram demo: server window](docs/screenshot.svg)
-
-![lazygram demo: a photo rendered in the terminal](docs/screenshot-photo.svg)
 
 ## Install
 
@@ -170,61 +194,6 @@ make help     # all targets
 Releases: tag `vX.Y.Z`, `make dist`, `make release` (uses `gh`), then bump
 the formula in [t0d0r/homebrew-tap](https://github.com/t0d0r/homebrew-tap).
 See specs/release.md.
-
-## Architecture
-
-```
-cmd/lazygram            subcommands (login, demo, default), wiring, smoke mode
-internal/domain         Chat, Message, Merge, Filter, ResolveChat (pure)
-internal/store          encrypted SQLite message cache (AES-256-GCM per row)
-internal/provider       Provider interface (Name, Chats, Sync)
-internal/provider/demo  offline scripted provider
-internal/provider/telegram  Telegram connector (gotd/td MTProto), QR login
-internal/qrcode         QR code to terminal text (half-block or ASCII)
-internal/update         self-update from GitHub releases (brew or binary)
-internal/command        slash-command parser
-internal/config         state directory and stored application registration
-internal/tui            bubbletea model and rendering
-```
-
-The core never imports a connector; adding a service means implementing
-`provider.Provider` and one case in `cmd/lazygram`.
-
-## Telegram connector
-
-It lists your 100 most recent dialogs and polls every 10 seconds
-with one request, fetching history only for chats whose newest message
-changed. Nothing older than the start is fetched unless you open a window
-or run `/last`. Short FLOOD_WAIT replies are honoured automatically.
-Sending happens only on Ctrl-X in a chat window or with `/send` for a
-local file. Details and limits:
-specs/providers.md.
-
-## Security constraints
-
-- No credentials, tokens, session files, phone numbers, user IDs, chat titles
-  or real messages in git, specs, session notes or logs. `.gitignore` blocks
-  `.env*`, keys, session files and `.state/`.
-- The state directory holds `telegram/session.json` (account access: treat it
-  like a password), `telegram/app.json` (your application registration),
-  `telegram/cache.sqlite`, the message cache, and `telegram/media/`, the
-  photos and files you fetched, encrypted with hashed names. Directories
-  are 0700, files 0600. Viewing an attachment decrypts a temporary copy
-  that is removed when lazygram exits.
-- The cache is encrypted per row with AES-256-GCM; the key is derived from
-  the session's auth key, so the cache is unreadable without `session.json`
-  and a new login starts a fresh one. Only message ids, timestamps and
-  counts are stored in clear (specs/storage.md).
-- Nothing typed at `lazygram login` is echoed or stored except the
-  application registration; the session file is the only login artifact.
-- Control characters (including ESC) are stripped from sender and text before
-  rendering, so remote messages cannot inject terminal escape sequences.
-- Apart from Telegram itself, lazygram contacts the network only when
-  `lazygram update` runs. Downloads are checked against the release's
-  SHA256SUMS, which catches broken files but is not a signature; HTTPS to
-  GitHub is what authenticates them. Release binaries are built without any
-  registration; a brew or release install asks for yours once at
-  `lazygram login` (or takes `TG_API_ID`/`TG_API_HASH` from the environment).
 
 ## License
 
