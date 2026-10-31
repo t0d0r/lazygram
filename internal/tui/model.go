@@ -82,7 +82,7 @@ type win struct {
 
 	enterSends bool // Enter sends plain text (toggled by a double Ctrl-X)
 
-	revealing   bool // the content still rolls in line by line, as at start-up
+	revealing   bool // the content still rolls in line by line (the window shown at start-up)
 	revealed    int  // rendered lines shown so far while revealing
 	revealTotal int  // rendered lines at the last View, for the step size
 }
@@ -229,11 +229,11 @@ func New(opt Options) *Model {
 	// The banner has the zero time so it stays above everything, however old
 	// the cached messages are.
 	m.wins[0].notes = append(m.wins[0].notes, note{text: logo.Wide, raw: true})
-	m.wins[0].revealing = true
 	m.note(m.wins[0], Tagline(opt.Version))
 	m.note(m.wins[0], "/help lists commands, /list the chats")
 	m.restoreLayout()
 	m.restoreTheme()
+	m.wins[m.cur].revealing = true // only the first screen rolls in; switching windows shows them at once
 	return m
 }
 
@@ -372,7 +372,7 @@ func (m *Model) restoreLayout() {
 	}
 	for i, id := range l.Windows {
 		if _, w := m.winFor(id); id != "" && w == nil {
-			m.wins = append(m.wins, &win{chatID: id, enterSends: i < len(l.Enter) && l.Enter[i], revealing: true})
+			m.wins = append(m.wins, &win{chatID: id, enterSends: i < len(l.Enter) && l.Enter[i]})
 		}
 	}
 	m.cur = min(max(l.Current, 0), len(m.wins)-1)

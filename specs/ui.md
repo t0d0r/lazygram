@@ -22,13 +22,13 @@ completion, and an activity indicator.
   where the window is at least its 76 columns wide, chunky below that,
   chosen at render time; plain ASCII, coloured top to bottom) and a
   tagline with the version. At start the content rolls in like on a slow
-  serial line: the server window and every window reopened from the last
-  session show their rendered lines one by one the first time they are
-  current, each new line at the bottom pushing the earlier ones up, so
+  serial line: the window that is current at start (the server window,
+  or the one restored from the last session) shows its rendered lines
+  one by one, each new line at the bottom pushing the earlier ones up, so
   the last frame is the ordinary view and nothing jumps (one line per
   28 ms, several per tick when the scrollback is long so the whole reveal
-  takes at most 2 s);
-  windows opened later appear at once, and smoke mode shows everything.
+  takes at most 2 s). Only that first screen rolls in: switching windows
+  shows them at once, and smoke mode shows everything.
   After the program ends the banner is printed to the terminal the same
   way (one line per 56 ms), BitchX style, in the same faces (banner3 on
   76 columns or more, chunky below), with the tagline (`by t0d0r`), the

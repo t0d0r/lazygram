@@ -1748,6 +1748,9 @@ func TestStartupRevealsTheWindowLineByLine(t *testing.T) {
 	if cmd != nil {
 		t.Fatal("no more ticks once revealed")
 	}
+	if _, w := m.openWin("c1"); w.revealing {
+		t.Fatal("other windows appear at once")
+	}
 }
 
 func TestPrintSlowlyKeepsEveryLine(t *testing.T) {

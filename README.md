@@ -90,8 +90,7 @@ embed, which wins over the one shipped in the source; delete `<state>/telegram/a
 ## Using it
 
 It works like BitchX/irssi, down to the figlet banner at start and exit,
-both rolling in line by line like a terminal on a slow serial line (the
-windows restored at start do the same).
+both rolling in line by line like a terminal on a slow serial line.
 Window 0 is the server window: every chat
 interleaved by time as `HH:MM #chat <sender> text`, plus `-!-` notices. A
 window bar above the input lists every window as `[N:name]`. Open windows,
