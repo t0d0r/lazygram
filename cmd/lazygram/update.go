@@ -4,17 +4,17 @@ import (
 	"bufio"
 	"fmt"
 	"io"
-	"os"
 	"strings"
 
 	"lazygram/internal/update"
 )
 
 // runUpdate implements "lazygram update": install the latest GitHub release
-// the way this binary was installed (brew, or replacing the file). check
-// only reports; yes skips the question.
-func runUpdate(check, yes bool, in io.Reader, out io.Writer) error {
-	c := update.New()
+// the way this binary was installed (brew, or replacing the file). A binary
+// a package manager installed is never replaced; the update is left to the
+// package manager. check only reports; yes skips the question. executable
+// resolves the running binary (update.Executable outside tests).
+func runUpdate(c *update.Client, version string, executable func() (string, error), check, yes bool, in io.Reader, out io.Writer) error {
 	latest, err := c.Latest()
 	if err != nil {
 		return err
@@ -35,11 +35,14 @@ func runUpdate(check, yes bool, in io.Reader, out io.Writer) error {
 	if check {
 		return nil
 	}
-	exe, err := update.Executable()
+	exe, err := executable()
 	if err != nil {
 		return err
 	}
 	method := update.Detect(exe)
+	if method == update.Package {
+		return fmt.Errorf("not replacing %s: %w", exe, update.ErrPackaged)
+	}
 	q := fmt.Sprintf("Update lazygram %s -> %s (%s)?", current, latest, method)
 	if !yes && !confirm(out, bufio.NewReader(in), q) {
 		_, _ = fmt.Fprintln(out, "skipped")
@@ -60,5 +63,3 @@ func confirm(out io.Writer, in *bufio.Reader, question string) bool {
 	s = strings.ToLower(strings.TrimSpace(s))
 	return s == "y" || s == "yes"
 }
-
-var _ = os.Stdin

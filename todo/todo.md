@@ -73,6 +73,18 @@
 - [x] double Ctrl-X toggles Enter-sends; help fits 80 columns; Tab only completes (specs/ui.md)
 - [x] bot inline buttons: rendered under the message, /press answers callbacks, links printed, reply text sent (specs/ui.md)
 
+## Arch Linux and Omarchy package (specs/release.md)
+
+- [x] audit: name free on Arch and AUR, pure Go, go 1.27.3 in Arch and Arch Linux ARM, tests hermetic
+- [x] recipe: packaging/omarchy/lazygram (PKGBUILD, .omarchy/package.json, desktop entry, icon)
+- [x] self-update never replaces a package-managed binary; exit hint names the package manager
+- [x] docs: docs/arch-omarchy.md, README install line, specs/release.md and specs/security.md
+- [x] built and tested in Arch x86_64 and Arch Linux ARM aarch64 containers; omarchy-pkgs validators run
+- [ ] release v0.4.15 (self-update refusal for packaged installs; tarball carries packaging/), then point the recipe at it: pkgver, updpkgsums, entry and icon from the tarball instead of the local sources
+- [ ] submit: fork omacom/omarchy-pkgs, copy packaging/omarchy/lazygram to pkgbuilds/lazygram, open the PR (packaging/omarchy/README.md has the steps and packaging/omarchy/PR.md the text); needs the build-approved label from a maintainer
+- [ ] after the package is published: README install line "omarchy pkg add lazygram" first, verify both channels and architectures
+- [ ] man page and shell completions (optional; the recipe would install them)
+
 ## Next
 
 - [ ] cap the media vault size (specs/storage.md)
@@ -83,3 +95,6 @@
 - [ ] gitleaks pre-commit hook
 - [x] CI: Linux and macOS workflows with README badges (specs/ci.md)
 - [x] input cursor: Left/Right, Ctrl-A/E, Delete, Ctrl-K, Ctrl-W before the cursor; completion at the cursor (specs/ui.md)
+- [x] mouse drag selects text and copies it on release: OSC 52 in the frame plus a system tool, /clip modes kept, clicks act on release (specs/ui.md, docs/clipboard.md)
+- [ ] double click selects a word, triple a row; Shift-click extends (specs/ui.md)
+- [ ] release v0.4.15 with the mouse selection and the self-update refusal

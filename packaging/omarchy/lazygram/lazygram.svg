@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- lazygram launcher icon: a terminal prompt and a paper plane. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <defs>
+    <clipPath id="body"><rect x="16" y="16" width="224" height="224" rx="40" ry="40"/></clipPath>
+  </defs>
+  <rect x="16" y="16" width="224" height="224" rx="40" ry="40" fill="#1a1b26"/>
+  <rect x="16" y="16" width="224" height="48" fill="#24283b" clip-path="url(#body)"/>
+  <circle cx="48" cy="40" r="7" fill="#f7768e"/>
+  <circle cx="72" cy="40" r="7" fill="#e0af68"/>
+  <circle cx="96" cy="40" r="7" fill="#9ece6a"/>
+  <path d="M48 108 L92 140 L48 172" fill="none" stroke="#9ece6a" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="104" y="166" width="44" height="14" rx="5" ry="5" fill="#9ece6a"/>
+  <path d="M136 100 L222 70 L198 184 L166 156 L150 176 L152 142 Z" fill="#2ca5e0"/>
+  <path d="M152 142 L198 108 L166 156 Z" fill="#1b6fa0"/>
+</svg>

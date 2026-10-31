@@ -112,6 +112,11 @@ type Model struct {
 
 	hover string // the clickable thing under the pointer, as a hover key
 
+	sel      *selection // a left-button drag in progress
+	screen   []string   // the rows of the last View, styled; the selection reads them
+	clipMode string     // /clip: auto, osc52, tool or off (kept)
+	clipSeq  string     // OSC 52 sequence riding on the next frames until clipFlushMsg
+
 	slow     []string // lines still to print, one per slowTick, like a slow serial line
 	slowWin  *win     // the window they go to
 	slowTick bool     // a slowTickMsg is scheduled
@@ -223,6 +228,9 @@ func New(opt Options) *Model {
 	}
 	if found, err := opt.Store.State(mouseKey, &m.mouseOn); !found || err != nil {
 		m.mouseOn = true
+	}
+	if found, err := opt.Store.State(clipKey, &m.clipMode); !found || err != nil || !validClipMode(m.clipMode) {
+		m.clipMode = clipAuto
 	}
 	_, _ = opt.Store.State(namesKey, &m.byName)
 	m.chats, _ = opt.Store.Chats()
@@ -798,6 +806,12 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.setInfo("opened " + msg.target)
 		}
+	case clipFlushMsg:
+		m.clipSeq = "" // the sequence has been flushed with a frame by now
+	case clipDoneMsg:
+		if msg.err != nil {
+			m.setErr(msg.tool + " failed: " + msg.err.Error())
+		}
 	case tea.MouseMsg:
 		return m.mouse(msg)
 	case tea.KeyMsg:
@@ -822,11 +836,17 @@ func (m *Model) exactChat(name string) (domain.Chat, bool) {
 // hoverKey names what the pointer is over, for the running light.
 func hoverKey(s span) string { return fmt.Sprintf("%d:%s", s.kind, s.target) }
 
-// mouse handles wheel scrolling, hovering and clicks on the spans of the
-// last View.
+// mouse handles wheel scrolling, hovering, left-button drags (a text
+// selection, copied on release) and clicks on the spans of the last View.
+// A click acts on release, so that a drag that starts on a link selects
+// instead of opening it.
 func (m *Model) mouse(e tea.MouseMsg) (tea.Model, tea.Cmd) {
 	w := m.wins[m.cur]
 	if e.Action == tea.MouseActionMotion {
+		if m.sel != nil && e.Button == tea.MouseButtonLeft { // dragging
+			m.sel.extend(e.X, e.Y)
+			return m, nil
+		}
 		was := m.hover
 		m.hover = ""
 		if e.Y >= 0 && e.Y < len(m.clicks) {
@@ -855,12 +875,25 @@ func (m *Model) mouse(e tea.MouseMsg) (tea.Model, tea.Cmd) {
 			w.scroll = max(w.scroll-3, 0)
 		}
 	case e.Action == tea.MouseActionPress && e.Button == tea.MouseButtonLeft:
-		if e.Y < 0 || e.Y >= len(m.clicks) {
+		m.sel = &selection{x0: e.X, y0: e.Y, x1: e.X, y1: e.Y}
+	case e.Action == tea.MouseActionRelease:
+		if m.sel == nil {
 			return m, nil
 		}
-		for _, s := range m.clicks[e.Y] {
-			if s.hit(e.X) {
-				return m.click(s)
+		s := *m.sel
+		m.sel = nil
+		if s.moved {
+			if m.clipMode == clipOff {
+				return m, nil
+			}
+			return m.copySelection(s)
+		}
+		if s.y0 < 0 || s.y0 >= len(m.clicks) {
+			return m, nil
+		}
+		for _, sp := range m.clicks[s.y0] {
+			if sp.hit(s.x0) {
+				return m.click(sp)
 			}
 		}
 	}
@@ -1516,6 +1549,8 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.hover = ""
 		m.setInfo("mouse off: drag selects text; /mouse turns clicks back on")
 		return m, tea.DisableMouse
+	case command.Clip:
+		m.clip(c.Arg)
 	case command.Fx:
 		m.fx = !m.fx
 		_ = m.opt.Store.SetState(fxKey, m.fx)
@@ -2260,10 +2295,9 @@ func (m *Model) View() string {
 		}
 	}
 
-	var b strings.Builder
+	rows := make([]string, 0, len(body)+4)
 	for _, l := range body {
-		b.WriteString(lipgloss.NewStyle().MaxWidth(m.width).Render(l))
-		b.WriteByte('\n')
+		rows = append(rows, lipgloss.NewStyle().MaxWidth(m.width).Render(l))
 	}
 	bar, barSpans := m.windowBar()
 	// A rule separates the content from the status rows; it carries the
@@ -2275,15 +2309,28 @@ func (m *Model) View() string {
 			hint = "enter: to send"
 		}
 	}
-	b.WriteString(m.rule(hint))
-	b.WriteByte('\n')
-	b.WriteString(m.statusLine())
-	b.WriteByte('\n')
-	b.WriteString(bar)
-	b.WriteByte('\n')
-	b.WriteString(m.inputLine(prompt))
+	rows = append(rows, m.rule(hint), m.statusLine(), bar, m.inputLine(prompt))
 	// Screen rows: h content rows, rule, status, window bar, input.
 	m.clicks = append(append([][]span{}, bodySpans...), nil, nil, barSpans, nil)
+	m.screen = rows
+	var b strings.Builder
+	for y, l := range rows {
+		if m.sel != nil && m.sel.moved {
+			if from, to, ok := m.sel.cols(y, m.width); ok {
+				l = markCells(l, from, to)
+			}
+		}
+		if y == h && m.clipSeq != "" {
+			// The OSC 52 sequence rides on the rule, which the renderer
+			// repaints anyway for the "copied" status; the terminal copies
+			// when the frame is flushed, in order with everything else.
+			l = m.clipSeq + l
+		}
+		if y > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(l)
+	}
 	m.animOn = m.hover != "" // the light runs only under the pointer
 	return b.String()
 }
@@ -2486,8 +2533,11 @@ const keyHelp = `Keys
 Themes: /theme lists the colour schemes, /theme <name> switches (kept).
 Clickable text is bright and underlined; a running light plays over the
 one under the mouse pointer. /fx turns the light on or off (kept).
-To select text with the mouse, hold Shift (Option on macOS) while
-dragging, or /mouse to turn mouse reporting off and on (kept).
+Drag with the left button to select text; on release it is copied to
+the clipboard: through the terminal (OSC 52) and the system tool when
+there is one (pbcopy, wl-copy, xclip, xsel, clip); /clip picks (kept).
+Shift-drag (Option on macOS) still uses the terminal's own selection,
+as does /mouse off.
 Mouse: click a chat name or nick in window 0 to open its window, a tag in
 the window bar to focus it, a row in a list to open it, a link or a
 [photo] / [file] token to open it with the system; the wheel scrolls.

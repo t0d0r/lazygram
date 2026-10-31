@@ -1,6 +1,7 @@
 // Package update finds the latest lazygram release on GitHub and installs
 // it the way the running binary was installed: with brew, or by replacing
-// the binary with the one from the release tarball. Every download is
+// the binary with the one from the release tarball. A binary a package
+// manager installed is left to that package manager. Every download is
 // checked against the release's SHA256SUMS before anything is installed.
 package update
 
@@ -236,7 +237,14 @@ type Method string
 const (
 	Homebrew Method = "homebrew"
 	Binary   Method = "binary"
+	// Package is a binary installed by the system's package manager (pacman
+	// on Arch Linux and Omarchy, for example). The package manager owns the
+	// file; replacing it would break the package, so updates go through it.
+	Package Method = "package"
 )
+
+// ErrPackaged says that the running binary belongs to a package manager.
+var ErrPackaged = errors.New("lazygram was installed by the system package manager; update it there (Arch Linux, Omarchy: sudo pacman -Syu)")
 
 // Executable is the running binary with symlinks resolved, so a Homebrew
 // install shows its Cellar path.
@@ -248,19 +256,27 @@ func Executable() (string, error) {
 	return filepath.EvalSymlinks(exe)
 }
 
-// Detect tells the install method from the resolved executable path.
+// Detect tells the install method from the resolved executable path: a
+// Homebrew Cellar, a file under /usr that a package manager owns (/usr/local
+// is the administrator's, not the package manager's), or a plain binary.
 func Detect(exe string) Method {
 	if strings.Contains(exe, "/Cellar/lazygram/") {
 		return Homebrew
+	}
+	if strings.HasPrefix(exe, "/usr/") && !strings.HasPrefix(exe, "/usr/local/") {
+		return Package
 	}
 	return Binary
 }
 
 // Install installs release v by method. exe is the running binary, which
-// the Binary method replaces.
+// the Binary method replaces. A packaged install is never touched.
 func (c *Client) Install(m Method, v Version, exe string) error {
-	if m == Homebrew {
+	switch m {
+	case Homebrew:
 		return interactive("brew", "upgrade", Formula)
+	case Package:
+		return ErrPackaged
 	}
 	return c.installBinary(v, exe, runtime.GOOS, runtime.GOARCH)
 }

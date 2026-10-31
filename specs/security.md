@@ -53,7 +53,15 @@
   upgrades before bumping.
 - `lazygram update` is the only network use besides Telegram; downloads are
   HTTPS-only, size-capped and checked against SHA256SUMS; release binaries
-  never contain a registration (specs/release.md).
+  never contain a registration (specs/release.md). A binary installed by
+  a package manager (under `/usr`, not `/usr/local`) is never replaced
+  (from v0.4.15): the update goes through the package manager, so the
+  package's file list stays true and nothing lazygram downloads ever
+  lands in `/usr/bin`.
+- The Arch/Omarchy package (specs/release.md) builds from the pinned
+  source tarball with `-tags release`; the recipe ships no credentials,
+  reads none, and installs nothing the user has to trust beyond the
+  binary built from the source.
 - Run gitleaks before the first push and review `git log -p`.
 
 ## Terminal injection

@@ -315,3 +315,56 @@ at the hidden password prompt takes effect only after Enter.
   the cursor and re-attaches the rest; the input row scrolls to the cursor.
 - v0.4.14 (input cursor) tagged at the CI-verified head and released;
   assets checked against SHA256SUMS; formula at 0.4.14.
+- Arch Linux / Omarchy package (specs/release.md): `packaging/omarchy/
+  lazygram/` holds the omarchy-pkgs recipe (PKGBUILD for 0.4.14 from the
+  pinned source tarball, `.omarchy/package.json` with a GitHub release
+  watch and the fast ring, a launcher entry in the form of Omarchy's own
+  Docker TUI entry, an SVG icon); `packaging/omarchy/README.md` is the
+  maintainer side (audit table, container build commands, manual checks
+  left, submission steps), `packaging/omarchy/PR.md` the pull request
+  text, `docs/arch-omarchy.md` the user side. Audit: the name is free in
+  Arch and the AUR; go 2:1.27.3-1 in Arch and Arch Linux ARM matches
+  go.mod; tests are hermetic.
+- Self-update on a packaged install: `update.Detect` returns `Package`
+  for a binary under `/usr` outside `/usr/local`; `lazygram update`
+  refuses with an error before asking anything (`-check` still reports),
+  `update.Install` refuses too, and the exit banner's hint names the
+  package manager instead of `lazygram update`. Reason: pacman owns the
+  file; replacing it breaks `pacman -Qkk` and the next upgrade would undo
+  it silently.
+- Container evidence (final recipe, Docker, one build at a time; two at
+  once ran the 8 GiB VM out of memory on the gotd schema package):
+  aarch64 (Arch Linux ARM, native) makepkg with check() in 108 s, x86_64
+  (archlinux:base-devel, emulated) in 203 s, every Go test green on both;
+  namcap clean on x86_64 after `hicolor-icon-theme` joined `depends`
+  (its error), two contradictory glibc warnings on the ARM image's
+  namcap; installed packages pass `pacman -Qkk` with 0 altered files
+  (the archlinux image's NoExtract of /usr/share/doc is lifted first);
+  the binary is PIE with BIND_NOW and needs libc only; `lazygram
+  -version`, `desktop-file-validate`, the launcher command line (hint,
+  then "Press Enter to close"), the offline demo screen and the
+  not-linked exit 2 all as expected. The table is in
+  packaging/omarchy/README.md. The watch pattern was checked by hand
+  (matches `v0.4.14` whole, ignores `v0.4.11-1-gd0bdc3f`).
+- Review (five angles, adversarially verified) led to: `GOTOOLCHAIN=local`
+  and an explicit `CGO_ENABLED=1` in the recipe, a 78-character pkgdesc,
+  `hicolor-icon-theme` in depends; the launcher entry now uses its own
+  window class `org.omarchy.lazygram` (what `omarchy-launch-tui` assigns,
+  so focus-or-launch works) and a `sh -c "lazygram || { ...; read -r _; }"`
+  wrapper so a start before `lazygram login` shows the hint instead of a
+  window that flashes shut; `Version=1.5`, keywords without the name; the
+  icon's title bar clipped to the body; `min_release_age` 24h in the
+  metadata; `runUpdate` and `updateHint` take the client, version and
+  executable resolver, so tests now assert the packaged-install refusal
+  (no question, no download, `-check` still reports) and both hint texts;
+  the documentation states the version boundary (the refusal ships with
+  0.4.15; 0.4.14 stops at "cannot write /usr/bin", never sudo it) and
+  that an Install > TUI entry named `lazygram` shadows the packaged one.
+- omarchy-pkgs validators were run in an Arch container against master
+  dd63dc3 (upstream-watch validate/check: already current; metadata
+  valid; pinned-sources and package-metadata tests PASS; `bin/build
+  --dry-run` plans the package); results in packaging/omarchy/README.md.
+- Open: open the omarchy-pkgs PR from a fork (needs a maintainer's
+  `build-approved` label), preferably after releasing 0.4.15 and
+  pointing the recipe at it (entry and icon from the tarball); delete the
+  stray tag.
