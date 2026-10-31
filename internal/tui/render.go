@@ -23,9 +23,10 @@ func colorFor(s string) lipgloss.Color {
 // note is a client-side line in a window: "-!- connected", /list output, ...
 // A raw note is shown as it is, without time stamp or marker: the banner.
 type note struct {
-	at   time.Time
-	text string
-	raw  bool
+	at    time.Time
+	text  string
+	raw   bool // the banner: coloured lines, no stamp
+	plain bool // text as it is in the note colour, no stamp or marker (help)
 }
 
 // Banner colours figlet lines with the gradient; used for the start banner
@@ -249,6 +250,15 @@ func renderRich(msgs []domain.Message, notes []note, o lineOpts) ([]string, [][]
 			if notes[j].raw {
 				for _, l := range Banner(strings.Split(sanitize(notes[j].text, true), "\n")) {
 					add(l)
+				}
+				j++
+				continue
+			}
+			if notes[j].plain {
+				text := sanitize(notes[j].text, true)
+				full := urlsOf(text)
+				for _, l := range wrapText(text, max(o.width, 10), max(o.width, 10)) {
+					add(noteStyle.Render(l), linkSpans(l, 0, full)...)
 				}
 				j++
 				continue

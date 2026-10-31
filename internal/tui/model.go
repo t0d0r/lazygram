@@ -44,8 +44,9 @@ const (
 )
 
 const (
-	fxKey          = "fx"    // store state key for the running lights
-	mouseKey       = "mouse" // store state key for mouse reporting
+	fxKey          = "fx"                  // store state key for the running lights
+	slowDelay      = 28 * time.Millisecond // between two lines of a slow print
+	mouseKey       = "mouse"               // store state key for mouse reporting
 	fxTick         = 30 * time.Millisecond
 	maxHistory     = 200
 	doubleCtrlX    = 600 * time.Millisecond
@@ -101,6 +102,10 @@ type Model struct {
 	viewFiles []string // the copies made so far
 
 	hover string // the clickable thing under the pointer, as a hover key
+
+	slow     []string // lines still to print, one per slowTick, like a slow serial line
+	slowWin  *win     // the window they go to
+	slowTick bool     // a slowTickMsg is scheduled
 
 	mouseOn bool         // mouse reporting; off lets the terminal select text
 	fx      bool         // running lights over clickable text
@@ -183,8 +188,9 @@ type (
 		data          []byte // the attachment
 		err           error
 	}
-	tickMsg   time.Time
-	fxTickMsg struct{}
+	tickMsg     time.Time
+	fxTickMsg   struct{}
+	slowTickMsg struct{} // the next line of a slow print is due
 )
 
 // New builds a model. Chats and messages cached in the store are available
@@ -569,6 +575,15 @@ func (m *Model) openCmd(target string) tea.Cmd {
 // kept going while something animated is on screen.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	model, cmd := m.update(msg)
+	if len(m.slow) > 0 && !m.slowTick { // keep a slow print going
+		m.slowTick = true
+		tick := tea.Tick(slowDelay, func(time.Time) tea.Msg { return slowTickMsg{} })
+		if cmd == nil {
+			cmd = tick
+		} else {
+			cmd = tea.Batch(cmd, tick)
+		}
+	}
 	// Decide from the hover state as it is now, not from the last render:
 	// the first hover after an idle screen must start the clock at once.
 	if m.fx && m.hover != "" && !m.ticking {
@@ -584,6 +599,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case slowTickMsg:
+		m.slowTick = false
+		m.slowStep()
 	case fxTickMsg:
 		m.ticking = false // the next View reads the hover clock
 	case tea.WindowSizeMsg:
@@ -1618,12 +1636,45 @@ func (m *Model) whois(arg string) {
 	m.note(w, fmt.Sprintf("  %s, %d messages this session, %d cached, %s", win, len(msgs), cached, last))
 }
 
-// help prints the command and key reference into the current window.
+// help prints the command and key reference into the current window,
+// line by line with a small delay, like a terminal on a slow line.
 func (m *Model) help() {
 	w := m.wins[m.cur]
-	m.note(w, command.HelpText)
-	m.note(w, keyHelp)
-	w.scroll = 0
+	m.slowPrint(w, strings.Split(command.HelpText+"\n"+keyHelp, "\n"))
+}
+
+// slowPrint queues plain lines for a window; slowTick delivers them.
+func (m *Model) slowPrint(w *win, lines []string) {
+	if m.slowWin != nil && m.slowWin != w {
+		m.flushSlow()
+	}
+	m.slowWin = w
+	m.slow = append(m.slow, lines...)
+}
+
+// flushSlow prints whatever is still queued at once.
+func (m *Model) flushSlow() {
+	for _, l := range m.slow {
+		m.slowWin.notes = append(m.slowWin.notes, note{at: time.Now(), text: l, plain: true})
+	}
+	m.slow, m.slowWin = nil, nil
+}
+
+// slowStep prints the next queued line.
+func (m *Model) slowStep() {
+	if len(m.slow) == 0 || m.slowWin == nil {
+		m.slow, m.slowWin = nil, nil
+		return
+	}
+	m.slowWin.notes = append(m.slowWin.notes, note{at: time.Now(), text: m.slow[0], plain: true})
+	if len(m.slowWin.notes) > maxNotes {
+		m.slowWin.notes = m.slowWin.notes[len(m.slowWin.notes)-maxNotes:]
+	}
+	m.slowWin.scroll = 0
+	m.slow = m.slow[1:]
+	if len(m.slow) == 0 {
+		m.slowWin = nil
+	}
 }
 
 // winCommand implements /win: no argument (or "list") opens the selectable

@@ -421,9 +421,37 @@ func TestUnknownAndPlainInputReportErrors(t *testing.T) {
 	}
 }
 
+// drain delivers every queued slow-print line.
+func drain(m *Model) {
+	for len(m.slow) > 0 {
+		m.Update(slowTickMsg{})
+	}
+}
+
+func TestHelpPrintsSlowlyWithoutIndent(t *testing.T) {
+	m := setup(t, newFake())
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyF1})
+	if cmd == nil || len(m.slow) == 0 || strings.Contains(body(m), "/quit") {
+		t.Fatal("help starts a slow print, nothing shown yet")
+	}
+	m.Update(slowTickMsg{})
+	if n := m.wins[0].notes; !n[len(n)-1].plain || n[len(n)-1].text != "Commands" {
+		t.Fatalf("first line: %+v", n[len(n)-1])
+	}
+	drain(m)
+	v := strings.Join(m.lines(), "\n")
+	if !strings.Contains(v, "\n  /quit, /q") || !strings.Contains(v, "\nCommands") || !strings.Contains(v, "\nKeys") {
+		t.Fatalf("command lines start after two spaces, headers at the margin:\n%s", v)
+	}
+	if strings.Contains(v, "-!- Commands") {
+		t.Fatal("no marker on help lines")
+	}
+}
+
 func TestQuitAndHelp(t *testing.T) {
 	m := setup(t, newFake())
 	press(m, tea.KeyF1)
+	drain(m)
 	v := m.View()
 	if m.mode != modeWin || !strings.Contains(v, "People are @name") || !strings.Contains(strings.Join(m.lines(), "\n"), "Ctrl-X") {
 		t.Fatalf("help should print into the window:\n%s", v)
@@ -433,6 +461,7 @@ func TestQuitAndHelp(t *testing.T) {
 	}
 	enter(m, "/win 1")
 	enter(m, "/help")
+	drain(m)
 	if !strings.Contains(m.View(), "People are @name") {
 		t.Fatal("/help should print into the current window")
 	}
@@ -775,6 +804,7 @@ func TestStartBannerAndTagline(t *testing.T) {
 	}
 	enter(m, "/win 1")
 	enter(m, "/stats")
+	drain(m)
 	m.Update(sentMsg{chatID: "c3"})
 	s := m.Summary()
 	for _, want := range []string{"time wasted:", "arrived", "1 sent", "buttons pressed", "files fetched", "in the cache", "opened", "1 chats visited", "2 commands run"} {

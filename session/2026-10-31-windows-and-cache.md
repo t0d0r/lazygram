@@ -234,3 +234,5 @@ at the hidden password prompt takes effect only after Enter.
   `Provider.Edit`/`Delete` (Telegram messages.editMessage,
   messages.deleteMessages revoke / channels.deleteMessages), `Store.Delete`,
   `domain.LastOwn`/`Remove`; `/edit` alone prefills the prompt.
+- Help prints as plain notes (no stamp/marker, two-space indent kept)
+  through a slow-print queue (28 ms per line).

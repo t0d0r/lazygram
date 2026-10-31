@@ -86,7 +86,9 @@ titles and notices are stripped of control characters before rendering.
   live case-insensitive search over text and sender with matches
   highlighted; the status line shows `N of M messages`; Esc returns.
 `/help` and F1 print the command and key reference into the current window
-as notices; there is no separate help view.
+as plain lines (no time stamp or marker; command lines start after two
+spaces), one line every 28 ms like a terminal on a slow serial line;
+there is no separate help view.
 
 ## Commands
 
