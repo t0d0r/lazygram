@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -18,17 +19,18 @@ import (
 )
 
 type fake struct {
-	chats   []domain.Chat
-	msgs    []domain.Message            // returned by Sync
-	recent  map[string][]domain.Message // returned by Recent
-	err     error
-	calls   []string // Recent calls as "chat:limit"
-	sent    []string // Send calls as "chat:text"
-	pressed []string // Press calls as "chat:msg:label"
-	fetched []string // Fetch calls as "chat:msg"
-	edited  []string // Edit calls as "chat:msg:text"
-	deleted []string // Delete calls as "chat:msg"
-	picture []byte   // what Fetch returns when set
+	chats     []domain.Chat
+	msgs      []domain.Message            // returned by Sync
+	recent    map[string][]domain.Message // returned by Recent
+	err       error
+	calls     []string // Recent calls as "chat:limit"
+	sent      []string // Send calls as "chat:text"
+	pressed   []string // Press calls as "chat:msg:label"
+	fetched   []string // Fetch calls as "chat:msg"
+	edited    []string // Edit calls as "chat:msg:text"
+	deleted   []string // Delete calls as "chat:msg"
+	picture   []byte   // what Fetch returns when set
+	sentFiles []string // SendFile calls as "chat:name:bytes:caption"
 }
 
 func (f *fake) Send(_ context.Context, chatID, text string) error {
@@ -45,6 +47,11 @@ func (f *fake) Fetch(_ context.Context, chatID, msgID string) ([]byte, string, e
 		return f.picture, msgID + ".png", nil
 	}
 	return []byte("BYTES-" + msgID), msgID + ".jpg", nil
+}
+
+func (f *fake) SendFile(_ context.Context, chatID, name string, data []byte, caption string) error {
+	f.sentFiles = append(f.sentFiles, fmt.Sprintf("%s:%s:%d:%s", chatID, name, len(data), caption))
+	return f.err
 }
 
 func (f *fake) Edit(_ context.Context, chatID, msgID, text string) error {
@@ -466,8 +473,13 @@ func TestQuitAndHelp(t *testing.T) {
 	enter(m, "/win 1")
 	enter(m, "/help")
 	drain(m)
-	if !strings.Contains(m.View(), "People are @name") {
-		t.Fatal("/help should print into the current window")
+	if m.cur != 0 || !strings.Contains(m.View(), "People are @name") {
+		t.Fatalf("/help from window 1 focuses the server window and prints there (cur=%d)", m.cur)
+	}
+	for _, n := range m.wins[1].notes {
+		if strings.Contains(n.text, "People are @name") {
+			t.Fatal("nothing printed into window 1")
+		}
 	}
 	typ(m, "/quit")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -1599,5 +1611,87 @@ func TestOpenShowsPicturesInTheTerminal(t *testing.T) {
 	}
 	if got, found, _ := m.opt.Store.Media("c1", "20"); !found || !bytes.Equal(got, f.picture) {
 		t.Fatal("the vault keeps the picture")
+	}
+}
+
+func TestSendFile(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	dir := t.TempDir()
+	pic := filepath.Join(dir, "cat.png")
+	if err := os.WriteFile(pic, []byte("PNG"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	enter(m, "/send "+pic)
+	if !m.isErr {
+		t.Fatal("server window")
+	}
+	enter(m, "/win @alice")
+	enter(m, "/send")
+	if !m.isErr || !strings.Contains(m.status, "usage") {
+		t.Fatalf("usage: %q", m.status)
+	}
+	enter(m, "/send "+filepath.Join(dir, "missing.png"))
+	if !m.isErr {
+		t.Fatal("missing file")
+	}
+	enter(m, "/send "+dir)
+	if !m.isErr || !strings.Contains(m.status, "regular") {
+		t.Fatalf("directory: %q", m.status)
+	}
+	cmd := enter(m, "/send "+pic+" my cat")
+	if cmd == nil || !strings.Contains(m.status, "sending photo cat.png") {
+		t.Fatalf("expected a send: %q", m.status)
+	}
+	m.Update(cmd())
+	if len(f.sentFiles) != 1 || f.sentFiles[0] != "c2:cat.png:3:my cat" || m.isErr {
+		t.Fatalf("sentFiles=%v status=%q", f.sentFiles, m.status)
+	}
+}
+
+func TestCompleteArgumentsAndPaths(t *testing.T) {
+	m := setup(t, newFake())
+	for typed, want := range map[string]string{
+		"/open o": "/open out ", "/win l": "/win list ", "/list -": "/list --show-deleted ",
+		"/open out @al": "/open out @alice ", "/win @al": "/win @alice ",
+	} {
+		m.input = []rune(typed)
+		m.complete()
+		if got := string(m.input); got != want {
+			t.Errorf("%q: got %q, want %q", typed, got, want)
+		}
+	}
+	dir := t.TempDir()
+	for _, n := range []string{"cat.png", "cow.jpg", "notes.txt"} {
+		if err := os.WriteFile(filepath.Join(dir, n), []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	m.input = []rune("/send " + filepath.Join(dir, "n"))
+	m.complete()
+	if got := string(m.input); got != "/send "+filepath.Join(dir, "notes.txt")+" " {
+		t.Fatalf("single file: %q", got)
+	}
+	m.input = []rune("/send " + filepath.Join(dir, "c"))
+	m.complete()
+	if got := string(m.input); got != "/send "+filepath.Join(dir, "c") {
+		t.Fatalf("no common prefix beyond c: %q", got)
+	}
+	m.complete() // second Tab lists them
+	if !strings.Contains(body(m), "cat.png  ") || !strings.Contains(body(m), "cow.jpg") {
+		t.Fatalf("list: %q", body(m))
+	}
+	m.input = []rune("/send " + filepath.Join(dir, "s"))
+	m.complete()
+	if got := string(m.input); got != "/send "+filepath.Join(dir, "sub")+"/" {
+		t.Fatalf("directory: %q", got)
+	}
+	m.input = []rune("/send " + filepath.Join(dir, "cat.png") + " my ca")
+	m.complete()
+	if got := string(m.input); got != "/send "+filepath.Join(dir, "cat.png")+" my ca" {
+		t.Fatalf("caption untouched: %q", got)
 	}
 }

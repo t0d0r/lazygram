@@ -48,6 +48,8 @@
 - [x] figlet banners at start and exit (specs/ui.md)
 - [x] /theme with nine colour schemes, persisted (specs/ui.md)
 - [x] pictures rendered in the terminal from memory; /open out for the viewer (specs/ui.md)
+- [x] /send <path> [caption] uploads photos and files; Tab completes paths and /open out, /win list (specs/ui.md)
+- [x] /help and F1 print into the server window and focus it (specs/ui.md)
 - [x] /edit and /delete for the last own message (specs/ui.md)
 - [x] public application registration shipped in the source for brew builds (specs/providers.md)
 - [x] attachments sealed in the vault; plain copies only while viewing; image names from content type (specs/storage.md)

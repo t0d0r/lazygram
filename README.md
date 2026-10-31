@@ -117,6 +117,7 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/stats`                   | client statistics                             |
 | `/me <text>`               | send an action line (`* you waves`)           |
 | `/msg <@user|#chan> <text>` | send to a chat, opening its window if needed |
+| `/send <path> [caption]`   | send a local file (Tab completes the path); pictures go as photos |
 | `/edit [text]`, `/delete`  | change or remove your last message in this chat |
 | `/names`                   | show chats by nick (`@alias`) or by name (`@Title`) |
 | `/press N`                 | press button N under the latest bot message; `/press <msg> N` for an older one |
@@ -125,7 +126,7 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/about`                   | version, author, build and libraries          |
 | `/fx`                      | running lights over links and buttons on/off  |
 | `/mouse`                   | mouse reporting on/off (off: drag selects text; or hold Shift/Option while dragging) |
-| `/refresh`, `/help`, `/quit` | sync now; print the help into the window; leave |
+| `/refresh`, `/help`, `/quit` | sync now; print the help into the server window; leave |
 
 In a chat window, type text and press **Ctrl-X** to send it to that chat;
 Enter is for commands (press Ctrl-X twice quickly to make Enter send in
@@ -142,13 +143,13 @@ viewer instead.
 
 | key                 | action                                             |
 |---------------------|----------------------------------------------------|
-| Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash |
+| Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash: commands, chats, themes, `/open out`, `/win list`, paths after `/send` |
 | Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
 | Alt-0 .. Alt-9      | window 0 .. 9 (Esc then the digit works too)       |
 | Up / Down           | input history (commands and sent lines)            |
 | PgUp / PgDn         | scroll a page; Home / End oldest / newest          |
 | Ctrl-R              | sync now                                           |
-| F1                  | print the help into the window                     |
+| F1                  | print the help into the server window              |
 | Esc                 | close the list or pager, else clear the input      |
 | Ctrl-X              | send the typed text to this window's chat          |
 | Ctrl-X twice        | toggle "Enter sends" for this window               |
@@ -193,7 +194,8 @@ It lists your 100 most recent dialogs and polls every 10 seconds
 with one request, fetching history only for chats whose newest message
 changed. Nothing older than the start is fetched unless you open a window
 or run `/last`. Short FLOOD_WAIT replies are honoured automatically.
-Sending happens only on Ctrl-X in a chat window. Details and limits:
+Sending happens only on Ctrl-X in a chat window or with `/send` for a
+local file. Details and limits:
 specs/providers.md.
 
 ## Security constraints

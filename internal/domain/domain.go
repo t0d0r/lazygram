@@ -65,6 +65,22 @@ type Media struct {
 	Name string `json:"name,omitempty"` // file name, when the service gives one
 }
 
+// IsImageName reports whether a file name has a raster image extension.
+func IsImageName(name string) bool {
+	switch strings.ToLower(filepathExt(name)) {
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp":
+		return true
+	}
+	return false
+}
+
+func filepathExt(name string) string {
+	if i := strings.LastIndex(name, "."); i >= 0 && i > strings.LastIndexAny(name, "/\\") {
+		return name[i:]
+	}
+	return ""
+}
+
 // Image reports whether the attachment is a picture a viewer can show.
 func (m *Media) Image() bool { return m != nil && (m.Kind == "photo" || m.Kind == "image") }
 

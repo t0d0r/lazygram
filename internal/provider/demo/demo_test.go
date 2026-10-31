@@ -155,3 +155,23 @@ func TestEditAndDeleteOwnLines(t *testing.T) {
 		}
 	}
 }
+
+func TestSendFileShowsUpAndFetchesBack(t *testing.T) {
+	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	p := newAt(func() time.Time { return clock })
+	first, _ := p.Sync(context.Background(), time.Time{})
+	if err := p.SendFile(context.Background(), "demo-3", "cat.png", []byte("PNGBYTES"), "look"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := p.Sync(context.Background(), first[len(first)-1].Time)
+	if len(got) != 1 || got[0].Media == nil || got[0].Media.Kind != "photo" || got[0].Text != "look" || got[0].Sender != "me" {
+		t.Fatalf("%+v", got)
+	}
+	data, name, err := p.Fetch(context.Background(), "demo-3", got[0].ID)
+	if err != nil || string(data) != "PNGBYTES" || name != "cat.png" {
+		t.Fatalf("%q %q %v", data, name, err)
+	}
+	if err := p.SendFile(context.Background(), "nope", "a.txt", nil, ""); err == nil {
+		t.Fatal("unknown chat")
+	}
+}

@@ -24,6 +24,7 @@ type Provider struct {
 	msgs  []domain.Message
 	now   func() time.Time
 	sent  int
+	files map[string][]byte // attachments sent from here, by message id
 }
 
 type line struct {
@@ -87,7 +88,7 @@ func New() *Provider { return newAt(time.Now) }
 
 func newAt(now func() time.Time) *Provider {
 	start := now().Truncate(time.Second)
-	p := &Provider{chats: chats, now: now}
+	p := &Provider{chats: chats, now: now, files: map[string][]byte{}}
 	for i, l := range script {
 		m := domain.Message{
 			ID:     fmt.Sprintf("%d", i+1),
@@ -198,6 +199,9 @@ func (p *Provider) Fetch(_ context.Context, chatID, msgID string) ([]byte, strin
 		if m.Media == nil {
 			return nil, "", fmt.Errorf("demo: message %s has no attachment", msgID)
 		}
+		if data, ok := p.files[msgID]; ok { // something sent from here
+			return data, m.Media.Name, nil
+		}
 		img := image.NewRGBA(image.Rect(0, 0, 160, 100))
 		for y := 0; y < 100; y++ {
 			for x := 0; x < 160; x++ {
@@ -243,4 +247,30 @@ func (p *Provider) Delete(_ context.Context, chatID, msgID string) error {
 		}
 	}
 	return fmt.Errorf("demo: no message %s in %s", msgID, chatID)
+}
+
+// SendFile implements provider.Provider: the attachment becomes a line
+// from "me" that the next Sync returns and Fetch serves back.
+func (p *Provider) SendFile(_ context.Context, chatID, name string, data []byte, caption string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	known := false
+	for _, c := range p.chats {
+		known = known || c.ID == chatID
+	}
+	if !known {
+		return fmt.Errorf("demo: unknown chat %s", chatID)
+	}
+	p.sent++
+	id := fmt.Sprintf("sent-%d", p.sent)
+	kind := "file"
+	if domain.IsImageName(name) {
+		kind = "photo"
+	}
+	p.files[id] = data
+	p.msgs = append(p.msgs, domain.Message{
+		ID: id, ChatID: chatID, Sender: "me", Text: caption, Time: p.now(),
+		Media: &domain.Media{Kind: kind, Name: name},
+	})
+	return nil
 }

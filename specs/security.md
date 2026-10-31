@@ -22,7 +22,9 @@
 - Sending is explicit: only text typed in a chat window and confirmed with
   Ctrl-X, or given to /me, is sent; Enter never sends. /edit and /delete
   touch only this account's newest message in the current chat, on the
-  user's command. Bot buttons are
+  user's command. /send reads only the one local regular file named on
+  the command line (64 MiB cap) and sends it to the current chat; Tab
+  completion after /send lists directory entries but reads no file. Bot buttons are
   pressed only by /press; link buttons are printed, never opened.
 - Attachments are downloaded only on /open or a click, never on arrival,
   and stored encrypted in the vault (hashed names, same keys as the

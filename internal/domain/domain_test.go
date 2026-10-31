@@ -181,3 +181,11 @@ func TestLastOwnAndRemove(t *testing.T) {
 		t.Fatal("remove of unknown is a no-op")
 	}
 }
+
+func TestIsImageName(t *testing.T) {
+	for name, want := range map[string]bool{"a.JPG": true, "dir/b.png": true, "c.webp": true, "d.pdf": false, "noext": false, "x.tar.gz": false, "../a.gif": true} {
+		if IsImageName(name) != want {
+			t.Errorf("%q: want %v", name, want)
+		}
+	}
+}

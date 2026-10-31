@@ -95,6 +95,7 @@ func (c *MTProto) run(ctx context.Context) error {
 		raw := tg.NewClient(cl)
 		c.svc = newService(floodAPI{api: raw, sleep: sleepCtx})
 		c.svc.files = raw
+		c.svc.upload = uploadWith(raw)
 		close(c.ready)
 		<-ctx.Done()
 		return nil
@@ -176,6 +177,25 @@ func (c *MTProto) Fetch(ctx context.Context, chatID, msgID string) ([]byte, stri
 		return nil, "", err
 	}
 	return c.svc.download(ctx, ent, id, msgID)
+}
+
+// SendFile implements Client. Only the lookup holds the client lock; the
+// upload runs unlocked.
+func (c *MTProto) SendFile(ctx context.Context, chatID, name string, data []byte, caption string) error {
+	if err := c.wait(ctx); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	ent, err := c.svc.entity(ctx, chatID)
+	up := c.svc.upload
+	c.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	if up == nil {
+		return errors.New("telegram: uploads are not available")
+	}
+	return up(ctx, ent.peer, name, data, caption, domain.IsImageName(name))
 }
 
 // Edit implements Client.

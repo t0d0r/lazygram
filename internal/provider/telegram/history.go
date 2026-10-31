@@ -47,8 +47,9 @@ type api interface {
 type service struct {
 	api api
 
-	files downloader.Client                          // nil: attachments cannot be fetched
-	wait  func(context.Context, time.Duration) error // sleeps; tests replace it
+	files  downloader.Client                          // nil: attachments cannot be fetched
+	upload uploadFunc                                 // nil: files cannot be sent
+	wait   func(context.Context, time.Duration) error // sleeps; tests replace it
 
 	known map[string]entity // chat id -> entity, filled by Dialogs
 	top   map[string]int    // chat id -> top message id already fetched

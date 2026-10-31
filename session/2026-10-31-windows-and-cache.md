@@ -244,3 +244,12 @@ at the hidden password prompt takes effect only after Enter.
 - README screenshots: `docs/screenshot.svg` and `docs/screenshot-photo.svg`,
   made from tmux captures of the demo (ANSI to SVG converter kept in the
   session scratchpad, not in the repo).
+- `/send <path> [caption]`: `Provider.SendFile`; Telegram uploads with
+  gotd's uploader (4 threads, outside the client lock,
+  `internal/provider/telegram/upload.go`) and sends through the message
+  sender as photo (image extension) or document; demo keeps sent bytes so
+  Fetch serves them back. 64 MiB cap, regular files only, `~` expands.
+- Tab completion: fixed first words per command (`/open out`, `/win list`,
+  `/list --show-deleted`) and local paths after `/send` (directories end
+  with `/` and descend on the next Tab; listing shows base names).
+- `/help` and F1 switch to the server window and print there.

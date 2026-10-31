@@ -12,28 +12,29 @@ type Kind int
 
 // Command kinds.
 const (
-	Help    Kind = iota
-	Quit         // leave
-	Refresh      // sync now
-	List         // print the chats; Arg filters
-	Win          // switch or open a window: Arg is a number or a chat name; empty lists windows
-	Close        // close window Arg (number), or the current one
-	Last         // fetch the last N messages for the current window's chat
-	Search       // open the local history pager; Arg is the search text
-	Stats        // print client statistics into the current window
-	Whois        // print what is known about a chat (Arg) or the current window's chat
-	Me           // send an action line ("* text") to the current window's chat
-	Press        // press a bot button: Arg is "N" or "<message id> N"
-	Open         // fetch and open the attachment of the latest message with one, or of message Arg
-	Theme        // list the colour themes, or switch to Arg
-	Move         // move the current window to position Arg
-	Msg          // send a message: Arg is "<@user|#chan> <text>"; the window opens if missing
-	About        // print version, author and build information
-	Fx           // toggle the running lights over clickable text
-	Mouse        // toggle mouse reporting (off lets the terminal select text)
-	Edit         // edit the last own message in this window: Arg is the new text (empty: prefill)
-	Delete       // delete the last own message in this window
-	Nicks        // toggle showing chats by nick (@alias) or by name (@title)
+	Help     Kind = iota
+	Quit          // leave
+	Refresh       // sync now
+	List          // print the chats; Arg filters
+	Win           // switch or open a window: Arg is a number or a chat name; empty lists windows
+	Close         // close window Arg (number), or the current one
+	Last          // fetch the last N messages for the current window's chat
+	Search        // open the local history pager; Arg is the search text
+	Stats         // print client statistics into the current window
+	Whois         // print what is known about a chat (Arg) or the current window's chat
+	Me            // send an action line ("* text") to the current window's chat
+	Press         // press a bot button: Arg is "N" or "<message id> N"
+	Open          // fetch and open the attachment of the latest message with one, or of message Arg
+	Theme         // list the colour themes, or switch to Arg
+	Move          // move the current window to position Arg
+	Msg           // send a message: Arg is "<@user|#chan> <text>"; the window opens if missing
+	About         // print version, author and build information
+	Fx            // toggle the running lights over clickable text
+	Mouse         // toggle mouse reporting (off lets the terminal select text)
+	Edit          // edit the last own message in this window: Arg is the new text (empty: prefill)
+	Delete        // delete the last own message in this window
+	Nicks         // toggle showing chats by nick (@alias) or by name (@title)
+	SendFile      // send a local file: Arg is "<path> [caption]"
 )
 
 // Command is a parsed slash command.
@@ -65,6 +66,7 @@ var table = map[string]Kind{
 	"edit":  Edit, "e": Edit,
 	"delete": Delete, "del": Delete, "rm": Delete,
 	"names": Nicks, "nicks": Nicks,
+	"send": SendFile, "file": SendFile, "upload": SendFile,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -113,6 +115,7 @@ const HelpText = `Commands
   /stats                 client statistics
   /me <text>             send an action line
   /msg <@user|#chan> <text>  send to that chat, opening its window
+  /send <path> [caption] send a local file; pictures go as photos (Tab completes the path)
   /edit [text]           edit your last message here (no text: put it in the prompt)
   /delete                delete your last message here, for everyone
   /press N | <msg> N     press a bot button (numbers shown under it)

@@ -629,3 +629,25 @@ func TestEditAndDelete(t *testing.T) {
 		t.Fatal("bad id")
 	}
 }
+
+func TestSendFileUsesTheUploader(t *testing.T) {
+	f := newFakeAPI()
+	c := &MTProto{cfg: testCfg, ready: make(chan struct{})}
+	c.svc = newService(f)
+	var got []string
+	c.svc.upload = func(_ context.Context, peer tg.InputPeerClass, name string, data []byte, caption string, photo bool) error {
+		got = append(got, fmt.Sprintf("%T:%s:%d:%s:%v", peer, name, len(data), caption, photo))
+		return nil
+	}
+	close(c.ready)
+	if err := c.SendFile(context.Background(), "telegram:7", "cat.JPG", []byte("abc"), "hi"); err != nil || len(got) != 1 || got[0] != "*tg.InputPeerUser:cat.JPG:3:hi:true" {
+		t.Fatalf("%v %v", err, got)
+	}
+	if err := c.SendFile(context.Background(), "telegram:-5", "notes.txt", []byte("abc"), ""); err != nil || got[1] != "*tg.InputPeerChat:notes.txt:3::false" {
+		t.Fatalf("%v %v", err, got)
+	}
+	c.svc.upload = nil
+	if err := c.SendFile(context.Background(), "telegram:7", "a.png", []byte("x"), ""); err == nil {
+		t.Fatal("no uploader")
+	}
+}

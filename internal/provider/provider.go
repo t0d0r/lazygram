@@ -34,6 +34,9 @@ type Provider interface {
 	// file name (extension at least) for the viewer. Nothing is written to
 	// disk by the provider; the caller keeps it encrypted.
 	Fetch(ctx context.Context, chatID, msgID string) (data []byte, name string, err error)
+	// SendFile uploads data as a photo (when name has an image extension)
+	// or as a file, with an optional caption.
+	SendFile(ctx context.Context, chatID, name string, data []byte, caption string) error
 	// Edit replaces the text of one of this account's messages.
 	Edit(ctx context.Context, chatID, msgID, text string) error
 	// Delete removes one of this account's messages for everyone.

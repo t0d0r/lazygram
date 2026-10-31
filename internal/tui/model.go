@@ -1177,7 +1177,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyCtrlR:
 		return m, m.refresh()
 	case tea.KeyF1:
-		m.help()
+		return m, m.help()
 	case tea.KeySpace:
 		m.input = append(m.input, ' ')
 	case tea.KeyRunes:
@@ -1340,7 +1340,7 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 	w := m.wins[m.cur]
 	switch c.Kind {
 	case command.Help:
-		m.help()
+		return m, m.help()
 	case command.Quit:
 		m.quitting = true
 		return m, tea.Quit
@@ -1372,6 +1372,8 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.closeWin(i)
 	case command.Msg:
 		return m.msg(c.Arg)
+	case command.SendFile:
+		return m.sendFile(c.Arg)
 	case command.Edit, command.Delete:
 		if w.chatID == "" {
 			m.setErr("the server window has no chat; /win to a chat first")
@@ -1595,6 +1597,62 @@ func (m *Model) msg(arg string) (tea.Model, tea.Cmd) {
 	return m, tea.Batch(cmds...)
 }
 
+// sendFile implements /send <path> [caption]: the file is read here and
+// sent to the current window's chat, as a photo when its name says so.
+func (m *Model) sendFile(arg string) (tea.Model, tea.Cmd) {
+	w := m.wins[m.cur]
+	if w.chatID == "" {
+		m.setErr("the server window has no chat; /win to a chat first")
+		return m, nil
+	}
+	path, caption, _ := strings.Cut(strings.TrimSpace(arg), " ")
+	if path == "" {
+		m.setErr("usage: /send <path> [caption]")
+		return m, nil
+	}
+	path = expandHome(path)
+	st, err := os.Stat(path)
+	switch {
+	case err != nil:
+		m.setErr("send: " + err.Error())
+		return m, nil
+	case !st.Mode().IsRegular():
+		m.setErr("send: not a regular file")
+		return m, nil
+	case st.Size() > 64<<20:
+		m.setErr("send: files are capped at 64 MiB")
+		return m, nil
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		m.setErr("send: " + err.Error())
+		return m, nil
+	}
+	name := filepath.Base(path)
+	kind := "file"
+	if domain.IsImageName(name) {
+		kind = "photo"
+	}
+	m.setInfo(fmt.Sprintf("sending %s %s (%d KiB) to %s...", kind, name, (len(data)+1023)/1024, m.nameOf(w.chatID)))
+	p := m.opt.Provider
+	chatID := w.chatID
+	return m, func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		return sentMsg{chatID: chatID, err: p.SendFile(ctx, chatID, name, data, strings.TrimSpace(caption))}
+	}
+}
+
+// expandHome replaces a leading ~/ with the home directory.
+func expandHome(path string) string {
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		if home, err := os.UserHomeDir(); err == nil {
+			return filepath.Join(home, path[1:])
+		}
+	}
+	return path
+}
+
 // stats prints client statistics into the current window.
 func (m *Model) stats() {
 	w := m.wins[m.cur]
@@ -1675,11 +1733,13 @@ func (m *Model) whois(arg string) {
 	m.note(w, fmt.Sprintf("  %s, %d messages this session, %d cached, %s", win, len(msgs), cached, last))
 }
 
-// help prints the command and key reference into the current window,
-// line by line with a small delay, like a terminal on a slow line.
-func (m *Model) help() {
-	w := m.wins[m.cur]
-	m.slowPrint(w, strings.Split(command.HelpText+"\n"+keyHelp, "\n"))
+// help prints the command and key reference into the server window, line
+// by line with a small delay, like a terminal on a slow line, and focuses
+// that window so the text is in view wherever /help was typed.
+func (m *Model) help() tea.Cmd {
+	cmd := m.switchTo(0)
+	m.slowPrint(m.wins[0], strings.Split(command.HelpText+"\n"+keyHelp, "\n"))
+	return cmd
 }
 
 // slowPrint queues plain lines for a window; slowTick delivers them.
@@ -1749,11 +1809,20 @@ type completion struct {
 	word string
 }
 
+// argWords are the fixed words a command takes as its first argument; the
+// chat names still complete after them (/win list, /open out 1234).
+var argWords = map[string][]string{
+	"/open": {"out"}, "/o": {"out"},
+	"/win": {"list"}, "/w": {"list"}, "/window": {"list"},
+	"/list": {"--show-deleted"}, "/l": {"--show-deleted"},
+}
+
 // complete expands the word at the end of the input the way bash does: a
-// command name when the line starts with one, a theme after /theme, else a
-// chat name (@user or #channel). One candidate is filled in with a space;
-// several are extended to their longest common prefix, and a second Tab
-// that cannot extend further prints them into the window.
+// command name when the line starts with one, a theme after /theme, a
+// command's fixed words (/open out, /win list), a local path after /send,
+// else a chat name (@user or #channel). One candidate is filled in with a
+// space; several are extended to their longest common prefix, and a second
+// Tab that cannot extend further prints them into the window.
 func (m *Model) complete() {
 	start := 0
 	for i := len(m.input) - 1; i >= 0; i-- {
@@ -1764,6 +1833,7 @@ func (m *Model) complete() {
 	}
 	word := strings.ToLower(string(m.input[start:]))
 	var cands []string
+	shown := func(s string) string { return s } // how a listed candidate prints
 	line := strings.ToLower(string(m.input[:start]))
 	switch {
 	case start == 0 && strings.HasPrefix(word, "/"):
@@ -1778,7 +1848,28 @@ func (m *Model) complete() {
 				cands = append(cands, n)
 			}
 		}
+	case strings.HasPrefix(line, "/send ") || strings.HasPrefix(line, "/file ") || strings.HasPrefix(line, "/upload "):
+		if strings.Count(line, " ") > 1 { // the caption is free text
+			return
+		}
+		cands = pathCandidates(string(m.input[start:]))
+		shown = func(s string) string { // bash lists the names, not the paths
+			if strings.HasSuffix(s, "/") {
+				return filepath.Base(s) + "/"
+			}
+			return filepath.Base(s)
+		}
+		if len(cands) == 1 && strings.HasSuffix(cands[0], "/") { // keep going into the directory
+			m.input = append(m.input[:start], []rune(cands[0])...)
+			m.comp = nil
+			return
+		}
 	default:
+		for _, n := range argWords[strings.TrimSpace(line)] {
+			if strings.HasPrefix(n, word) {
+				cands = append(cands, n)
+			}
+		}
 		bare := strings.TrimLeft(word, "@#")
 		seen := map[string]bool{}
 		for _, c := range m.chats {
@@ -1810,11 +1901,42 @@ func (m *Model) complete() {
 		return
 	}
 	if m.comp != nil && m.comp.word == prefix { // second Tab: list them
-		m.note(m.wins[m.cur], strings.Join(cands, "  "))
+		names := make([]string, len(cands))
+		for i, c := range cands {
+			names[i] = shown(c)
+		}
+		m.note(m.wins[m.cur], strings.Join(names, "  "))
 		m.comp = nil
 		return
 	}
 	m.comp = &completion{word: prefix}
+}
+
+// pathCandidates lists the local files and directories that start with
+// the typed path (~ expands; directories end with /), the way a shell does.
+func pathCandidates(typed string) []string {
+	dir, base := filepath.Split(expandHome(typed))
+	shown := typed[:len(typed)-len(base)] // keep ~/ as typed
+	if dir == "" {
+		dir = "."
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return nil
+	}
+	var out []string
+	for _, e := range entries {
+		n := e.Name()
+		if !strings.HasPrefix(n, base) || (base == "" && strings.HasPrefix(n, ".")) {
+			continue
+		}
+		if e.IsDir() {
+			n += "/"
+		}
+		out = append(out, shown+n)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // commonPrefix is the longest prefix shared by all strings (case kept from

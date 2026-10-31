@@ -93,8 +93,8 @@ titles and notices are stripped of control characters before rendering.
   (all chats in window 0) with the full date on every line; typed text is a
   live case-insensitive search over text and sender with matches
   highlighted; the status line shows `N of M messages`; Esc returns.
-`/help` and F1 print the command and key reference into the current window
-as plain lines (no time stamp or marker; command lines start after two
+`/help` and F1 focus the server window (window 0) and print the command
+and key reference there as plain lines (no time stamp or marker; command lines start after two
 spaces), one line every 28 ms like a terminal on a slow serial line;
 there is no separate help view.
 
@@ -102,7 +102,7 @@ there is no separate help view.
 
 | command                       | action                                               |
 |-------------------------------|------------------------------------------------------|
-| `/help`, `/?`                 | print the help into the current window               |
+| `/help`, `/?`                 | focus the server window and print the help there     |
 | `/quit`, `/q`                 | leave                                                |
 | `/refresh`, `/r`              | sync now                                             |
 | `/list [text]`, `/ls`         | selectable chat list; `--show-deleted` includes deleted accounts |
@@ -117,6 +117,7 @@ there is no separate help view.
 | `/stats`                      | print client statistics                              |
 | `/me <text>`                  | send `* text` to this window's chat (shown as `* you text`) |
 | `/msg <@user|#chan> <text>`   | send to that chat, opening and focusing its window if missing |
+| `/send <path> [caption]`      | send a local file to this chat (pictures as photos), with an optional caption |
 | `/edit [text]`                | edit your last message in this chat; without text it is put in the prompt as `/edit <text>` |
 | `/delete`                     | delete your last message in this chat, for everyone  |
 | `/press N`, `/press <msg> N`  | press a bot button (see Buttons)                     |
@@ -133,6 +134,19 @@ Short forms: `/w`, `/j`, `/join`, `/query` for `/win`; `/wc`, `/part` for
 `/info` for `/whois`; `/uptime` for `/stats`; `/action` for `/me`. Errors
 show in the status line in red; provider errors also land in the server
 window.
+
+## Editing and deleting
+
+## Sending files
+
+`/send <path> [caption]` reads a local file (`~` expands; regular files
+only, 64 MiB cap) and sends it to the current window's chat through
+`Provider.SendFile`: a name with a raster image extension (jpg, jpeg,
+png, gif, webp) goes as a photo, anything else as a document with its
+base name and mime type. The status shows `sending photo name (N KiB) to
+@chat...` while the upload runs; the message then arrives through sync
+like any other and shows as `[photo]`/`[file: name]`. In the server
+window `/send` is an error. Nothing is read without the command.
 
 ## Editing and deleting
 
@@ -256,7 +270,7 @@ status line and the window.
 | PgUp / PgDn          | scroll a page (the wheel scrolls three lines)     |
 | Home / End           | oldest / newest                                   |
 | Ctrl-R               | sync now                                          |
-| F1                   | print the help into the window                    |
+| F1                   | focus the server window and print the help there  |
 | Esc                  | close the list or pager, else clear the input     |
 | Ctrl-X               | send the typed text to this window's chat         |
 | Ctrl-U / Ctrl-W      | clear the input / delete the last word            |
@@ -276,12 +290,18 @@ On an empty prompt in a window, Tab switches to the next window and
 Shift-Tab to the previous one. With text typed, Tab completes the last
 word of the input like bash. A line that is one
 word starting with `/` completes command names; after `/theme ` theme
-names; otherwise chat names: every non-deleted chat whose `@name`/`#name`
-starts with the word, or whose bare alias starts with it when the word has
-no sigil (then the sigil is added). One candidate is filled in with a
-trailing space; several are extended to their longest common prefix, and
-a second Tab that cannot extend further prints the candidates into the
-window as a notice. There is no cycling.
+names; after `/send ` (and its aliases) local paths: entries of the typed
+directory that start with the typed base name, `~` expanded, hidden files
+only when a dot is typed, directories filled in with a trailing `/` and no
+space so the next Tab descends; the caption after the path is free text
+and never completed. Otherwise a command's fixed first words (`/open out`,
+`/win list`, `/list --show-deleted`) and chat names: every non-deleted
+chat whose `@name`/`#name` starts with the word, or whose bare alias
+starts with it when the word has no sigil (then the sigil is added). One
+candidate is filled in with a trailing space; several are extended to
+their longest common prefix, and a second Tab that cannot extend further
+prints the candidates into the window as a notice (base names for paths).
+There is no cycling.
 
 ## Scrolling
 
