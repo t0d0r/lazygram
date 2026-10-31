@@ -34,7 +34,8 @@ in a searchable pager. Feature goals are inspired by nchat.
 - Looks: nine colour themes, BitchX-style banners that roll in like a slow
   serial line, a random parting face and session statistics at exit
 - `lazygram demo` with invented data, `lazygram update` (brew or binary,
-  checked against SHA256SUMS), static binaries for Linux and macOS
+  checked against SHA256SUMS), static binaries for Linux and macOS, an
+  Arch Linux / Omarchy package recipe
 
 ## Screenshots
 
@@ -48,6 +49,12 @@ with every chat interleaved, bot buttons and a `[photo]` token.
 ```sh
 brew install t0d0r/tap/lazygram
 ```
+
+Arch Linux and Omarchy: an Arch package recipe lives in
+`packaging/omarchy/lazygram` (`makepkg -si` there builds and installs it;
+once it is in pkgs.omarchy.org, `omarchy pkg add lazygram`). See
+[docs/arch-omarchy.md](docs/arch-omarchy.md) for launching from the Omarchy
+menu, troubleshooting, upgrade and uninstall.
 
 Or download a static binary for Linux or macOS from the
 [releases](https://github.com/t0d0r/lazygram/releases) (`uname -m`:
@@ -69,7 +76,9 @@ Update later with `lazygram update`: it upgrades through brew when
 installed that way, otherwise replaces the binary with the latest release
 after checking it against the release's SHA256SUMS. `lazygram update -check`
 only reports; `-yes` skips the question. A build from source is never
-replaced.
+replaced, and neither is a binary installed by a package manager (pacman):
+those update through the package manager (from v0.4.15; on 0.4.14 the
+command stops with a permission error, do not rerun it with sudo).
 
 ## Quick start
 

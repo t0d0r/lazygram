@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"lazygram/internal/config"
+	"lazygram/internal/update"
 )
 
 func TestNotLinkedExitsWithHint(t *testing.T) {
@@ -152,14 +153,36 @@ func TestFlagsAfterSubcommand(t *testing.T) {
 }
 
 func TestUpdateHint(t *testing.T) {
-	if updateHint("dev", time.Second) != "" || updateHint("v0.3.0-2-gabc", time.Second) != "" {
+	c := update.New()
+	c.HTTP.Timeout = 500 * time.Millisecond
+	if updateHint(c, "dev", update.Binary) != "" || updateHint(c, "v0.3.0-2-gabc", update.Package) != "" {
 		t.Fatal("builds from source get no hint")
 	}
 	// A release build with no network answers quietly within the timeout.
 	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:9") // nothing listens there
 	start := time.Now()
-	if h := updateHint("v0.1.0", 500*time.Millisecond); h != "" {
+	if h := updateHint(c, "v0.1.0", update.Binary); h != "" {
 		t.Fatalf("unexpected hint: %q", h)
+	}
+	if time.Since(start) > 3*time.Second {
+		t.Fatal("the check must stay brief")
+	}
+	// With a release in reach, the hint names the way to update: the
+	// command for a plain binary, the package manager for a packaged one.
+	srv := releaseServer(t, "v9.9.9", nil)
+	defer srv.Close()
+	c.Base = srv.URL
+	if h := updateHint(c, "v0.1.0", update.Binary); !strings.Contains(h, "v0.1.0 -> v9.9.9") || !strings.Contains(h, "run: lazygram update") {
+		t.Fatalf("binary hint: %q", h)
+	}
+	if h := updateHint(c, "v0.1.0", update.Package); !strings.Contains(h, "pacman -Syu") || strings.Contains(h, "lazygram update") {
+		t.Fatalf("package hint: %q", h)
+	}
+	if h := updateHint(c, "v9.9.9", update.Package); h != "" {
+		t.Fatalf("up to date: %q", h)
+	}
+	if installMethod() == update.Package {
+		t.Fatal("a test binary is not a packaged install")
 	}
 	if time.Since(start) > 3*time.Second {
 		t.Fatal("the check must stay brief")

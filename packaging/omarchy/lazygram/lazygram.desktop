@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.5
+Type=Application
+Name=lazygram
+GenericName=Telegram client
+Comment=Terminal Telegram client with IRC-style windows
+TryExec=xdg-terminal-exec
+Exec=xdg-terminal-exec --app-id=org.omarchy.lazygram -e sh -c "lazygram || { echo; echo Press Enter to close; read -r _; }"
+Icon=lazygram
+Terminal=false
+Categories=Network;Chat;InstantMessaging;ConsoleOnly;
+Keywords=chat;messaging;im;irc;tui;terminal;
+StartupNotify=true

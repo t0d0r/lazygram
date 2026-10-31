@@ -136,7 +136,7 @@ func run(args []string) error {
 	case "login":
 		return runLogin(o)
 	case "update":
-		return runUpdate(o.check, o.yes, os.Stdin, os.Stdout)
+		return runUpdate(update.New(), version, update.Executable, o.check, o.yes, os.Stdin, os.Stdout)
 	default:
 		fs.Usage()
 		return exitError{fmt.Sprintf("lazygram: unknown command %q\n", cmd), 2}
@@ -231,21 +231,36 @@ func runTelegram(o options) error {
 	return runTUI(o, prov, st, 10*time.Second)
 }
 
-// updateHint checks GitHub for a newer release, briefly and quietly: a
-// release build gets a one-line hint when a newer version exists, a build
-// from source or an unreachable network gets nothing.
-func updateHint(version string, timeout time.Duration) string {
+// updateHint asks c for a newer release, briefly and quietly: a release
+// build gets a one-line hint when a newer version exists, a build from
+// source or an unreachable network gets nothing. A packaged install (pacman
+// on Arch Linux and Omarchy) is pointed at its package manager, since
+// lazygram update never replaces a file a package manager owns. The caller
+// sets the client's timeout.
+func updateHint(c *update.Client, version string, method update.Method) string {
 	current, release := update.Parse(version)
 	if !release {
 		return ""
 	}
-	c := update.New()
-	c.HTTP.Timeout = timeout
 	latest, err := c.Latest()
 	if err != nil || current.Compare(latest) >= 0 {
 		return ""
 	}
-	return fmt.Sprintf("a newer release is available: %s -> %s (run: lazygram update)", current, latest)
+	how := "run: lazygram update"
+	if method == update.Package {
+		how = "update it with the package manager, for example sudo pacman -Syu"
+	}
+	return fmt.Sprintf("a newer release is available: %s -> %s (%s)", current, latest, how)
+}
+
+// installMethod tells how the running binary was installed. A path that
+// cannot be resolved counts as a plain binary.
+func installMethod() update.Method {
+	exe, err := update.Executable()
+	if err != nil {
+		return update.Binary
+	}
+	return update.Detect(exe)
 }
 
 // sessionHint adds the way out of a session file that cannot be used.
@@ -305,7 +320,9 @@ func runTUI(o options, prov provider.Provider, st *store.Store, poll time.Durati
 		width, summary = m.Width(), m.Summary()
 	}
 	tui.PrintSlowly(os.Stdout, tui.ExitBanner(version, width, summary))
-	if hint := updateHint(version, 3*time.Second); hint != "" {
+	c := update.New()
+	c.HTTP.Timeout = 3 * time.Second
+	if hint := updateHint(c, version, installMethod()); hint != "" {
 		fmt.Println(hint)
 	}
 	return nil

@@ -156,13 +156,36 @@ func TestDetect(t *testing.T) {
 	cases := map[string]Method{
 		"/opt/homebrew/Cellar/lazygram/0.3.0/bin/lazygram":              Homebrew,
 		"/home/linuxbrew/.linuxbrew/Cellar/lazygram/0.3.0/bin/lazygram": Homebrew,
+		"/usr/local/Cellar/lazygram/0.3.0/bin/lazygram":                 Homebrew,
 		"/usr/local/bin/lazygram":                                       Binary,
 		"/home/u/.local/bin/lazygram":                                   Binary,
+		"/opt/lazygram/bin/lazygram":                                    Binary,
+		"/usr/bin/lazygram":                                             Package,
+		"/usr/lib/lazygram/lazygram":                                    Package,
 	}
 	for exe, want := range cases {
 		if got := Detect(exe); got != want {
 			t.Errorf("Detect(%q) = %s, want %s", exe, got, want)
 		}
+	}
+}
+
+// TestInstallPackageRefuses: a binary owned by the package manager is never
+// replaced, whatever the release says, and nothing is downloaded for it.
+func TestInstallPackageRefuses(t *testing.T) {
+	c := New()
+	c.Base = "http://127.0.0.1:1" // nothing listens: a download attempt would fail loudly
+	dir := t.TempDir()
+	exe := filepath.Join(dir, "lazygram")
+	if err := os.WriteFile(exe, []byte("packaged"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	err := c.Install(Package, Version{9, 9, 9}, exe)
+	if err == nil || !strings.Contains(err.Error(), "package manager") {
+		t.Fatalf("Install(Package) = %v", err)
+	}
+	if got, _ := os.ReadFile(exe); string(got) != "packaged" {
+		t.Errorf("binary changed: %q", got)
 	}
 }
 
