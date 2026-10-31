@@ -57,6 +57,8 @@
 - [x] light themes: light, solarized-light, gruvbox-light (specs/ui.md)
 - [x] /redraw (/clear) drops a window's notes, keeps its messages (specs/ui.md)
 - [x] /help and F1 print into the server window and focus it (specs/ui.md)
+- [x] /help lists the commands only and names /keys; /keys prints the key reference the same way (specs/ui.md)
+- [x] /help spells out every parser alias; tests hold the table and the help text together (specs/ui.md)
 - [x] block-face banners (figlet banner3/chunky); start-up windows and the exit banner print line by line (specs/ui.md)
 - [x] exit banner picks one of several faces at random (own pixel font, figlet, wordmark); a window's first history rolls in (specs/ui.md)
 - [x] /edit and /delete for the last own message (specs/ui.md)

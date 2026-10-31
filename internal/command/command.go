@@ -37,6 +37,7 @@ const (
 	Nicks         // toggle showing chats by nick (@alias) or by name (@title)
 	SendFile      // send a local file: Arg is "<path> [caption]"
 	Redraw        // drop the notices and pictures from the window, keep the messages
+	Keys          // print the keyboard shortcut reference into the server window
 )
 
 // Command is a parsed slash command.
@@ -71,6 +72,7 @@ var table = map[string]Kind{
 	"names": Nicks, "nicks": Nicks,
 	"send": SendFile, "file": SendFile, "upload": SendFile,
 	"redraw": Redraw, "clear": Redraw,
+	"keys": Keys, "shortcuts": Keys, "bindings": Keys,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -101,36 +103,59 @@ func Names() []string {
 	return out
 }
 
-// HelpText lists the commands for /help. Lines stay under 70 columns so
-// they fit an 80-column window after the notice indent.
+// HelpText lists the commands for /help: every spelling the parser table
+// accepts appears as a slash-prefixed word, the short forms on an "also"
+// continuation of their command (TestHelpTextCoversEveryName enforces
+// it). The keys are a separate list, printed by /keys, and the last line
+// says so. Lines stay under 70 columns so they fit an 80-column window
+// after the notice indent.
 const HelpText = `Commands
-  /help, /?              this help
-  /quit, /q              leave lazygram
-  /refresh, /r           sync now
-  /list [text]           chat list: @people and #channels
+  /help, /?              this command list (F1 too); also /h
+  /keys                  the keyboard shortcuts;
+                         also /shortcuts, /bindings
+  /quit, /q              leave lazygram; also /exit
+  /refresh, /r           sync now; also /sync
+  /list [text]           chat list: @people and #channels;
+                         also /ls, /chats
   /win, /win list        list of the open windows
   /win N                 switch to window N (0 is the server window)
   /win @user | #chan     open or switch to that chat's window
-  /close [N]             close a window
-  /move N                move this window to position N
-  /last [N]              fetch the last N messages here (default 10)
-  /search [text]         page through this chat's local history
-  /whois [name]          what is known about a chat
-  /stats                 client statistics
-  /me <text>             send an action line
-  /msg <@user|#chan> <text>  send to that chat, opening its window
-  /send <path> [caption] send a local file; pictures go as photos (Tab completes the path)
-  /redraw, /clear        drop the notices and pictures from this window; the messages stay
-  /edit [text]           edit your last message here (no text: put it in the prompt)
-  /delete                delete your last message here, for everyone
-  /press N | <msg> N     press a bot button (numbers shown under it)
-  /open [msg]            fetch a photo and show it here, in the terminal
+                         /win is also /w, /window, /j, /join, /query
+  /close [N]             close a window; also /wc, /part
+  /move N                move this window to position N; also /mv
+  /last [N]              fetch the last N messages here (default 10);
+                         also /history, /hist
+  /search [text]         page through this chat's local history;
+                         also /find, /log
+  /whois [name]          what is known about a chat; also /wi, /info
+  /stats                 client statistics; also /uptime
+  /me <text>             send an action line; also /action
+  /msg <@user|#chan> <text>  send to that chat, opening its window;
+                         also /say, /tell
+  /send <path> [caption] send a local file; pictures go as photos
+                         (Tab completes the path); also /file, /upload
+  /redraw, /clear        drop the notices and pictures from this
+                         window; the messages stay
+  /edit [text]           edit your last message here
+                         (no text: put it in the prompt); also /e
+  /delete                delete your last message here, for everyone;
+                         also /del, /rm
+  /press N | <msg> N     press a bot button (numbers shown under it);
+                         also /button, /btn
+  /open [msg]            fetch a photo and show it in the terminal
                          (a file: decrypt a copy and show where)
   /open out [msg]        the same, but in the system viewer
-  /theme [name]          list the colour themes, or switch to one
-  /about                 version, author and build information
-  /fx                    running lights over links and buttons on or off
-  /mouse                 mouse reporting on or off (off: the terminal selects)
-  /clip [mode]           where a mouse selection is copied: auto (terminal
-                         and system tool), osc52, tool or off (kept)
-  /names                 show chats by nick (@alias) or by name (@Title)`
+                         /open is also /fetch, /download
+  /theme [name]          list the colour themes, or switch to one;
+                         also /colors, /colours
+  /about                 version, author and build information;
+                         also /version
+  /fx                    running lights over links and buttons
+                         on or off; also /lights, /anim
+  /mouse                 mouse reporting on or off
+                         (off: the terminal selects text)
+  /clip [mode]           selection clipboard: auto (terminal/tool),
+                         osc52, tool or off (kept); also /clipboard
+  /names                 show chats by nick (@alias) or name (@Title);
+                         also /nicks
+Keyboard shortcuts: type /keys.`

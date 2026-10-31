@@ -15,6 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"lazygram/internal/command"
 	"lazygram/internal/domain"
 	"lazygram/internal/logo"
 	"lazygram/internal/provider"
@@ -455,11 +456,68 @@ func TestHelpPrintsSlowlyWithoutIndent(t *testing.T) {
 	}
 	drain(m)
 	v := strings.Join(m.lines(), "\n")
-	if !strings.Contains(v, "\n  /quit, /q") || !strings.Contains(v, "\nCommands") || !strings.Contains(v, "\nKeys") {
+	if !strings.Contains(v, "\n  /quit, /q") || !strings.Contains(v, "\nCommands") {
 		t.Fatalf("command lines start after two spaces, headers at the margin:\n%s", v)
 	}
 	if strings.Contains(v, "-!- Commands") {
 		t.Fatal("no marker on help lines")
+	}
+	if strings.Contains(v, "\nKeys") || strings.Contains(v, "Ctrl-N / Ctrl-P") || strings.Contains(v, "People are @name") {
+		t.Fatalf("/help lists the commands only, the keys are /keys:\n%s", v)
+	}
+	if !strings.Contains(v, "\n  /keys ") || !strings.Contains(v, "type /keys") {
+		t.Fatalf("/help names /keys as the key reference:\n%s", v)
+	}
+	// Every spelling the parser accepts is on screen as a whole word
+	// between spaces or commas, so "/win" does not stand in for "/w".
+	words := map[string]bool{}
+	for _, l := range m.lines() {
+		for _, f := range strings.FieldsFunc(ansi.Strip(l), func(r rune) bool { return r == ' ' || r == ',' }) {
+			words[f] = true
+		}
+	}
+	for _, name := range command.Names() {
+		if !words[name] {
+			t.Errorf("%s is accepted by the parser but not printed by /help", name)
+		}
+	}
+}
+
+func TestKeysPrintsIntoServerWindow(t *testing.T) {
+	m := setup(t, newFake())
+	enter(m, "/win 1")
+	if m.cur != 1 {
+		t.Fatalf("cur=%d", m.cur)
+	}
+	typ(m, "/keys")
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil || len(m.slow) == 0 || m.slowWin != m.wins[0] || strings.Contains(body(m), "Ctrl-X") {
+		t.Fatal("/keys starts a slow print into window 0, nothing shown yet")
+	}
+	if m.cur != 0 || m.mode != modeWin {
+		t.Fatalf("/keys focuses the server window (cur=%d mode=%v)", m.cur, m.mode)
+	}
+	m.Update(slowTickMsg{})
+	if n := m.wins[0].notes; !n[len(n)-1].plain || n[len(n)-1].text != "Keys" {
+		t.Fatalf("first line: %+v", n[len(n)-1])
+	}
+	drain(m)
+	v := strings.Join(m.lines(), "\n")
+	for _, want := range []string{"\nKeys", "\n  Ctrl-X ", "Ctrl-N / Ctrl-P", "\n  F1 ", "People are @name"} {
+		if !strings.Contains(v, want) {
+			t.Fatalf("missing %q in the key reference:\n%s", want, v)
+		}
+	}
+	if strings.Contains(v, "-!- Keys") || strings.Contains(v, "\nCommands") || strings.Contains(v, "/quit, /q") {
+		t.Fatalf("plain lines, keys only, no command list:\n%s", v)
+	}
+	for _, n := range m.wins[1].notes {
+		if strings.Contains(n.text, "Ctrl-X") {
+			t.Fatal("nothing printed into window 1")
+		}
+	}
+	if m.isErr {
+		t.Fatalf("status %q", m.status)
 	}
 }
 
@@ -468,7 +526,7 @@ func TestQuitAndHelp(t *testing.T) {
 	press(m, tea.KeyF1)
 	drain(m)
 	v := m.View()
-	if m.mode != modeWin || !strings.Contains(v, "People are @name") || !strings.Contains(strings.Join(m.lines(), "\n"), "Ctrl-X") {
+	if m.mode != modeWin || !strings.Contains(v, "Keyboard shortcuts: type /keys") || !strings.Contains(strings.Join(m.lines(), "\n"), "/names") {
 		t.Fatalf("help should print into the window:\n%s", v)
 	}
 	if !strings.Contains(strings.Join(m.lines(), "\n"), "/win N                 switch") {
@@ -477,11 +535,11 @@ func TestQuitAndHelp(t *testing.T) {
 	enter(m, "/win 1")
 	enter(m, "/help")
 	drain(m)
-	if m.cur != 0 || !strings.Contains(m.View(), "People are @name") {
+	if m.cur != 0 || !strings.Contains(m.View(), "Keyboard shortcuts: type /keys") {
 		t.Fatalf("/help from window 1 focuses the server window and prints there (cur=%d)", m.cur)
 	}
 	for _, n := range m.wins[1].notes {
-		if strings.Contains(n.text, "People are @name") {
+		if strings.Contains(n.text, "Keyboard shortcuts") {
 			t.Fatal("nothing printed into window 1")
 		}
 	}
