@@ -29,3 +29,14 @@ func TestInertWithoutClient(t *testing.T) {
 	}
 	var _ provider.Provider = p
 }
+
+func TestMTProtoMakesNoConnectionOnConstruction(t *testing.T) {
+	c := NewClient(config.Telegram{APIID: 1, APIHash: "h", SessionDir: t.TempDir()})
+	if c.cancel != nil {
+		t.Fatal("client must connect lazily")
+	}
+	p, err := New(config.Telegram{APIID: 1, APIHash: "h", SessionDir: "/s"}, c)
+	if err != nil || p.Close() != nil {
+		t.Fatalf("%v", err)
+	}
+}

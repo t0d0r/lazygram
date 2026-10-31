@@ -1,15 +1,16 @@
 // Package telegram is the live Telegram connector boundary.
 //
-// v0.1 ships only the validated construction path and an inert provider: no
-// Telegram client library is linked and no network connection is made. A real
-// client (for example an MTProto library) plugs in behind the Client
-// interface once application credentials and an approved login flow exist.
-// Credentials come from the environment only; see package config.
+// The provider talks to Telegram through the Client interface. MTProto
+// (gotd/td) is the real implementation; with a nil client the provider is
+// inert. It only reads, never logs in, and connects only when selected by
+// environment configuration. Credentials come from the environment only; see
+// package config.
 package telegram
 
 import (
 	"context"
 	"fmt"
+	"io"
 	"time"
 
 	"lazygram/internal/config"
@@ -38,13 +39,21 @@ func New(cfg config.Telegram, client Client) (*Provider, error) {
 	return &Provider{cfg: cfg, client: client}, nil
 }
 
+// Close releases the underlying client when it has one.
+func (p *Provider) Close() error {
+	if c, ok := p.client.(io.Closer); ok {
+		return c.Close()
+	}
+	return nil
+}
+
 // Name implements provider.Provider.
 func (p *Provider) Name() string { return config.ProviderTelegram }
 
 // Chats implements provider.Provider.
 func (p *Provider) Chats(ctx context.Context) ([]domain.Chat, error) {
 	if p.client == nil {
-		return nil, fmt.Errorf("telegram: %w (no client library linked in v0.1; use the demo provider)", provider.ErrNotImplemented)
+		return nil, fmt.Errorf("telegram: %w (no client configured; use the demo provider)", provider.ErrNotImplemented)
 	}
 	return p.client.Dialogs(ctx, p.cfg.Chats)
 }

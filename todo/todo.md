@@ -14,10 +14,17 @@
 - [x] non-interactive smoke mode
 - [x] README and specs
 
+## v0.2 telegram (in progress)
+
+- [x] choose library: gotd/td (specs/providers.md)
+- [x] implement telegram.Client: dialogs, history, conversion, tested with fakes
+- [ ] user-run login flow storing session under LAZYGRAM_TG_SESSION
+- [ ] first real-service smoke test by the operator
+- [ ] flood-wait handling and error backoff
+- [ ] resolve chat refs beyond the 100 most recent dialogs
+
 ## Next
 
-- [ ] choose a Telegram client library and implement telegram.Client (specs/providers.md)
-- [ ] user-run first login flow, session state under LAZYGRAM_TG_SESSION
 - [ ] load history on demand from the service when the cache lacks it
 - [ ] sending messages (post-v0.1)
 - [ ] unread markers and mention highlight

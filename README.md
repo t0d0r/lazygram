@@ -5,8 +5,9 @@ from all configured chats as one chronological scrollback, like a single IRC
 channel (BitchX / irssi style), and lets you open the full history of any chat
 in a searchable pager. Feature goals are inspired by nchat.
 
-v0.1 ships the complete UI, a local history cache, and a demo provider. The
-live Telegram connector is a validated, inert stub (see Telegram setup).
+v0.1 ships the complete UI, a local history cache, and a demo provider. A
+read-only Telegram connector (gotd/td) is included but untested against the
+real service and needs an existing authorized session (see Telegram setup).
 
 ## Quick start
 
@@ -49,7 +50,7 @@ internal/domain         Chat, Message, Merge, Filter, ResolveChat (pure)
 internal/store          JSONL history cache + chats.json (owner-only files)
 internal/provider       Provider interface (Name, Chats, Sync)
 internal/provider/demo  offline scripted provider
-internal/provider/telegram  config-gated live connector boundary (inert in v0.1)
+internal/provider/telegram  read-only Telegram connector (gotd/td MTProto)
 internal/command        slash-command parser
 internal/config         environment loading and validation
 internal/tui            bubbletea model and rendering
@@ -70,9 +71,11 @@ Selected with `LAZYGRAM_PROVIDER=telegram`. Required environment variables:
 | `LAZYGRAM_TG_CHATS`    | optional `alias=chat-ref,alias2=ref2` list       |
 
 Also: `LAZYGRAM_DATA_DIR` (history cache root, default
-`~/.local/state/lazygram`). In v0.1 no Telegram client library is linked, so
-the live provider reports "not available" and makes no network connection.
-lazygram never asks for credentials and never performs a login by itself.
+`~/.local/state/lazygram`). The connector connects only when
+`LAZYGRAM_PROVIDER=telegram` is set, reads only the chats in
+`LAZYGRAM_TG_CHATS` (`@username` or numeric id), and never logs in: with no
+authorized session in `LAZYGRAM_TG_SESSION` it reports an error. lazygram never
+asks for credentials. Details: specs/providers.md.
 
 ## Security constraints
 

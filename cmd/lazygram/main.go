@@ -5,6 +5,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -45,6 +46,9 @@ func run() error {
 	if err != nil {
 		return err
 	}
+	if c, ok := prov.(io.Closer); ok {
+		defer func() { _ = c.Close() }()
+	}
 	st, err := store.Open(filepath.Join(cfg.DataDir, prov.Name()))
 	if err != nil {
 		return err
@@ -63,7 +67,7 @@ func run() error {
 func newProvider(cfg config.Config) (provider.Provider, error) {
 	switch cfg.Provider {
 	case config.ProviderTelegram:
-		return telegram.New(cfg.Telegram, nil)
+		return telegram.New(cfg.Telegram, telegram.NewClient(cfg.Telegram))
 	default:
 		return demo.New(), nil
 	}

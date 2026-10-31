@@ -21,11 +21,29 @@ are fixed, so a cached run keeps its first-run timestamps (known quirk).
 ## telegram
 
 Config via environment (see README). `telegram.New` validates configuration.
-`telegram.Client` is the seam for a real library adapter (Dialogs, History).
-With a nil client every call returns ErrNotImplemented and the UI shows a
-friendly status message. Nothing connects, logs in, or stores a session in
-v0.1. Adding the adapter requires: credentials supplied by the operator, a
-library decision recorded here, and a login flow run by the user.
+`telegram.Client` (Dialogs, History) is the seam; with a nil client every call
+returns ErrNotImplemented.
+
+Library decision: github.com/gotd/td (pure Go MTProto, no cgo, actively
+maintained). Used through `telegram.MTProto`, built on `tg.Client` via a small
+`api` interface so the logic is tested with fakes and no network.
+
+Behavior of `MTProto`:
+- Lazy: no connection until the first Dialogs/History call, and only when
+  LAZYGRAM_PROVIDER=telegram. Session state: `$LAZYGRAM_TG_SESSION/session.json`
+  (dir 0700, file 0600, never committed).
+- Never logs in. If the session holds no authorized account every call fails
+  with ErrNotLoggedIn. A login flow is a separate, user-run step (todo).
+- Read-only. Only messages.getDialogs and messages.getHistory are called.
+- Only chats listed in LAZYGRAM_TG_CHATS are read. Refs: `@username` or the
+  Bot-API style numeric id (user `42`, group `-5`, channel `-100<id>`), found
+  among the 100 most recent dialogs. Unknown aliases are reported by name.
+- Chat ids are `telegram:<bot-api id>`; message ids are Telegram message ids.
+- Sync pages backwards per chat until messages not newer than `since`, capped
+  at 300 messages per chat per call. Service messages are skipped; media-only
+  messages show as `[media]`.
+- Limits: no flood-wait handling beyond the library defaults, no update
+  stream (polling every 5s), no topics/forums, no edit/delete tracking.
 
 ## Adding a service
 

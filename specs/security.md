@@ -7,7 +7,12 @@
   `.env*`, `*.pem`, `*.key`, session files and `.state/`.
 - Cache files are owner-only.
 - lazygram does not log message content.
-- No interactive Telegram login is performed by the project's tooling.
+- No interactive Telegram login is performed by the project's tooling; the
+  connector fails closed when no authorized session exists.
+- The session file grants account access: keep `LAZYGRAM_TG_SESSION` outside
+  the repository (or in a git-ignored path) and treat it like a password.
+- Only explicitly configured chats are fetched.
+- Third-party dependency: github.com/gotd/td; review upgrades before bumping.
 - Run gitleaks before the first push and review `git log -p`.
 
 ## Terminal injection

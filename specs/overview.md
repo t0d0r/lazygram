@@ -20,10 +20,11 @@ Read-only: sending messages is out of scope.
 
 ## Live Telegram limitations (v0.1)
 
-No Telegram client library is linked and no credentials are provided, so the
-live provider returns ErrNotImplemented and makes no network calls. No login
-flow exists. Real use needs: approved API credentials, a client library
-adapter implementing `telegram.Client`, and a user-run first login.
+The live provider uses gotd/td (specs/providers.md) and is read-only. It
+needs operator-supplied API credentials and an already authorized session in
+LAZYGRAM_TG_SESSION; lazygram has no login flow yet and fails with a clear
+error otherwise. The live path has only been tested against fakes, never
+against the real service. Polling, not push updates.
 
 ## Acceptance criteria
 
