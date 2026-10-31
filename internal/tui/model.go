@@ -1439,6 +1439,8 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 	switch c.Kind {
 	case command.Help:
 		return m, m.help()
+	case command.Keys:
+		return m, m.keys()
 	case command.Redraw:
 		m.redraw(w)
 	case command.Quit:
@@ -1846,12 +1848,21 @@ func (m *Model) redraw(w *win) {
 	m.setInfo("")
 }
 
-// help prints the command and key reference into the server window, line
-// by line with a small delay, like a terminal on a slow line, and focuses
-// that window so the text is in view wherever /help was typed.
+// help prints the command reference into the server window, line by line
+// with a small delay, like a terminal on a slow line, and focuses that
+// window so the text is in view wherever /help was typed. The keys are
+// a separate list (/keys), and the last help line says so.
 func (m *Model) help() tea.Cmd {
 	cmd := m.switchTo(0)
-	m.slowPrint(m.wins[0], strings.Split(command.HelpText+"\n"+keyHelp, "\n"))
+	m.slowPrint(m.wins[0], strings.Split(command.HelpText, "\n"))
+	return cmd
+}
+
+// keys prints the keyboard shortcut reference the same way /help prints
+// the commands: into the server window, slowly, as plain lines.
+func (m *Model) keys() tea.Cmd {
+	cmd := m.switchTo(0)
+	m.slowPrint(m.wins[0], strings.Split(keyHelp, "\n"))
 	return cmd
 }
 
@@ -2480,7 +2491,7 @@ const keyHelp = `Keys
   PgUp / PgDn            scroll a page (the wheel scrolls too)
   Home / End             oldest / newest
   Ctrl-R                 sync now
-  F1                     this help
+  F1                     the command list (/help); /keys prints this
   Esc                    close the list or pager; clear the input
   Ctrl-C                 quit
 Themes: /theme lists the colour schemes, /theme <name> switches (kept).

@@ -116,15 +116,25 @@ titles and notices are stripped of control characters before rendering.
   live case-insensitive search over text and sender with matches
   highlighted; the status line shows `N of M messages`; Esc returns.
 `/help` and F1 focus the server window (window 0) and print the command
-and key reference there as plain lines (no time stamp or marker; command lines start after two
-spaces), one line every 28 ms like a terminal on a slow serial line;
-there is no separate help view.
+reference there as plain lines (no time stamp or marker; command lines
+start after two spaces), one line every 28 ms like a terminal on a slow
+serial line; there is no separate help view. The command reference lists
+the slash commands only, each as its `/name` with every short form the
+parser accepts spelled out (see Short forms below), wrapped so no line
+passes 70 columns, and ends with a line that says to type `/keys` for
+the keyboard shortcuts. `/keys` prints the key
+reference (the Keys table below, plus the notes on themes, mouse and
+windows) the same way, into the server window, slowly, as plain lines.
+The two are separate so that `/help` stays short enough to read on one
+screen; F1 keeps printing the command reference, and that reference
+names `/keys`, so the keys are one step away from either.
 
 ## Commands
 
 | command                       | action                                               |
 |-------------------------------|------------------------------------------------------|
-| `/help`, `/?`                 | focus the server window and print the help there     |
+| `/help`, `/?`                 | focus the server window and print the command reference there; it ends by naming `/keys` |
+| `/keys`, `/shortcuts`         | focus the server window and print the key reference there |
 | `/redraw`, `/clear`           | drop the window's notices, help text, pictures and banner; the messages stay; a slow print still queued for it is dropped |
 | `/quit`, `/q`                 | leave                                                |
 | `/refresh`, `/r`              | sync now                                             |
@@ -152,11 +162,21 @@ there is no separate help view.
 | `/mouse`                      | mouse reporting on or off; off lets the terminal select text (kept) |
 | `/names`                      | show chats by nick (`@alias`) or by name (`@Title`), kept |
 
-Short forms: `/w`, `/j`, `/join`, `/query` for `/win`; `/wc`, `/part` for
-`/close`; `/history` for `/last`; `/find`, `/log` for `/search`; `/wi`,
-`/info` for `/whois`; `/uptime` for `/stats`; `/action` for `/me`. Errors
-show in the status line in red; provider errors also land in the server
-window.
+Short forms: `/h` for `/help`; `/shortcuts`, `/bindings` for `/keys`;
+`/exit` for `/quit`; `/sync` for `/refresh`; `/ls`, `/chats` for `/list`;
+`/w`, `/window`, `/j`, `/join`, `/query` for `/win`; `/wc`, `/part` for
+`/close`; `/mv` for `/move`; `/history`, `/hist` for `/last`; `/find`,
+`/log` for `/search`; `/wi`, `/info` for `/whois`; `/uptime` for
+`/stats`; `/action` for `/me`; `/say`, `/tell` for `/msg`; `/file`,
+`/upload` for `/send`; `/e` for `/edit`; `/del`, `/rm` for `/delete`;
+`/button`, `/btn` for `/press`; `/fetch`, `/download` for `/open`;
+`/colors`, `/colours` for `/theme`; `/version` for `/about`; `/lights`,
+`/anim` for `/fx`; `/nicks` for `/names`. `/help` prints every spelling
+the parser accepts, the short forms as `also /x, /y` after their
+command, so the printed reference and the parser table never disagree
+(a test checks each table entry against the help text and against the
+printed output). Errors show in the status line in red; provider errors
+also land in the server window.
 
 ## Editing and deleting
 
@@ -298,7 +318,7 @@ status line and the window.
 | PgUp / PgDn          | scroll a page (the wheel scrolls three lines)     |
 | Home / End           | oldest / newest                                   |
 | Ctrl-R               | sync now                                          |
-| F1                   | focus the server window and print the help there  |
+| F1                   | focus the server window and print the command reference there (as `/help`) |
 | Esc                  | close the list or pager, else clear the input     |
 | Ctrl-X               | send the typed text to this window's chat         |
 | Ctrl-U / Ctrl-W      | clear the input / delete the word before the cursor (and the spaces after it) |

@@ -166,7 +166,8 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/fx`                      | running lights over links and buttons on/off  |
 | `/mouse`                   | mouse reporting on/off (off: drag selects text; or hold Shift/Option while dragging) |
 | `/redraw`, `/clear`        | drop notices, help text and pictures from this window; messages stay |
-| `/refresh`, `/help`, `/quit` | sync now; print the help into the server window; leave |
+| `/refresh`, `/help`, `/quit` | sync now; print the command list, with every short form, into the server window (it ends by naming `/keys`); leave |
+| `/keys`                    | print the keyboard shortcuts into the server window |
 
 In a chat window, type text and press **Ctrl-X** to send it to that chat;
 Enter is for commands (press Ctrl-X twice quickly to make Enter send in
@@ -190,7 +191,7 @@ viewer instead.
 | Left / Right        | move the cursor in the input; Ctrl-A / Ctrl-E start / end; Delete removes under the cursor (as Backspace at the end), Ctrl-W the word before it, Ctrl-K to the end |
 | PgUp / PgDn         | scroll a page; Home / End oldest / newest          |
 | Ctrl-R              | sync now                                           |
-| F1                  | print the help into the server window              |
+| F1                  | print the command list into the server window (`/keys` for this table) |
 | Esc                 | close the list or pager, else clear the input      |
 | Ctrl-X              | send the typed text to this window's chat          |
 | Ctrl-X twice        | toggle "Enter sends" for this window               |

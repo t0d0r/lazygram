@@ -1,6 +1,9 @@
 package command
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 func TestParse(t *testing.T) {
 	cases := []struct {
@@ -45,6 +48,9 @@ func TestParse(t *testing.T) {
 		{"/send ~/pic.png a caption", Command{SendFile, "~/pic.png a caption"}, false},
 		{"/redraw", Command{Redraw, ""}, false},
 		{"/clear", Command{Redraw, ""}, false},
+		{"/keys", Command{Keys, ""}, false},
+		{"/shortcuts", Command{Keys, ""}, false},
+		{"/KEYS extra", Command{Keys, "extra"}, false},
 		{"/bogus", Command{}, true},
 		{"/", Command{}, true},
 		{"hello", Command{}, true},
@@ -71,5 +77,47 @@ func TestNamesSortedWithSlash(t *testing.T) {
 		if n[i-1] >= n[i] {
 			t.Fatal("not sorted")
 		}
+	}
+}
+
+// hasSlashWord reports whether text holds "/"+name as a whole word: at
+// the start or after a space, and followed by a space, comma, newline
+// or the end. "/win" does not count for "/w", nor "/edit" for "/e".
+func hasSlashWord(text, name string) bool {
+	word := "/" + name
+	for i := 0; ; {
+		j := strings.Index(text[i:], word)
+		if j < 0 {
+			return false
+		}
+		at := i + j
+		end := at + len(word)
+		before := at == 0 || text[at-1] == ' '
+		after := end == len(text) || strings.ContainsRune(" ,\n", rune(text[end]))
+		if before && after {
+			return true
+		}
+		i = end
+	}
+}
+
+// TestHelpTextCoversEveryName keeps /help and the parser table in step:
+// a spelling added to the table without a line in HelpText fails here.
+func TestHelpTextCoversEveryName(t *testing.T) {
+	for name := range table {
+		if !hasSlashWord(HelpText, name) {
+			t.Errorf("/%s is accepted by the parser but missing from HelpText", name)
+		}
+	}
+	if hasSlashWord("/win /edit", "w") || hasSlashWord("/win /edit", "e") || !hasSlashWord("also /w, /e", "e") {
+		t.Fatal("hasSlashWord must match whole words only")
+	}
+	for _, l := range strings.Split(HelpText, "\n") {
+		if len(l) > 70 {
+			t.Errorf("help line over 70 columns (%d): %q", len(l), l)
+		}
+	}
+	if !strings.HasSuffix(HelpText, "type /keys.") || strings.Contains(HelpText, "Ctrl-") {
+		t.Fatal("help names /keys for the shortcuts and holds no key listing")
 	}
 }
