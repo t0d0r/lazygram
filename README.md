@@ -73,9 +73,11 @@ Selected with `LAZYGRAM_PROVIDER=telegram`. Required environment variables:
 Also: `LAZYGRAM_DATA_DIR` (history cache root, default
 `~/.local/state/lazygram`). The connector connects only when
 `LAZYGRAM_PROVIDER=telegram` is set, reads only the chats in
-`LAZYGRAM_TG_CHATS` (`@username` or numeric id), and never logs in: with no
-authorized session in `LAZYGRAM_TG_SESSION` it reports an error. lazygram never
-asks for credentials. Details: specs/providers.md.
+`LAZYGRAM_TG_CHATS` (`@username` or numeric id), and never logs in by itself:
+with no authorized session in `LAZYGRAM_TG_SESSION` it reports an error.
+Create the session once with `./lazygram login` (interactive: phone, code,
+optional two-step password; answers are never echoed or stored, only the
+session file is). Details: specs/providers.md.
 
 ## Security constraints
 
