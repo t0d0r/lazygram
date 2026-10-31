@@ -900,7 +900,9 @@ func (m *Model) switchTo(i int) tea.Cmd {
 	if w.chatID != "" {
 		m.visited[w.chatID] = true
 	}
-	m.setInfo("window " + strconv.Itoa(i) + ": " + m.winName(i))
+	if m.isErr { // a switch clears a stale error; the tag says where we are
+		m.setInfo("")
+	}
 	if w.chatID != "" && !w.loaded && !m.loading[w.chatID] {
 		m.note(w, fmt.Sprintf("fetching the last %d messages", recentOnOpen))
 		return m.recentCmd(w.chatID, recentOnOpen)
@@ -1865,9 +1867,9 @@ func seg(text string, i int, bold bool) string {
 func (m *Model) statusLine() string {
 	// The sync segment keeps its width and colour across polls, so the
 	// rest of the line does not jump every ten seconds.
-	sync, syncColor := "never synced    ", 6
+	sync, syncColor := "synced: never   ", 6
 	if !m.lastSync.IsZero() {
-		sync, syncColor = "synced  "+m.lastSync.Format("15:04:05"), 2
+		sync, syncColor = "synced: "+m.lastSync.Format("15:04:05"), 2
 		if m.syncing {
 			sync = "syncing " + m.lastSync.Format("15:04:05")
 		}
