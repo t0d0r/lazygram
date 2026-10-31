@@ -23,9 +23,11 @@ completion, and an activity indicator.
   chosen at render time; plain ASCII, coloured top to bottom) and a
   tagline with the version. At start the content rolls in like on a slow
   serial line: the server window and every window reopened from the last
-  session show their rendered lines one by one from the top of the screen
-  the first time they are current (one line per 28 ms, several per tick
-  when the scrollback is long so the whole reveal takes at most 2 s);
+  session show their rendered lines one by one the first time they are
+  current, each new line at the bottom pushing the earlier ones up, so
+  the last frame is the ordinary view and nothing jumps (one line per
+  28 ms, several per tick when the scrollback is long so the whole reveal
+  takes at most 2 s);
   windows opened later appear at once, and smoke mode shows everything.
   After the program ends the banner is printed to the terminal the same
   way (one line per 56 ms), BitchX style, in the same faces (banner3 on

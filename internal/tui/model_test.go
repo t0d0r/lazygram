@@ -1724,8 +1724,13 @@ func TestStartupRevealsTheWindowLineByLine(t *testing.T) {
 	}
 	m.Update(revealTickMsg{})
 	rows := strings.Split(ansi.Strip(body(m)), "\n")
-	if strings.TrimSpace(rows[0]) == "" || strings.TrimSpace(rows[1]) != "" {
-		t.Fatalf("one line at the top of the screen after one tick:\n%s", body(m))
+	if last := rows[len(rows)-1]; strings.TrimSpace(last) == "" || strings.TrimSpace(rows[len(rows)-2]) != "" {
+		t.Fatalf("one line at the bottom of the screen after one tick:\n%s", body(m))
+	}
+	m.Update(revealTickMsg{})
+	rows = strings.Split(ansi.Strip(body(m)), "\n")
+	if strings.TrimSpace(rows[len(rows)-2]) == "" || strings.TrimSpace(rows[len(rows)-3]) != "" {
+		t.Fatalf("the second line pushes the first one up:\n%s", body(m))
 	}
 	for i := 0; i < 200 && m.wins[0].revealing; i++ {
 		m.Update(revealTickMsg{})

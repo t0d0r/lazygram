@@ -256,8 +256,10 @@ at the hidden password prompt takes effect only after Enter.
 - Banners regenerated with figlet banner3 (76 cols) and chunky (49 cols);
   `logo.Pick(width)` chooses, so the start banner note is rendered in the
   face that fits the window. Start-up reveal: windows that exist at start
-  (`win.revealing`) show their lines one per `slowDelay` tick from the top
-  of the screen, with a step so a long scrollback finishes within 2 s;
+  (`win.revealing`) show their lines one per `slowDelay` tick, each new
+  line at the bottom pushing the rest up (bottom-anchored like the normal
+  view, so the end of the reveal does not reposition anything), with a
+  step so a long scrollback finishes within 2 s;
   `revealAll` for snapshots and tests. `tui.PrintSlowly` prints the exit
   banner one line per 56 ms.
 - The arrival status names the windows: `N new message(s) in 2:#dev (2),

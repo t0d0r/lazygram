@@ -2133,17 +2133,13 @@ func (m *Model) View() string {
 	default:
 		lines, sp := m.richLines()
 		m.lastLines = len(lines)
-		if w.revealing { // start-up: the lines roll in from the top of the screen
+		if w.revealing { // start-up: each line arrives at the bottom and pushes the rest up
 			w.revealTotal = len(lines)
 			if w.revealed >= len(lines) {
 				w.revealing = false
 			} else {
 				lines, sp = lines[:w.revealed], sp[:w.revealed]
 				w.scroll = 0
-				if len(lines) < h {
-					lines = append(lines, make([]string, h-len(lines))...)
-					sp = append(sp, make([][]span, h-len(sp))...)
-				}
 			}
 		}
 		body, w.scroll = window(lines, h, w.scroll)
