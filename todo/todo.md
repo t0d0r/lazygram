@@ -18,8 +18,8 @@
 
 - [x] choose library: gotd/td (specs/providers.md)
 - [x] implement telegram.Client: dialogs, history, conversion, tested with fakes
-- [ ] user-run login flow storing session under LAZYGRAM_TG_SESSION
-- [ ] first real-service smoke test by the operator
+- [x] user-run `lazygram login` storing session under LAZYGRAM_TG_SESSION (specs/providers.md)
+- [ ] first real-service login and smoke test by the operator
 - [ ] flood-wait handling and error backoff
 - [ ] resolve chat refs beyond the 100 most recent dialogs
 

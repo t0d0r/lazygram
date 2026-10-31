@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"golang.org/x/term"
 
 	"lazygram/internal/config"
 	"lazygram/internal/provider"
@@ -30,8 +31,15 @@ func main() {
 }
 
 func run() error {
+	if len(os.Args) > 1 && os.Args[1] == "login" {
+		return runLogin()
+	}
 	smoke := flag.Bool("smoke", false, "sync once, print one screen, and exit (no terminal needed)")
 	showVersion := flag.Bool("version", false, "print the version and exit")
+	flag.Usage = func() {
+		fmt.Fprintln(os.Stderr, "usage: lazygram [-smoke] [-version]\n       lazygram login   one-time Telegram sign-in (interactive)")
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 	if *showVersion {
 		fmt.Println("lazygram", version)
@@ -73,7 +81,4 @@ func newProvider(cfg config.Config) (provider.Provider, error) {
 	}
 }
 
-func isTerminal(f *os.File) bool {
-	fi, err := f.Stat()
-	return err == nil && fi.Mode()&os.ModeCharDevice != 0
-}
+func isTerminal(f *os.File) bool { return term.IsTerminal(int(f.Fd())) }

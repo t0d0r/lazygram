@@ -32,8 +32,9 @@ Behavior of `MTProto`:
 - Lazy: no connection until the first Dialogs/History call, and only when
   LAZYGRAM_PROVIDER=telegram. Session state: `$LAZYGRAM_TG_SESSION/session.json`
   (dir 0700, file 0600, never committed).
-- Never logs in. If the session holds no authorized account every call fails
-  with ErrNotLoggedIn. A login flow is a separate, user-run step (todo).
+- The running TUI never logs in. If the session holds no authorized account
+  every call fails with ErrNotLoggedIn. Sign-in is the separate, user-run
+  `lazygram login` subcommand (below).
 - Read-only. Only messages.getDialogs and messages.getHistory are called.
 - Only chats listed in LAZYGRAM_TG_CHATS are read. Refs: `@username` or the
   Bot-API style numeric id (user `42`, group `-5`, channel `-100<id>`), found
@@ -44,6 +45,21 @@ Behavior of `MTProto`:
   messages show as `[media]`.
 - Limits: no flood-wait handling beyond the library defaults, no update
   stream (polling every 5s), no topics/forums, no edit/delete tracking.
+
+### `lazygram login`
+
+One-time, interactive, user-run. Requires LAZYGRAM_TG_API_ID, _API_HASH and
+_SESSION (provider need not be set); refuses without a terminal on stdin.
+Prompts on the terminal for phone (international format, normalized by
+`NormalizePhone`), the login code, and, if the account has two-step
+verification, the password (read without echo). Answers are never read from
+flags, environment or files, never echoed, never logged. If an authorized
+session already exists it prints "already logged in" and changes nothing.
+Accounts are never created (sign-up and terms-of-service acceptance are
+refused). On success it prints only the session directory and enforces mode
+0600 on `session.json`. Ctrl-C cancels. The flow is covered by tests for the
+prompter, phone normalization and the authenticator adapter; the exchange with
+Telegram itself is untested.
 
 ## Adding a service
 

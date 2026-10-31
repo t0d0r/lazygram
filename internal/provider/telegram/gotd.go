@@ -16,6 +16,8 @@ import (
 	"lazygram/internal/domain"
 )
 
+const sessionFile = "session.json"
+
 // ErrNotLoggedIn means the local session state holds no authorized account.
 // lazygram never logs in by itself; see specs/providers.md.
 var ErrNotLoggedIn = errors.New("no authorized Telegram session found in " + config.EnvTGSession)
@@ -61,12 +63,10 @@ func (c *MTProto) start() {
 }
 
 func (c *MTProto) run(ctx context.Context) error {
-	if err := os.MkdirAll(c.cfg.SessionDir, 0o700); err != nil {
-		return fmt.Errorf("telegram: session dir: %w", err)
+	cl, err := newGotdClient(c.cfg)
+	if err != nil {
+		return err
 	}
-	cl := gotd.NewClient(c.cfg.APIID, c.cfg.APIHash, gotd.Options{
-		SessionStorage: &gotd.FileSessionStorage{Path: filepath.Join(c.cfg.SessionDir, "session.json")},
-	})
 	return cl.Run(ctx, func(ctx context.Context) error {
 		st, err := cl.Auth().Status(ctx)
 		if err != nil {
@@ -80,6 +80,16 @@ func (c *MTProto) run(ctx context.Context) error {
 		<-ctx.Done()
 		return nil
 	})
+}
+
+// newGotdClient builds a client whose session lives in cfg.SessionDir (0700).
+func newGotdClient(cfg config.Telegram) (*gotd.Client, error) {
+	if err := os.MkdirAll(cfg.SessionDir, 0o700); err != nil {
+		return nil, fmt.Errorf("telegram: session dir: %w", err)
+	}
+	return gotd.NewClient(cfg.APIID, cfg.APIHash, gotd.Options{
+		SessionStorage: &gotd.FileSessionStorage{Path: filepath.Join(cfg.SessionDir, sessionFile)},
+	}), nil
 }
 
 func (c *MTProto) wait(ctx context.Context) error {

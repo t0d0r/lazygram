@@ -9,6 +9,9 @@
 - lazygram does not log message content.
 - No interactive Telegram login is performed by the project's tooling; the
   connector fails closed when no authorized session exists.
+- `lazygram login` reads phone, code and password only from the interactive
+  terminal (password without echo) and never prints or stores them; the only
+  artifact is the session file.
 - The session file grants account access: keep `LAZYGRAM_TG_SESSION` outside
   the repository (or in a git-ignored path) and treat it like a password.
 - Only explicitly configured chats are fetched.

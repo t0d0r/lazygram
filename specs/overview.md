@@ -22,8 +22,8 @@ Read-only: sending messages is out of scope.
 
 The live provider uses gotd/td (specs/providers.md) and is read-only. It
 needs operator-supplied API credentials and an already authorized session in
-LAZYGRAM_TG_SESSION; lazygram has no login flow yet and fails with a clear
-error otherwise. The live path has only been tested against fakes, never
+LAZYGRAM_TG_SESSION, created by the user-run `lazygram login`; without one it
+fails with a clear error. The live path has only been tested against fakes, never
 against the real service. Polling, not push updates.
 
 ## Acceptance criteria
