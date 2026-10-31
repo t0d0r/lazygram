@@ -79,3 +79,4 @@
 - [ ] unread markers and mention highlight
 - [ ] cmd/lazygram tests for provider selection
 - [ ] gitleaks pre-commit hook
+- [x] CI: Linux and macOS workflows with README badges (specs/ci.md)

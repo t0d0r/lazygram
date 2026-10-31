@@ -1,5 +1,9 @@
 # lazygram
 
+[![Linux](https://github.com/t0d0r/lazygram/actions/workflows/linux.yml/badge.svg)](https://github.com/t0d0r/lazygram/actions/workflows/linux.yml)
+[![macOS](https://github.com/t0d0r/lazygram/actions/workflows/macos.yml/badge.svg)](https://github.com/t0d0r/lazygram/actions/workflows/macos.yml)
+[![Release](https://img.shields.io/github/v/release/t0d0r/lazygram)](https://github.com/t0d0r/lazygram/releases)
+
 A local terminal client for chat services, Telegram first. It shows messages
 from all your chats as one chronological scrollback, like a single IRC
 channel (BitchX / irssi style), and lets you open the full history of any chat

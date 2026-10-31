@@ -296,3 +296,6 @@ at the hidden password prompt takes effect only after Enter.
   (`strings.Fields(line)[0]` on an empty slice; now guarded), nothing
   completes after /open in the server window (spec), and an ambiguous
   theme prefix names its matches instead of "no theme".
+- CI: `.github/workflows/linux.yml` and `macos.yml` run `make check` and
+  `make smoke` on push to master and on pull requests; README carries
+  the Linux, macOS and release badges (specs/ci.md).

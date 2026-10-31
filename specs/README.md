@@ -6,3 +6,4 @@
 - [storage.md](storage.md) - local history cache format and rules
 - [security.md](security.md) - credential handling and repository hygiene
 - [release.md](release.md) - versioning, release artifacts, Homebrew formula, self-update
+- [ci.md](ci.md) - GitHub Actions: Linux and macOS checks on every push and pull request, badges
