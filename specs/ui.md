@@ -1,8 +1,10 @@
 # UI
 
-Layout, top to bottom: topic bar, content, status line, window bar, input
-line. The window bar lists every window as `[N:name]`; the current window
-is highlighted and windows with unread messages stand out. The
+Layout, top to bottom: content, status line, window bar, input line.
+There is no header: the status line carries the window tag, and in the
+list and pager views it shows what the view holds in place of the status
+message. The window bar lists every window as `[N:name]`; the current
+window is highlighted and windows with unread messages stand out. The
 model is BitchX/irssi: virtual windows, a slash-command input line, Tab
 completion, and an activity indicator.
 
@@ -74,9 +76,9 @@ titles and notices are stripped of control characters before rendering.
   then stays there while the list scrolls under it, and moves on to the
   bottom only when the list ends; the same on the way up.
 - pager (`/search [text]`): the local history of the current window's chat
-  (all chats in window 1) with the full date on every line; typed text is a
+  (all chats in window 0) with the full date on every line; typed text is a
   live case-insensitive search over text and sender with matches
-  highlighted; topic shows `N of M messages`; Esc returns.
+  highlighted; the status line shows `N of M messages`; Esc returns.
 `/help` and F1 print the command and key reference into the current window
 as notices; there is no separate help view.
 
@@ -280,5 +282,5 @@ the hint to remove it and log in again.
 ## Non-interactive mode
 
 When stdin or stdout is not a terminal, or with -smoke, lazygram loads
-chats, syncs once, prints one 100x24 screen of the server window and exits
-0. `login` refuses without a terminal.
+chats, syncs once, prints one 100x24 screen of the server window (21
+content rows, status, window bar, input) and exits 0. `login` refuses without a terminal.

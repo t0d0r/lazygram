@@ -290,7 +290,7 @@ func TestTabCompletesNamesAndCommands(t *testing.T) {
 // bar or input line.
 func body(m *Model) string {
 	lines := strings.Split(m.View(), "\n")
-	return strings.Join(lines[1:len(lines)-3], "\n")
+	return strings.Join(lines[:len(lines)-3], "\n")
 }
 
 func TestListIsSelectableAndHidesDeleted(t *testing.T) {

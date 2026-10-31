@@ -119,7 +119,8 @@ type Model struct {
 	showDeleted bool    // /list --show-deleted
 
 	width, height int
-	lastLines     int // rendered line count of the current window at the last View
+	lastLines     int    // rendered line count of the current window at the last View
+	modeInfo      string // what the list or pager shows, for the status line
 
 	started  time.Time
 	seen     int             // messages that arrived this session
@@ -1674,7 +1675,7 @@ func (m *Model) listItems() []domain.Chat {
 	return out
 }
 
-func (m *Model) contentHeight() int { return max(m.height-4, 1) }
+func (m *Model) contentHeight() int { return max(m.height-3, 1) }
 
 func (m *Model) nameWidth() int {
 	w := 4
@@ -1720,22 +1721,23 @@ func (m *Model) View() string {
 	}
 	h := m.contentHeight()
 	w := m.wins[m.cur]
-	var topic, prompt string
+	var prompt string
 	var body []string
 	bodySpans := make([][]span, h) // one entry per content row
+	m.modeInfo = ""
 
 	switch m.mode {
 	case modeList:
 		var rows []string
 		if m.listSrc == listWindows {
 			m.listCur = min(max(m.listCur, 0), len(m.wins)-1)
-			topic = fmt.Sprintf("windows (%d) - Up/Down moves, Enter focuses, Esc returns", len(m.wins))
+			m.modeInfo = fmt.Sprintf("windows (%d): Up/Down, Enter focuses, Esc returns", len(m.wins))
 			rows = m.winLines()
 			prompt = "windows > "
 		} else {
 			items := m.listItems()
 			m.listCur = min(max(m.listCur, 0), max(len(items)-1, 0))
-			topic = fmt.Sprintf("chats (%d) - Up/Down moves, Enter opens the window, Esc returns, type to narrow", len(items))
+			m.modeInfo = fmt.Sprintf("chats (%d): Up/Down, Enter opens, Esc returns, type to narrow", len(items))
 			rows = m.listLines(items)
 			prompt = "list > "
 		}
@@ -1753,7 +1755,7 @@ func (m *Model) View() string {
 			showChat: w.chatID == "", fullDate: true, highlight: q, phase: m.phaseOpt(), hover: m.hover, cache: m.rcache})
 		body, w.scroll = window(lines, h, w.scroll)
 		bodySpans, _ = window(sp, h, w.scroll)
-		topic = fmt.Sprintf("history of %s - %d of %d messages - type to search, PgUp/PgDn, Esc returns",
+		m.modeInfo = fmt.Sprintf("history of %s: %d of %d messages; type to search, Esc returns",
 			m.winName(m.cur), len(hits), len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})))
 		prompt = "search > "
 	default:
@@ -1767,7 +1769,6 @@ func (m *Model) View() string {
 			body[h-1] = actStyle.Render(fitLine(strings.Repeat(" ", pad)+marker, m.width))
 			bodySpans[h-1] = []span{{pad, pad + lipgloss.Width(marker), spanEnd, ""}}
 		}
-		topic = m.topic()
 		prompt = "[" + m.winName(m.cur) + "] "
 		if w.enterSends {
 			prompt = "[" + m.winName(m.cur) + "]> "
@@ -1775,8 +1776,6 @@ func (m *Model) View() string {
 	}
 
 	var b strings.Builder
-	b.WriteString(barStyle.Render(fitLine(topic, m.width)))
-	b.WriteByte('\n')
 	for _, l := range body {
 		b.WriteString(lipgloss.NewStyle().MaxWidth(m.width).Render(l))
 		b.WriteByte('\n')
@@ -1787,23 +1786,10 @@ func (m *Model) View() string {
 	b.WriteString(bar)
 	b.WriteByte('\n')
 	b.WriteString(m.inputLine(prompt))
-	// Screen rows: topic, h content rows, status, window bar, input.
-	m.clicks = append(append([][]span{nil}, bodySpans...), nil, barSpans, nil)
+	// Screen rows: h content rows, status, window bar, input.
+	m.clicks = append(append([][]span{}, bodySpans...), nil, barSpans, nil)
 	m.animOn = m.hover != "" // the light runs only under the pointer
 	return b.String()
-}
-
-func (m *Model) topic() string {
-	w := m.wins[m.cur]
-	if w.chatID == "" {
-		return fmt.Sprintf("lazygram - window 0: server - all chats - %d messages - %d windows", len(m.msgs), len(m.wins)-1)
-	}
-	n := len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID}))
-	s := fmt.Sprintf("lazygram - window %d: %s", m.cur, m.nameOf(w.chatID))
-	if c, ok := m.chat(w.chatID); ok && c.Title != "" && c.Title != c.Alias {
-		s += " - " + sanitize(c.Title, false)
-	}
-	return fmt.Sprintf("%s - %d messages", s, n)
 }
 
 // listLines renders the /list rows: window number, name, title, unread.
@@ -1900,7 +1886,10 @@ func (m *Model) statusLine() string {
 	if w.scroll > 0 && m.mode == modeWin {
 		text += actStyle.Render(fmt.Sprintf("scrolled up %d lines", w.scroll)) + gap
 	}
-	if m.status != "" {
+	switch {
+	case m.modeInfo != "":
+		text += infoStyle.Render(m.modeInfo) + gap
+	case m.status != "":
 		if m.isErr {
 			text += errStyle.Render(m.status)
 		} else {

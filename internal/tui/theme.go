@@ -109,7 +109,6 @@ var (
 	noteStyle   lipgloss.Style
 	buttonStyle lipgloss.Style
 	hiStyle     = lipgloss.NewStyle().Reverse(true).Bold(true)
-	barStyle    lipgloss.Style
 	infoStyle   lipgloss.Style
 	actStyle    lipgloss.Style
 	errStyle    lipgloss.Style
@@ -129,7 +128,6 @@ func applyTheme(t theme) {
 	dayStyle = lipgloss.NewStyle().Foreground(c(t.Day)).Italic(true)
 	noteStyle = lipgloss.NewStyle().Foreground(c(t.Note))
 	buttonStyle = lipgloss.NewStyle().Foreground(c(t.Button))
-	barStyle = lipgloss.NewStyle().Background(c(t.BarBG)).Foreground(c(t.BarFG)).Bold(true)
 	infoStyle = lipgloss.NewStyle().Background(c(t.StatusBG)).Foreground(c(t.StatusFG))
 	actStyle = lipgloss.NewStyle().Background(c(t.StatusBG)).Foreground(c(t.Act)).Bold(true)
 	errStyle = lipgloss.NewStyle().Background(c(t.StatusBG)).Foreground(c(t.Error)).Bold(true)

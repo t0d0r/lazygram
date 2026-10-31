@@ -222,3 +222,5 @@ at the hidden password prompt takes effect only after Enter.
   `make release` at the tag publishes them. Brew does not need them.
 - Status bar: fixed-width, fixed-colour sync segment; "nothing new" polls
   leave the status alone (no ten-second flicker).
+- Header (topic bar) removed: three fixed rows remain (status, window bar,
+  input); list and pager info moved into the status line.
