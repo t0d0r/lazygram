@@ -236,3 +236,5 @@ at the hidden password prompt takes effect only after Enter.
   `domain.LastOwn`/`Remove`; `/edit` alone prefills the prompt.
 - Help prints as plain notes (no stamp/marker, two-space indent kept)
   through a slow-print queue (28 ms per line).
+- `/names` toggles chat display between `@alias` and `@Title` everywhere
+  (kept in state); commands keep accepting aliases and titles.

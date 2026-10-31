@@ -54,6 +54,14 @@ the alias (Telegram: username, else a slug of the title). `/win`, `/last`
 and completion accept names with or without the sigil; a sigil restricts
 the kind.
 
+## Names: nick or title
+
+`/names` toggles how chats are shown everywhere (window bar, status tag,
+server window column, lists): by nick, `@alias` / `#alias` (default), or
+by name, the sigil followed by the chat's title (`@Alice Smith`,
+`#News`). Commands, completion and `/whois` keep accepting the alias (and
+the title, as before); the choice is kept across restarts.
+
 ## Line format
 
 Server window: `HH:MM #chat <sender> text` with a padded chat column.
@@ -117,6 +125,7 @@ there is no separate help view.
 | `/about`, `/version`          | version, author, repository, license, build, libraries, uptime |
 | `/fx`                         | running lights over clickable text on or off (kept) |
 | `/mouse`                      | mouse reporting on or off; off lets the terminal select text (kept) |
+| `/names`                      | show chats by nick (`@alias`) or by name (`@Title`), kept |
 
 Short forms: `/w`, `/j`, `/join`, `/query` for `/win`; `/wc`, `/part` for
 `/close`; `/history` for `/last`; `/find`, `/log` for `/search`; `/wi`,

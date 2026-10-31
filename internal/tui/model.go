@@ -47,6 +47,7 @@ const (
 	fxKey          = "fx"                  // store state key for the running lights
 	slowDelay      = 28 * time.Millisecond // between two lines of a slow print
 	mouseKey       = "mouse"               // store state key for mouse reporting
+	namesKey       = "names"               // store state key for showing chats by name
 	fxTick         = 30 * time.Millisecond
 	maxHistory     = 200
 	doubleCtrlX    = 600 * time.Millisecond
@@ -108,6 +109,7 @@ type Model struct {
 	slowTick bool     // a slowTickMsg is scheduled
 
 	mouseOn bool         // mouse reporting; off lets the terminal select text
+	byName  bool         // show chats as @Title instead of @alias
 	fx      bool         // running lights over clickable text
 	hoverAt time.Time    // when the pointer reached the hovered element
 	ticking bool         // an fx tick is scheduled
@@ -210,6 +212,7 @@ func New(opt Options) *Model {
 	if found, err := opt.Store.State(mouseKey, &m.mouseOn); !found || err != nil {
 		m.mouseOn = true
 	}
+	_, _ = opt.Store.State(namesKey, &m.byName)
 	m.chats, _ = opt.Store.Chats()
 	m.msgs, _ = opt.Store.Messages("", opt.Backlog)
 	// The banner has the zero time so it stays above everything, however old
@@ -933,9 +936,18 @@ func (m *Model) chat(chatID string) (domain.Chat, bool) {
 // nameOf is the chat's IRC-style name, or its id when the chat is unknown.
 func (m *Model) nameOf(chatID string) string {
 	if c, ok := m.chat(chatID); ok {
-		return c.Name()
+		return m.display(c)
 	}
 	return chatID
+}
+
+// display is how a chat is shown: @alias, or @Title when /names chose
+// names (the sigil stays, the title is sanitized).
+func (m *Model) display(c domain.Chat) string {
+	if !m.byName || strings.TrimSpace(c.Title) == "" {
+		return c.Name()
+	}
+	return c.Name()[:1] + sanitize(strings.TrimSpace(c.Title), false)
 }
 
 func (m *Model) winFor(chatID string) (int, *win) {
@@ -1370,6 +1382,15 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		return m, m.editCmd(last, c.Arg)
 	case command.About:
 		m.about()
+	case command.Nicks:
+		m.byName = !m.byName
+		_ = m.opt.Store.SetState(namesKey, m.byName)
+		m.rcache = &renderCache{}
+		if m.byName {
+			m.setInfo("chats shown by name (@Title); /names switches back to nicks")
+		} else {
+			m.setInfo("chats shown by nick (@alias)")
+		}
 	case command.Mouse:
 		m.mouseOn = !m.mouseOn
 		_ = m.opt.Store.SetState(mouseKey, m.mouseOn)
@@ -1616,7 +1637,7 @@ func (m *Model) whois(arg string) {
 	kind := map[domain.ChatKind]string{domain.ChatUser: "person", domain.ChatGroup: "group", domain.ChatChannel: "channel"}[c.Kind]
 	msgs := domain.Filter(m.msgs, domain.Query{ChatID: c.ID})
 	cached, _ := m.opt.Store.Count(c.ID)
-	m.note(w, fmt.Sprintf("whois %s: %s", c.Name(), sanitize(c.Title, false)))
+	m.note(w, fmt.Sprintf("whois %s: %s (/names switches between the two)", c.Name(), sanitize(c.Title, false)))
 	line := fmt.Sprintf("  %s on %s, id %s", kind, c.Service, c.ID)
 	if c.Deleted {
 		line += ", deleted account"
@@ -1820,7 +1841,7 @@ func (m *Model) contentHeight() int { return max(m.height-4, 1) }
 func (m *Model) nameWidth() int {
 	w := 4
 	for _, c := range m.chats {
-		w = max(w, lipgloss.Width(c.Name()))
+		w = max(w, lipgloss.Width(m.display(c)))
 	}
 	return min(w, 15)
 }
@@ -1951,7 +1972,7 @@ func (m *Model) listLines(items []domain.Chat) []string {
 		if wi, _ := m.winFor(c.ID); wi > 0 {
 			mark = fmt.Sprintf("%2d ", wi)
 		}
-		row := fmt.Sprintf("%s %-16s %-30s", mark, c.Name(), sanitize(c.Title, false))
+		row := fmt.Sprintf("%s %-16s %-30s", mark, m.display(c), sanitize(c.Title, false))
 		if c.Unread > 0 {
 			row += fmt.Sprintf("  %d unread", c.Unread)
 		}

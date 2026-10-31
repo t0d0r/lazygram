@@ -33,6 +33,7 @@ const (
 	Mouse        // toggle mouse reporting (off lets the terminal select text)
 	Edit         // edit the last own message in this window: Arg is the new text (empty: prefill)
 	Delete       // delete the last own message in this window
+	Nicks        // toggle showing chats by nick (@alias) or by name (@title)
 )
 
 // Command is a parsed slash command.
@@ -63,6 +64,7 @@ var table = map[string]Kind{
 	"mouse": Mouse,
 	"edit":  Edit, "e": Edit,
 	"delete": Delete, "del": Delete, "rm": Delete,
+	"names": Nicks, "nicks": Nicks,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -119,4 +121,5 @@ const HelpText = `Commands
   /theme [name]          list the colour themes, or switch to one
   /about                 version, author and build information
   /fx                    running lights over links and buttons on or off
-  /mouse                 mouse reporting on or off (off: drag selects text)`
+  /mouse                 mouse reporting on or off (off: drag selects text)
+  /names                 show chats by nick (@alias) or by name (@Title)`

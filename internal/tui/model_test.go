@@ -1538,3 +1538,30 @@ func TestEditAndDeleteLastOwnMessage(t *testing.T) {
 		t.Fatal("nothing left of mine")
 	}
 }
+
+func TestNamesTogglesNickOrTitle(t *testing.T) {
+	m := setup(t, newFake())
+	if !strings.Contains(m.View(), "[3:@alice]") {
+		t.Fatal("nick by default")
+	}
+	enter(m, "/names")
+	v := m.View()
+	if !m.byName || !strings.Contains(v, "[3:@Alice Smith]") || !strings.Contains(v, "[1:#News]") || strings.Contains(v, "[3:@alice]") {
+		t.Fatalf("by name:\n%s", v)
+	}
+	if !strings.Contains(body(m), "@Alice Smith") {
+		t.Fatal("the server window column follows")
+	}
+	var saved bool
+	if ok, _ := m.opt.Store.State(namesKey, &saved); !ok || !saved {
+		t.Fatal("kept")
+	}
+	enter(m, "/win @alice") // commands still take the alias
+	if m.winName(m.cur) != "@Alice Smith" {
+		t.Fatalf("win: %s", m.winName(m.cur))
+	}
+	enter(m, "/names")
+	if m.byName || !strings.Contains(m.View(), "[3:@alice]") {
+		t.Fatal("back to nicks")
+	}
+}

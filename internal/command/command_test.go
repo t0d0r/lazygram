@@ -41,6 +41,7 @@ func TestParse(t *testing.T) {
 		{"/e", Command{Edit, ""}, false},
 		{"/delete", Command{Delete, ""}, false},
 		{"/rm", Command{Delete, ""}, false},
+		{"/names", Command{Nicks, ""}, false},
 		{"/bogus", Command{}, true},
 		{"/", Command{}, true},
 		{"hello", Command{}, true},
