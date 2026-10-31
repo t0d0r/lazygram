@@ -108,3 +108,14 @@ at the hidden password prompt takes effect only after Enter.
 - Figlet banners (`internal/logo`, generated with figlet slant/smslant,
   ASCII only): start banner as a raw note at the top of the server window
   with a version tagline; exit banner printed after the alt screen closes.
+
+## v0.3.0 released
+
+- github.com/t0d0r/lazygram is public; `master` and tag `v0.3.0`
+  (23c1de5, with the banners) are pushed and the GitHub release holds the
+  four tarballs and SHA256SUMS. All assets downloaded back and verified:
+  sums match, binary reports `lazygram v0.3.0`, exits 2 when not linked,
+  no registration inside. The source tarball holds no private files.
+- `Formula/lazygram.rb` in t0d0r/homebrew-tap points at the v0.3.0 source
+  tarball (sha256 recorded in the formula) and installs with
+  `brew install t0d0r/tap/lazygram`.
