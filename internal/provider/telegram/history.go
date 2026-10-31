@@ -34,6 +34,9 @@ type api interface {
 	MessagesGetBotCallbackAnswer(ctx context.Context, req *tg.MessagesGetBotCallbackAnswerRequest) (*tg.MessagesBotCallbackAnswer, error)
 	MessagesGetMessages(ctx context.Context, id []tg.InputMessageClass) (tg.MessagesMessagesClass, error)
 	ChannelsGetMessages(ctx context.Context, req *tg.ChannelsGetMessagesRequest) (tg.MessagesMessagesClass, error)
+	MessagesEditMessage(ctx context.Context, req *tg.MessagesEditMessageRequest) (tg.UpdatesClass, error)
+	MessagesDeleteMessages(ctx context.Context, req *tg.MessagesDeleteMessagesRequest) (*tg.MessagesAffectedMessages, error)
+	ChannelsDeleteMessages(ctx context.Context, req *tg.ChannelsDeleteMessagesRequest) (*tg.MessagesAffectedMessages, error)
 }
 
 // service implements Client on top of api. It is read-only. Every History
@@ -205,6 +208,48 @@ func (s *service) Send(ctx context.Context, chatID, text string) error {
 	})
 	if err != nil {
 		return fmt.Errorf("telegram: send: %w", err)
+	}
+	return nil
+}
+
+// Edit replaces the text of one of this account's messages.
+func (s *service) Edit(ctx context.Context, chatID, msgID, text string) error {
+	ent, err := s.entity(ctx, chatID)
+	if err != nil {
+		return err
+	}
+	id, err := strconv.Atoi(msgID)
+	if err != nil {
+		return fmt.Errorf("telegram: bad message id %q", msgID)
+	}
+	if strings.TrimSpace(text) == "" {
+		return errors.New("telegram: empty message")
+	}
+	req := &tg.MessagesEditMessageRequest{Peer: ent.peer, ID: id}
+	req.SetMessage(text)
+	if _, err := s.api.MessagesEditMessage(ctx, req); err != nil {
+		return fmt.Errorf("telegram: edit: %w", err)
+	}
+	return nil
+}
+
+// Delete removes one of this account's messages for everyone.
+func (s *service) Delete(ctx context.Context, chatID, msgID string) error {
+	ent, err := s.entity(ctx, chatID)
+	if err != nil {
+		return err
+	}
+	id, err := strconv.Atoi(msgID)
+	if err != nil {
+		return fmt.Errorf("telegram: bad message id %q", msgID)
+	}
+	if ent.channel != nil {
+		_, err = s.api.ChannelsDeleteMessages(ctx, &tg.ChannelsDeleteMessagesRequest{Channel: ent.channel, ID: []int{id}})
+	} else {
+		_, err = s.api.MessagesDeleteMessages(ctx, &tg.MessagesDeleteMessagesRequest{Revoke: true, ID: []int{id}})
+	}
+	if err != nil {
+		return fmt.Errorf("telegram: delete: %w", err)
 	}
 	return nil
 }
@@ -441,6 +486,18 @@ func (f floodAPI) MessagesGetMessages(ctx context.Context, id []tg.InputMessageC
 
 func (f floodAPI) ChannelsGetMessages(ctx context.Context, req *tg.ChannelsGetMessagesRequest) (tg.MessagesMessagesClass, error) {
 	return retryFlood(ctx, f.sleep, func() (tg.MessagesMessagesClass, error) { return f.api.ChannelsGetMessages(ctx, req) })
+}
+
+func (f floodAPI) MessagesEditMessage(ctx context.Context, req *tg.MessagesEditMessageRequest) (tg.UpdatesClass, error) {
+	return retryFlood(ctx, f.sleep, func() (tg.UpdatesClass, error) { return f.api.MessagesEditMessage(ctx, req) })
+}
+
+func (f floodAPI) MessagesDeleteMessages(ctx context.Context, req *tg.MessagesDeleteMessagesRequest) (*tg.MessagesAffectedMessages, error) {
+	return retryFlood(ctx, f.sleep, func() (*tg.MessagesAffectedMessages, error) { return f.api.MessagesDeleteMessages(ctx, req) })
+}
+
+func (f floodAPI) ChannelsDeleteMessages(ctx context.Context, req *tg.ChannelsDeleteMessagesRequest) (*tg.MessagesAffectedMessages, error) {
+	return retryFlood(ctx, f.sleep, func() (*tg.MessagesAffectedMessages, error) { return f.api.ChannelsDeleteMessages(ctx, req) })
 }
 
 func retryFlood[T any](ctx context.Context, sleep func(context.Context, time.Duration) error, call func() (T, error)) (T, error) {

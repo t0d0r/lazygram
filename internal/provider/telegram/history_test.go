@@ -3,6 +3,7 @@ package telegram
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -24,6 +25,8 @@ type fakeAPI struct {
 	sent    []string
 	pressed []string // callback data pressed
 	fetched []string // "messages" or "channels" per refetch
+	edited  []string // "id:text"
+	deleted []string // "messages:[ids]:revoke" or "channels:[ids]"
 
 	extraDialogs []tg.DialogClass // listed before the fixed dialogs
 	extraChats   []tg.ChatClass
@@ -176,6 +179,22 @@ func (f *fakeAPI) ChannelsGetMessages(_ context.Context, r *tg.ChannelsGetMessag
 		}
 	}
 	return &tg.MessagesChannelMessages{Messages: out}, nil
+}
+
+func (f *fakeAPI) MessagesEditMessage(_ context.Context, r *tg.MessagesEditMessageRequest) (tg.UpdatesClass, error) {
+	msg, _ := r.GetMessage()
+	f.edited = append(f.edited, fmt.Sprintf("%d:%s", r.ID, msg))
+	return &tg.Updates{}, nil
+}
+
+func (f *fakeAPI) MessagesDeleteMessages(_ context.Context, r *tg.MessagesDeleteMessagesRequest) (*tg.MessagesAffectedMessages, error) {
+	f.deleted = append(f.deleted, fmt.Sprintf("messages:%v:%v", r.ID, r.Revoke))
+	return &tg.MessagesAffectedMessages{}, nil
+}
+
+func (f *fakeAPI) ChannelsDeleteMessages(_ context.Context, r *tg.ChannelsDeleteMessagesRequest) (*tg.MessagesAffectedMessages, error) {
+	f.deleted = append(f.deleted, fmt.Sprintf("channels:%v", r.ID))
+	return &tg.MessagesAffectedMessages{}, nil
 }
 
 func (f *fakeAPI) MessagesSendMessage(_ context.Context, r *tg.MessagesSendMessageRequest) (tg.UpdatesClass, error) {
@@ -588,5 +607,25 @@ func TestFetchStreamsIntoMemory(t *testing.T) {
 	lw := &limitWriter{w: io.Discard, left: 3}
 	if _, err := lw.Write([]byte("abcd")); err == nil {
 		t.Fatal("the size cap must hold")
+	}
+}
+
+func TestEditAndDelete(t *testing.T) {
+	f := newFakeAPI()
+	s := newService(f)
+	if err := s.Edit(context.Background(), "telegram:7", "5", "new text"); err != nil || f.edited[0] != "5:new text" {
+		t.Fatalf("%v %v", err, f.edited)
+	}
+	if err := s.Edit(context.Background(), "telegram:7", "5", "  "); err == nil {
+		t.Fatal("empty edit")
+	}
+	if err := s.Delete(context.Background(), "telegram:7", "5"); err != nil || f.deleted[0] != "messages:[5]:true" {
+		t.Fatalf("%v %v", err, f.deleted)
+	}
+	if err := s.Delete(context.Background(), "telegram:-1000000000009", "8"); err != nil || f.deleted[1] != "channels:[8]" {
+		t.Fatalf("channel delete: %v %v", err, f.deleted)
+	}
+	if err := s.Delete(context.Background(), "telegram:7", "x"); err == nil {
+		t.Fatal("bad id")
 	}
 }

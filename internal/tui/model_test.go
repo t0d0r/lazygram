@@ -26,6 +26,8 @@ type fake struct {
 	sent    []string // Send calls as "chat:text"
 	pressed []string // Press calls as "chat:msg:label"
 	fetched []string // Fetch calls as "chat:msg"
+	edited  []string // Edit calls as "chat:msg:text"
+	deleted []string // Delete calls as "chat:msg"
 }
 
 func (f *fake) Send(_ context.Context, chatID, text string) error {
@@ -39,6 +41,16 @@ func (f *fake) Fetch(_ context.Context, chatID, msgID string) ([]byte, string, e
 		return nil, "", f.err
 	}
 	return []byte("BYTES-" + msgID), msgID + ".jpg", nil
+}
+
+func (f *fake) Edit(_ context.Context, chatID, msgID, text string) error {
+	f.edited = append(f.edited, chatID+":"+msgID+":"+text)
+	return f.err
+}
+
+func (f *fake) Delete(_ context.Context, chatID, msgID string) error {
+	f.deleted = append(f.deleted, chatID+":"+msgID)
+	return f.err
 }
 
 func (f *fake) Press(_ context.Context, chatID, msgID string, b domain.Button) (domain.PressAnswer, error) {
@@ -1443,5 +1455,56 @@ func TestCtrlXAddsALineWhenEnterSends(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX}) // fast second press: toggle back, line removed
 	if m.wins[m.cur].enterSends || string(m.input) != "first" {
 		t.Fatalf("toggle: enterSends=%v input=%q", m.wins[m.cur].enterSends, string(m.input))
+	}
+}
+
+func TestEditAndDeleteLastOwnMessage(t *testing.T) {
+	f := newFake()
+	f.msgs = append(f.msgs, mk("c1", "5", "me", "my typo", 3), mk("c1", "6", "ada", "reply", 4))
+	m := setup(t, f)
+	enter(m, "/edit x")
+	if !m.isErr {
+		t.Fatal("server window")
+	}
+	enter(m, "/win @alice")
+	enter(m, "/delete")
+	if !m.isErr || !strings.Contains(m.status, "no message of yours") {
+		t.Fatalf("no own message: %q", m.status)
+	}
+	enter(m, "/win #dev")
+	enter(m, "/edit")
+	if string(m.input) != "/edit my typo" {
+		t.Fatalf("prefill: %q", string(m.input))
+	}
+	m.input = nil
+	cmd := enter(m, "/edit my fix")
+	if cmd == nil {
+		t.Fatal("expected an edit")
+	}
+	m.Update(cmd())
+	if len(f.edited) != 1 || f.edited[0] != "c1:5:my fix" || m.isErr {
+		t.Fatalf("edited=%v status=%q", f.edited, m.status)
+	}
+	if !strings.Contains(body(m), "<me> my fix") || strings.Contains(body(m), "my typo") {
+		t.Fatalf("edit must show:\n%s", body(m))
+	}
+	if got, _ := m.opt.Store.Messages("c1", 0); got[len(got)-2].Text != "my fix" {
+		t.Fatal("cache must hold the edit")
+	}
+	cmd = enter(m, "/delete")
+	m.Update(cmd())
+	if len(f.deleted) != 1 || f.deleted[0] != "c1:5" || strings.Contains(body(m), "<me> my fix") || !strings.Contains(body(m), "deleted your message: my fix") {
+		t.Fatalf("deleted=%v\n%s", f.deleted, body(m))
+	}
+	if n, _ := m.opt.Store.Count("c1"); n != 3 {
+		t.Fatalf("cache count %d", n)
+	}
+	f.err = errors.New("MESSAGE_EDIT_TIME_EXPIRED")
+	f.msgs = nil
+	enter(m, "/win 0")
+	enter(m, "/win #dev")
+	enter(m, "/delete")
+	if !m.isErr {
+		t.Fatal("nothing left of mine")
 	}
 }

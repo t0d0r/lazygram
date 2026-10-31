@@ -43,6 +43,12 @@ func TestInertWithoutClient(t *testing.T) {
 	if _, _, err := p.Fetch(context.Background(), "x", "1"); !errors.Is(err, provider.ErrNotImplemented) {
 		t.Fatalf("fetch: %v", err)
 	}
+	if err := p.Edit(context.Background(), "x", "1", "t"); !errors.Is(err, provider.ErrNotImplemented) {
+		t.Fatalf("edit: %v", err)
+	}
+	if err := p.Delete(context.Background(), "x", "1"); !errors.Is(err, provider.ErrNotImplemented) {
+		t.Fatalf("delete: %v", err)
+	}
 	var _ provider.Provider = p
 }
 

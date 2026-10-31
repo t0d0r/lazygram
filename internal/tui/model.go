@@ -169,7 +169,15 @@ type (
 		err    error
 	}
 	sendLaterMsg struct{ seq int } // the double Ctrl-X window has passed
-	fetchedMsg   struct {
+	editedMsg    struct {
+		chatID, msgID, text string
+		err                 error
+	}
+	deletedMsg struct {
+		chatID, msgID, text string
+		err                 error
+	}
+	fetchedMsg struct {
 		chatID, msgID string
 		name          string // file name for the viewer
 		data          []byte // the attachment
@@ -525,6 +533,33 @@ func (m *Model) Cleanup() {
 	m.viewFiles, m.viewDir = nil, ""
 }
 
+func (m *Model) editCmd(msg domain.Message, text string) tea.Cmd {
+	p, st := m.opt.Provider, m.opt.Store
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		err := p.Edit(ctx, msg.ChatID, msg.ID, text)
+		if err == nil {
+			msg.Text = text
+			err = st.Replace(msg)
+		}
+		return editedMsg{chatID: msg.ChatID, msgID: msg.ID, text: text, err: err}
+	}
+}
+
+func (m *Model) deleteCmd(msg domain.Message) tea.Cmd {
+	p, st := m.opt.Provider, m.opt.Store
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		err := p.Delete(ctx, msg.ChatID, msg.ID)
+		if err == nil {
+			err = st.Delete(msg.ChatID, msg.ID)
+		}
+		return deletedMsg{chatID: msg.ChatID, msgID: msg.ID, text: msg.Text, err: err}
+	}
+}
+
 func (m *Model) openCmd(target string) tea.Cmd {
 	open := m.opt.Open
 	return func() tea.Msg { return openedMsg{target: target, err: open(target)} }
@@ -651,6 +686,28 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.note(w, "decrypted to "+path+" (until exit; kept encrypted in the vault)")
 		m.setInfo("decrypted to " + path)
+	case editedMsg:
+		if msg.err != nil {
+			m.fail("edit: " + errText(msg.err))
+			break
+		}
+		for i := range m.msgs {
+			if m.msgs[i].ChatID == msg.chatID && m.msgs[i].ID == msg.msgID {
+				m.msgs[i].Text = msg.text
+			}
+		}
+		m.rcache = &renderCache{}
+		m.setInfo("edited")
+	case deletedMsg:
+		if msg.err != nil {
+			m.fail("delete: " + errText(msg.err))
+			break
+		}
+		m.msgs = domain.Remove(m.msgs, msg.chatID, msg.msgID)
+		if _, w := m.winFor(msg.chatID); w != nil {
+			m.note(w, "deleted your message: "+msg.text)
+		}
+		m.setInfo("deleted")
 	case sendLaterMsg:
 		if p := m.pending; p != nil && p.seq == msg.seq {
 			m.pending = nil
@@ -1272,6 +1329,27 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.closeWin(i)
 	case command.Msg:
 		return m.msg(c.Arg)
+	case command.Edit, command.Delete:
+		if w.chatID == "" {
+			m.setErr("the server window has no chat; /win to a chat first")
+			break
+		}
+		last, ok := domain.LastOwn(m.msgs, w.chatID)
+		if !ok {
+			m.setErr("no message of yours in " + m.nameOf(w.chatID) + " to " + map[bool]string{true: "edit", false: "delete"}[c.Kind == command.Edit])
+			break
+		}
+		if c.Kind == command.Delete {
+			m.setInfo("deleting your last message...")
+			return m, m.deleteCmd(last)
+		}
+		if c.Arg == "" { // put the text in the prompt for changing
+			m.input = []rune("/edit " + last.Text)
+			m.setInfo("change the text and press Enter")
+			break
+		}
+		m.setInfo("editing...")
+		return m, m.editCmd(last, c.Arg)
 	case command.About:
 		m.about()
 	case command.Mouse:

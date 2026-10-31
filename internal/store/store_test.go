@@ -248,3 +248,18 @@ func TestMediaVaultIsSealed(t *testing.T) {
 		t.Fatal("memory vault")
 	}
 }
+
+func TestDelete(t *testing.T) {
+	s := mustOpen(t, Memory, secret)
+	mustAdd(t, s, m("a", "1", 1, "x"), m("a", "2", 2, "y"))
+	if err := s.Delete("a", "1"); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := s.Messages("a", 0)
+	if len(got) != 1 || got[0].ID != "2" {
+		t.Fatalf("%+v", got)
+	}
+	if err := s.Delete("a", "nope"); err != nil {
+		t.Fatal("deleting an unknown message is fine")
+	}
+}

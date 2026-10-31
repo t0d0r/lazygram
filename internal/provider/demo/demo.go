@@ -212,3 +212,35 @@ func (p *Provider) Fetch(_ context.Context, chatID, msgID string) ([]byte, strin
 	}
 	return nil, "", fmt.Errorf("demo: no message %s in %s", msgID, chatID)
 }
+
+// Edit implements provider.Provider for the account's own lines.
+func (p *Provider) Edit(_ context.Context, chatID, msgID, text string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i := range p.msgs {
+		if p.msgs[i].ChatID == chatID && p.msgs[i].ID == msgID {
+			if p.msgs[i].Sender != "me" {
+				return fmt.Errorf("demo: message %s is not yours", msgID)
+			}
+			p.msgs[i].Text = text
+			return nil
+		}
+	}
+	return fmt.Errorf("demo: no message %s in %s", msgID, chatID)
+}
+
+// Delete implements provider.Provider for the account's own lines.
+func (p *Provider) Delete(_ context.Context, chatID, msgID string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for i := range p.msgs {
+		if p.msgs[i].ChatID == chatID && p.msgs[i].ID == msgID {
+			if p.msgs[i].Sender != "me" {
+				return fmt.Errorf("demo: message %s is not yours", msgID)
+			}
+			p.msgs = append(p.msgs[:i], p.msgs[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("demo: no message %s in %s", msgID, chatID)
+}

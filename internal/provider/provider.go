@@ -34,4 +34,8 @@ type Provider interface {
 	// file name (extension at least) for the viewer. Nothing is written to
 	// disk by the provider; the caller keeps it encrypted.
 	Fetch(ctx context.Context, chatID, msgID string) (data []byte, name string, err error)
+	// Edit replaces the text of one of this account's messages.
+	Edit(ctx context.Context, chatID, msgID, text string) error
+	// Delete removes one of this account's messages for everyone.
+	Delete(ctx context.Context, chatID, msgID string) error
 }

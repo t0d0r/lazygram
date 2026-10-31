@@ -27,6 +27,8 @@ type Client interface {
 	Send(ctx context.Context, chatID, text string) error
 	Press(ctx context.Context, chatID, msgID string, b domain.Button) (domain.PressAnswer, error)
 	Fetch(ctx context.Context, chatID, msgID string) ([]byte, string, error)
+	Edit(ctx context.Context, chatID, msgID, text string) error
+	Delete(ctx context.Context, chatID, msgID string) error
 }
 
 // Provider adapts a Client to provider.Provider.
@@ -92,6 +94,22 @@ func (p *Provider) Fetch(ctx context.Context, chatID, msgID string) ([]byte, str
 		return nil, "", fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
 	}
 	return p.client.Fetch(ctx, chatID, msgID)
+}
+
+// Edit implements provider.Provider.
+func (p *Provider) Edit(ctx context.Context, chatID, msgID, text string) error {
+	if p.client == nil {
+		return fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
+	}
+	return p.client.Edit(ctx, chatID, msgID, text)
+}
+
+// Delete implements provider.Provider.
+func (p *Provider) Delete(ctx context.Context, chatID, msgID string) error {
+	if p.client == nil {
+		return fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
+	}
+	return p.client.Delete(ctx, chatID, msgID)
 }
 
 // Recent implements provider.Provider.

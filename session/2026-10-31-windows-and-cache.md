@@ -230,3 +230,7 @@ at the hidden password prompt takes effect only after Enter.
   input (one rule only).
 - Status messages (errors in red, notices, list/pager summaries) are shown
   on the rule line, left; the status line keeps only its segments.
+- `/edit [text]` and `/delete` for the newest own message in the window:
+  `Provider.Edit`/`Delete` (Telegram messages.editMessage,
+  messages.deleteMessages revoke / channels.deleteMessages), `Store.Delete`,
+  `domain.LastOwn`/`Remove`; `/edit` alone prefills the prompt.

@@ -8,7 +8,9 @@ type Provider interface {
     Recent(ctx, chatID string, limit int) ([]domain.Message, error)
     Send(ctx, chatID, text string) error
     Press(ctx, chatID, msgID string, b domain.Button) (domain.PressAnswer, error)
-    Fetch(ctx, chatID, msgID string) (path string, err error)
+    Fetch(ctx, chatID, msgID string) (data []byte, name string, err error)
+    Edit(ctx, chatID, msgID, text string) error
+    Delete(ctx, chatID, msgID string) error
 }
 ```
 
@@ -21,7 +23,8 @@ returned, it arrives through `Sync`. `Press` presses a callback button and
 returns the bot's answer (text, optional URL) and the message as it is
 afterwards (`Updated`), since bots edit their message in response; the
 caller replaces the message. `Fetch` downloads a message's attachment into memory and returns its
-bytes and a file name; the caller seals it into the vault. `Sync` may return messages together with an error
+bytes and a file name; the caller seals it into the vault. `Edit` and
+`Delete` change or remove one of the account's own messages. `Sync` may return messages together with an error
 (a batch that failed part-way); the caller stores them before showing the
 error. The store de-duplicates by (chat id, message id), so calls may
 overlap. Message times are absolute; the UI converts to local
@@ -158,7 +161,9 @@ name, which decides nothing about what gets opened). Other media (polls,
 locations, ...) shows as `[media]` and cannot be fetched. The only calls the connector makes: messages.getDialogs,
 messages.getHistory, messages.sendMessage (Ctrl-X, /me, reply buttons),
 messages.getBotCallbackAnswer, messages.getMessages and
-channels.getMessages (/press, /open), upload.getFile (/open). Service messages are skipped;
+channels.getMessages (/press, /open), upload.getFile (/open),
+messages.editMessage (/edit), messages.deleteMessages with revoke or
+channels.deleteMessages (/delete). Service messages are skipped;
 media-only messages show as `[media]`. Sender: user name, else post author,
 else `me` for own messages, else the peer's name in private chats, else
 `channel`. A FLOOD_WAIT of up to 60s is slept once and the request retried;

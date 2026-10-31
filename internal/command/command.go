@@ -31,6 +31,8 @@ const (
 	About        // print version, author and build information
 	Fx           // toggle the running lights over clickable text
 	Mouse        // toggle mouse reporting (off lets the terminal select text)
+	Edit         // edit the last own message in this window: Arg is the new text (empty: prefill)
+	Delete       // delete the last own message in this window
 )
 
 // Command is a parsed slash command.
@@ -59,6 +61,8 @@ var table = map[string]Kind{
 	"about": About, "version": About,
 	"fx": Fx, "lights": Fx, "anim": Fx,
 	"mouse": Mouse,
+	"edit":  Edit, "e": Edit,
+	"delete": Delete, "del": Delete, "rm": Delete,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -107,6 +111,8 @@ const HelpText = `Commands
   /stats                 client statistics
   /me <text>             send an action line
   /msg <@user|#chan> <text>  send to that chat, opening its window
+  /edit [text]           edit your last message here (no text: put it in the prompt)
+  /delete                delete your last message here, for everyone
   /press N | <msg> N     press a bot button (numbers shown under it)
   /open [msg]            fetch a photo or file and open it (images) or
                          show where it was saved

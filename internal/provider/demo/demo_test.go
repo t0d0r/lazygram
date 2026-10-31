@@ -126,3 +126,32 @@ func TestFetchReturnsAPNG(t *testing.T) {
 		t.Fatal("a message without media")
 	}
 }
+
+func TestEditAndDeleteOwnLines(t *testing.T) {
+	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	p := newAt(func() time.Time { return clock })
+	all, _ := p.Sync(context.Background(), time.Time{})
+	var mine, theirs domain.Message
+	for _, m := range all {
+		if m.ChatID == "demo-3" && m.Sender == "me" {
+			mine = m
+		}
+		if m.ChatID == "demo-3" && m.Sender != "me" {
+			theirs = m
+		}
+	}
+	if err := p.Edit(context.Background(), mine.ChatID, mine.ID, "changed"); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.Edit(context.Background(), theirs.ChatID, theirs.ID, "nope"); err == nil {
+		t.Fatal("only own lines")
+	}
+	if err := p.Delete(context.Background(), mine.ChatID, mine.ID); err != nil {
+		t.Fatal(err)
+	}
+	for _, m := range p.msgs {
+		if m.ID == mine.ID {
+			t.Fatal("deleted line still there")
+		}
+	}
+}

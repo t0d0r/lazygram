@@ -136,6 +136,26 @@ func Replace(msgs []Message, m Message) []Message {
 	return Merge(msgs, []Message{m})
 }
 
+// LastOwn returns the newest message of chatID sent by this account.
+func LastOwn(msgs []Message, chatID string) (Message, bool) {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].ChatID == chatID && msgs[i].Sender == "me" {
+			return msgs[i], true
+		}
+	}
+	return Message{}, false
+}
+
+// Remove drops the message with the given chat and id, if present.
+func Remove(msgs []Message, chatID, msgID string) []Message {
+	for i := range msgs {
+		if msgs[i].ChatID == chatID && msgs[i].ID == msgID {
+			return append(append([]Message{}, msgs[:i]...), msgs[i+1:]...)
+		}
+	}
+	return msgs
+}
+
 // LatestWithMedia returns the newest message of chatID with an attachment.
 func LatestWithMedia(msgs []Message, chatID string) (Message, bool) {
 	for i := len(msgs) - 1; i >= 0; i-- {

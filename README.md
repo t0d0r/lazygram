@@ -107,6 +107,7 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/stats`                   | client statistics                             |
 | `/me <text>`               | send an action line (`* you waves`)           |
 | `/msg <@user|#chan> <text>` | send to a chat, opening its window if needed |
+| `/edit [text]`, `/delete`  | change or remove your last message in this chat |
 | `/press N`                 | press button N under the latest bot message; `/press <msg> N` for an older one |
 | `/open [msg]`              | fetch a `[photo]`/`[file]` into the encrypted vault; images open in the system viewer |
 | `/theme [name]`            | colour themes: default, solarized, gruvbox, dracula, nord, monokai, tokyonight, vim, emacs |

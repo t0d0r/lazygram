@@ -107,6 +107,8 @@ as notices; there is no separate help view.
 | `/stats`                      | print client statistics                              |
 | `/me <text>`                  | send `* text` to this window's chat (shown as `* you text`) |
 | `/msg <@user|#chan> <text>`   | send to that chat, opening and focusing its window if missing |
+| `/edit [text]`                | edit your last message in this chat; without text it is put in the prompt as `/edit <text>` |
+| `/delete`                     | delete your last message in this chat, for everyone  |
 | `/press N`, `/press <msg> N`  | press a bot button (see Buttons)                     |
 | `/open [msg]`                 | fetch an attachment; open it when it is an image     |
 | `/theme [name]`               | list the colour themes or switch (see Themes)        |
@@ -119,6 +121,18 @@ Short forms: `/w`, `/j`, `/join`, `/query` for `/win`; `/wc`, `/part` for
 `/info` for `/whois`; `/uptime` for `/stats`; `/action` for `/me`. Errors
 show in the status line in red; provider errors also land in the server
 window.
+
+## Editing and deleting
+
+`/edit` and `/delete` act on the newest message in the current window's
+chat that this account sent (sender `me`). `/edit` alone puts its text
+into the prompt as `/edit <text>` for changing; `/edit <new text>` sends
+the edit through `Provider.Edit`, after which the line, the mirror and
+the cache show the new text. `/delete` removes it for everyone through
+`Provider.Delete`, drops it from the mirror and the cache, and leaves a
+notice with the deleted text in the window. Both fail in the server
+window and when there is no own message in the chat. Errors (for example
+an edit past Telegram's time limit) go to the status rule and window 0.
 
 ## Buttons
 

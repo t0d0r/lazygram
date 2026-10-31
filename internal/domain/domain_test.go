@@ -163,3 +163,21 @@ func TestReplaceAndLatestWithButtons(t *testing.T) {
 		t.Fatalf("replace appends unknown: %+v", ms)
 	}
 }
+
+func TestLastOwnAndRemove(t *testing.T) {
+	ms := []Message{msg("a", "1", 0, "me", "mine"), msg("a", "2", 1, "x", "theirs"), msg("a", "3", 2, "me", "mine too"), msg("b", "1", 3, "me", "other chat")}
+	got, ok := LastOwn(ms, "a")
+	if !ok || got.ID != "3" {
+		t.Fatalf("%+v %v", got, ok)
+	}
+	if _, ok := LastOwn(ms, "c"); ok {
+		t.Fatal("none")
+	}
+	ms = Remove(ms, "a", "3")
+	if len(ms) != 3 || ms[2].ChatID != "b" {
+		t.Fatalf("remove: %+v", ms)
+	}
+	if len(Remove(ms, "a", "nope")) != 3 {
+		t.Fatal("remove of unknown is a no-op")
+	}
+}

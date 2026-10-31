@@ -178,6 +178,26 @@ func (c *MTProto) Fetch(ctx context.Context, chatID, msgID string) ([]byte, stri
 	return c.svc.download(ctx, ent, id, msgID)
 }
 
+// Edit implements Client.
+func (c *MTProto) Edit(ctx context.Context, chatID, msgID, text string) error {
+	if err := c.wait(ctx); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.svc.Edit(ctx, chatID, msgID, text)
+}
+
+// Delete implements Client.
+func (c *MTProto) Delete(ctx context.Context, chatID, msgID string) error {
+	if err := c.wait(ctx); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.svc.Delete(ctx, chatID, msgID)
+}
+
 // Recent implements Client.
 func (c *MTProto) Recent(ctx context.Context, chatID string, limit int) ([]domain.Message, error) {
 	if err := c.wait(ctx); err != nil {

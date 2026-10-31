@@ -244,6 +244,14 @@ func (s *Store) Replace(m domain.Message) error {
 	return err
 }
 
+// Delete removes a message from the cache.
+func (s *Store) Delete(chatID, msgID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, err := s.db.Exec(`DELETE FROM messages WHERE chat_key = ? AND id = ?`, s.chatKey(chatID), msgID)
+	return err
+}
+
 // Messages returns the newest limit messages of a chat (every chat when
 // chatID is empty), oldest first. limit <= 0 means all.
 func (s *Store) Messages(chatID string, limit int) ([]domain.Message, error) {
