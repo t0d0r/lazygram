@@ -34,6 +34,10 @@ func TestWrapText(t *testing.T) {
 	if strings.Join(got, "|") != "one two|three four five six" {
 		t.Fatalf("first line narrower than the rest: %q", got)
 	}
+	got = wrapText("  /x   a long description that wraps", 20, 20)
+	if len(got) != 3 || got[0] != "  /x a long" || got[1] != "  description that" || got[2] != "  wraps" {
+		t.Fatalf("indent must be kept on wrapped pieces: %q", got)
+	}
 }
 
 func TestWindow(t *testing.T) {

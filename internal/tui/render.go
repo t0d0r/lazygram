@@ -210,24 +210,30 @@ func wrapText(text string, first, width int) []string {
 			out = append(out, strings.TrimRight(para, " ")) // keep internal spacing
 			continue
 		}
+		// A long line keeps its leading indent on every piece.
+		lead := para[:len(para)-len(strings.TrimLeft(para, " "))]
+		if len(lead) > limit()/2 {
+			lead = ""
+		}
+		room := func() int { return max(limit()-len(lead), 1) }
 		var cur string
 		flush := func() {
-			out = append(out, cur)
+			out = append(out, lead+cur)
 			cur = ""
 		}
 		for _, w := range strings.Fields(para) {
-			for lipgloss.Width(w) > limit() {
+			for lipgloss.Width(w) > room() {
 				if cur != "" {
 					flush()
 				}
-				head, rest := splitAt(w, limit())
-				out = append(out, head)
+				head, rest := splitAt(w, room())
+				out = append(out, lead+head)
 				w = rest
 			}
 			switch {
 			case cur == "":
 				cur = w
-			case lipgloss.Width(cur)+1+lipgloss.Width(w) <= limit():
+			case lipgloss.Width(cur)+1+lipgloss.Width(w) <= room():
 				cur += " " + w
 			default:
 				flush()

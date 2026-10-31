@@ -75,21 +75,20 @@ func Names() []string {
 	return out
 }
 
-// HelpText lists the commands for the in-app help view.
+// HelpText lists the commands for /help. Lines stay under 70 columns so
+// they fit an 80-column window after the notice indent.
 const HelpText = `Commands
-  /help, /?                 show this help
-  /quit, /q                 leave lazygram
-  /refresh, /r              sync with the service now
-  /list [text], /ls         print the chats: @people and #channels
-  /win, /win list           selectable list of the open windows
-  /win N                    switch to window N (1 is the server window)
-  /win @user, /win #chan    open or switch to that chat's window (Tab completes)
-  /close [N]                close a window
-  /last [N]                 fetch the last N messages of this window's chat (default 10)
-  /search [text]            page through this window's local history, searching for text
-  /whois [@user|#chan]      what is known about a chat (default: this window's)
-  /stats                    client statistics
-  /me <text>                send an action line ("* text") to this window's chat
-  /press N                  press button N of the latest message with buttons here
-  /press <msg> N            press button N of message <msg> (the number shown after it)
-  Typing text in a chat window and pressing Ctrl-X sends it to that chat.`
+  /help, /?              this help
+  /quit, /q              leave lazygram
+  /refresh, /r           sync now
+  /list [text]           chat list: @people and #channels
+  /win, /win list        list of the open windows
+  /win N                 switch to window N (1 is the server window)
+  /win @user | #chan     open or switch to that chat's window
+  /close [N]             close a window
+  /last [N]              fetch the last N messages here (default 10)
+  /search [text]         page through this chat's local history
+  /whois [name]          what is known about a chat
+  /stats                 client statistics
+  /me <text>             send an action line
+  /press N | <msg> N     press a bot button (numbers shown under it)`

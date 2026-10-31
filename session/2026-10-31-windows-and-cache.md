@@ -128,3 +128,6 @@ at the hidden password prompt takes effect only after Enter.
   keyboards converted; press = getBotCallbackAnswer + a refetch through
   messages.getMessages or channels.getMessages (entity keeps an
   InputChannel). Demo: `@demobot` with Deploy/Hold/Runbook.
+- Double Ctrl-X (within 600 ms) toggles "Enter sends" per window (prompt
+  `[@name]> `). Help text re-laid out under 70 columns; long indented
+  lines keep their indent when wrapped. Tab only completes, in every view.

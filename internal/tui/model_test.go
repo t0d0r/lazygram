@@ -353,7 +353,7 @@ func TestQuitAndHelp(t *testing.T) {
 	if m.mode != modeWin || !strings.Contains(v, "Ctrl-X") || !strings.Contains(v, "People are @name") {
 		t.Fatalf("help should print into the window:\n%s", v)
 	}
-	if !strings.Contains(strings.Join(m.lines(), "\n"), "/win N                    switch") {
+	if !strings.Contains(strings.Join(m.lines(), "\n"), "/win N                 switch") {
 		t.Fatal("help columns must keep their alignment")
 	}
 	enter(m, "/win 2")
@@ -737,5 +737,58 @@ func TestPressErrorLandsInWindow(t *testing.T) {
 	m.Update(cmd())
 	if !m.isErr || !strings.Contains(body(m), "-!- press Yes: BOT_RESPONSE_TIMEOUT") {
 		t.Fatalf("%q\n%s", m.status, body(m))
+	}
+}
+
+func TestDoubleCtrlXTogglesEnterSends(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	enter(m, "/win @alice")
+	press(m, tea.KeyCtrlX)
+	press(m, tea.KeyCtrlX) // fast: toggle on
+	if !m.wins[m.cur].enterSends || !strings.Contains(m.View(), "[@alice]> ") {
+		t.Fatalf("toggle on: %v %q", m.wins[m.cur].enterSends, m.status)
+	}
+	cmd := enter(m, "hello via enter")
+	if cmd == nil || len(f.sent) != 0 {
+		t.Fatal("Enter must send now")
+	}
+	cmd()
+	if len(f.sent) != 1 || f.sent[0] != "c2:hello via enter" {
+		t.Fatalf("sent=%v", f.sent)
+	}
+	enter(m, "/win 1")
+	if m.wins[0].enterSends {
+		t.Fatal("the toggle is per window")
+	}
+	enter(m, "/win @alice")
+	enter(m, "/stats") // commands still run while Enter sends
+	if !strings.Contains(body(m), "stats: fake") {
+		t.Fatal("/stats should still run")
+	}
+	m.lastCtrlX = time.Now().Add(-2 * time.Second)
+	press(m, tea.KeyCtrlX) // slow: no toggle (empty input, nothing sent)
+	if !m.wins[m.cur].enterSends {
+		t.Fatal("a slow Ctrl-X must not toggle")
+	}
+	press(m, tea.KeyCtrlX) // fast after the previous: toggle off
+	if m.wins[m.cur].enterSends {
+		t.Fatal("toggle off")
+	}
+}
+
+func TestTabInListOnlyCompletes(t *testing.T) {
+	m := setup(t, newFake())
+	enter(m, "/list")
+	press(m, tea.KeyDown)
+	press(m, tea.KeyTab) // empty input: completes to the first name, never moves the cursor
+	if m.listCur != 1 || string(m.input) != "#dev" {
+		t.Fatalf("cur=%d input=%q", m.listCur, string(m.input))
+	}
+	m.input, m.comp = nil, nil
+	typ(m, "al")
+	press(m, tea.KeyTab)
+	if got := string(m.input); got != "@alice " {
+		t.Fatalf("Tab completes the filter: %q", got)
 	}
 }

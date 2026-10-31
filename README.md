@@ -103,7 +103,8 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/refresh`, `/help`, `/quit` | sync now; print the help into the window; leave |
 
 In a chat window, type text and press **Ctrl-X** to send it to that chat;
-Enter is for commands. The sent line shows up as `<me>` once the service
+Enter is for commands (press Ctrl-X twice quickly to make Enter send in
+that window, and again to switch back). The sent line shows up as `<me>` once the service
 has it. Bot messages with buttons show them underneath as
 `[1] Yes  [2] Docs (link)  (msg 1234)`; `/press 1` answers the bot and the
 edited message replaces the old line, link buttons only print their URL,
@@ -119,6 +120,7 @@ reply-keyboard buttons send their label.
 | F1                  | print the help into the window                     |
 | Esc                 | close the list or pager, else clear the input      |
 | Ctrl-X              | send the typed text to this window's chat          |
+| Ctrl-X twice        | toggle "Enter sends" for this window               |
 | Ctrl-C              | quit                                               |
 
 ## Development

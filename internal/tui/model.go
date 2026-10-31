@@ -39,6 +39,7 @@ const (
 )
 
 const (
+	doubleCtrlX    = 600 * time.Millisecond
 	layoutKey      = "windows" // store state key for the window layout
 	defaultBacklog = 2000      // cached messages loaded at start
 	recentOnOpen   = 10        // messages fetched when a chat window first opens
@@ -62,6 +63,8 @@ type win struct {
 	scroll int // lines above the bottom
 	notes  []note
 	loaded bool // recent history fetched once
+
+	enterSends bool // Enter sends plain text (toggled by a double Ctrl-X)
 }
 
 // Model is the bubbletea model.
@@ -77,8 +80,9 @@ type Model struct {
 	input []rune
 	comp  *completion
 
-	escPending bool   // an Esc was just pressed: a digit now switches windows
-	escSaved   []rune // the input as it was before that Esc cleared it
+	escPending bool      // an Esc was just pressed: a digit now switches windows
+	escSaved   []rune    // the input as it was before that Esc cleared it
+	lastCtrlX  time.Time // for the double Ctrl-X toggle
 
 	listCur     int     // selected row in the list view
 	listSrc     listSrc // what the list view shows
@@ -476,6 +480,7 @@ func (m *Model) switchTo(i int) tea.Cmd {
 		m.saveLayout()
 	}
 	m.mode = modeWin
+	m.lastCtrlX = time.Time{} // a double Ctrl-X never spans two windows
 	w := m.wins[i]
 	w.unread = 0
 	m.setInfo("window " + strconv.Itoa(i+1) + ": " + m.winName(i))
@@ -561,17 +566,23 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		return m.enter()
 	case tea.KeyCtrlX:
+		now := time.Now()
+		// A second Ctrl-X on an empty line within the window toggles; with
+		// text typed it sends, so a message is never swallowed.
+		if m.mode == modeWin && w.chatID != "" && strings.TrimSpace(string(m.input)) == "" && now.Sub(m.lastCtrlX) < doubleCtrlX {
+			m.lastCtrlX = time.Time{}
+			w.enterSends = !w.enterSends
+			if w.enterSends {
+				m.setInfo("Enter now sends text in " + m.winName(m.cur) + " (double Ctrl-X to turn off)")
+			} else {
+				m.setInfo("Enter runs commands again; Ctrl-X sends")
+			}
+			return m, nil
+		}
+		m.lastCtrlX = now
 		return m.send()
 	case tea.KeyTab:
-		if m.mode == modeList {
-			m.listCur++
-		} else {
-			m.complete()
-		}
-	case tea.KeyShiftTab:
-		if m.mode == modeList {
-			m.listCur = max(m.listCur-1, 0)
-		}
+		m.complete() // Tab only ever completes
 	case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 		if len(m.input) > 0 {
 			m.input = m.input[:len(m.input)-1]
@@ -667,8 +678,12 @@ func (m *Model) enter() (tea.Model, tea.Cmd) {
 	}
 	if !strings.HasPrefix(line, "/") {
 		if line != "" {
-			if m.wins[m.cur].chatID != "" && m.mode == modeWin {
-				m.setErr("Ctrl-X sends the text to " + m.winName(m.cur) + "; Enter runs /commands")
+			w := m.wins[m.cur]
+			if w.enterSends && w.chatID != "" && m.mode == modeWin {
+				return m.send()
+			}
+			if w.chatID != "" && m.mode == modeWin {
+				m.setErr("Ctrl-X sends the text to " + m.winName(m.cur) + "; Enter runs /commands (double Ctrl-X to swap)")
 			} else {
 				m.input = nil
 				m.setErr("not a command (start with /); Ctrl-X sends text in a chat window")
@@ -1074,6 +1089,9 @@ func (m *Model) View() string {
 		body, w.scroll = window(lines, h, w.scroll)
 		topic = m.topic()
 		prompt = "[" + m.winName(m.cur) + "] "
+		if w.enterSends {
+			prompt = "[" + m.winName(m.cur) + "]> "
+		}
 	}
 
 	var b strings.Builder
@@ -1222,17 +1240,18 @@ func (m *Model) inputLine(prompt string) string {
 }
 
 const keyHelp = `Keys
-  Tab               complete a command or a @user / #channel name; again cycles
-  Ctrl-N / Ctrl-P   next / previous window (also Alt-Right / Alt-Left)
-  Alt-1 .. Alt-0    window 1 .. 10 (Esc then the digit works too)
-  PgUp / PgDn       scroll a page; Up / Down a line; Home / End oldest / newest
-  Ctrl-R            sync now
-  F1                print this help
-  Esc               close the list or pager / clear the input
-  Ctrl-X            send the typed text to this window's chat
-  Ctrl-C            quit
-
-Window 1 is the server window: every chat interleaved, plus client notices.
-A window opens for a chat when it gets a message or has unread messages;
+  Tab                    complete a command or @user / #chan; again cycles
+  Ctrl-X                 send the typed text to this chat
+  Ctrl-X twice (fast)    toggle "Enter sends" for this window
+  Ctrl-N / Ctrl-P        next / previous window (Alt-Right / Alt-Left too)
+  Alt-1..0, Esc 1..0     window 1..10
+  PgUp / PgDn            scroll a page; Up / Down a line
+  Home / End             oldest / newest
+  Ctrl-R                 sync now
+  F1                     this help
+  Esc                    close the list or pager; clear the input
+  Ctrl-C                 quit
+Window 1 is the server window: every chat interleaved, plus notices.
+A window opens for a chat when it gets a message or has unread ones;
 [Act: 2,3] in the status line lists windows with unread messages.
 People are @name, groups and channels are #name.`

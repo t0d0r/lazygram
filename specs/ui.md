@@ -48,7 +48,8 @@ from newlines inside the message) start just past the time column, BitchX
 style, and empty lines inside a message are dropped. Notices: `HH:MM -!- text`. A message
 whose text starts with `* ` is an action line (`/me`) and renders as
 `HH:MM * sender text`. Long lines
-wrap as described above. A dim separator marks a change of local day.
+wrap as described above; a long line that starts with spaces keeps that
+indent on every piece, so help columns survive narrow windows. A dim separator marks a change of local day.
 Chat and sender colors derive from a hash so they are stable. Sender, text,
 titles and notices are stripped of control characters before rendering.
 
@@ -59,8 +60,9 @@ titles and notices are stripped of control characters before rendering.
   number when open, name, title, unread count, `(deleted)`. Up/Down (or
   Tab/Shift-Tab) move, Enter opens or focuses that chat's window, typing
   narrows the rows, Esc returns. Deleted accounts are hidden unless asked
-  for. `/win` (or `/win list`) shows the same kind of list for the open
-  windows (number, name, title, unread, `(current)`); Enter focuses.
+  for. Tab completes the typed filter like anywhere else and never moves
+  the cursor. `/win` (or `/win list`) shows the same kind of list for the
+  open windows (number, name, title, unread, `(current)`); Enter focuses.
   Scrolling: the cursor moves down the screen until it reaches the middle,
   then stays there while the list scrolls under it, and moves on to the
   bottom only when the list ends; the same on the way up.
@@ -116,8 +118,11 @@ Reply text: the label is sent like Ctrl-X. Pressing is always explicit.
 In a chat window, typed text plus Ctrl-X sends it to that chat through
 `Provider.Send`; the input clears, the status says "sending", and a sync
 is triggered so the line appears as `<me>` as soon as the service has it.
-Enter never sends: on plain text it reminds about Ctrl-X and keeps the
-text. Ctrl-X refuses in the server window, on empty text, and on text that
+By default Enter never sends: on plain text it reminds about Ctrl-X and
+keeps the text. Two Ctrl-X within 600 ms on an empty line toggle "Enter sends" for the
+current window (the prompt becomes `[@name]> `); with text typed the
+second Ctrl-X sends it instead, so nothing is swallowed. Commands still
+run, and Ctrl-X still sends. The toggle is per window and per session. Ctrl-X refuses in the server window, on empty text, and on text that
 starts with `/` (prefix a space to send such text). Send errors go to the
 status line and the window.
 
@@ -125,7 +130,8 @@ status line and the window.
 
 | key                  | action                                            |
 |----------------------|---------------------------------------------------|
-| Tab                  | complete; again cycles the candidates             |
+| Tab                  | complete; again cycles the candidates (nothing else, in every view) |
+| Ctrl-X twice         | toggle "Enter sends" for this window              |
 | Ctrl-N / Ctrl-P      | next / previous window (Alt-Right / Alt-Left too) |
 | Alt-1 .. Alt-0       | window 1 .. 10; Esc followed by the digit does the same (the typed input survives) |
 | PgUp / PgDn          | scroll a page; Up / Down one line                 |
