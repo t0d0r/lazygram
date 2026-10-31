@@ -21,10 +21,13 @@
 - Sending is explicit: only text typed in a chat window and confirmed with
   Ctrl-X, or given to /me, is sent; Enter never sends. Bot buttons are
   pressed only by /press; link buttons are printed, never opened.
-- Attachments are downloaded only on /open or a click, into a 0700 media
-  directory with 0600 files; only images are handed to the system opener,
-  other files are saved and their path shown. Downloaded files are remote
-  content; the media directory is part of the private state.
+- Attachments are downloaded only on /open or a click, never on arrival,
+  and stored encrypted in the vault (hashed names, same keys as the
+  cache). Viewing decrypts a copy into a private temporary directory that
+  is removed at exit; only raster images are handed to the system opener,
+  named by content type (a sender's "photo.html" never reaches a browser),
+  other files only get their temporary path shown. Downloaded files are
+  remote content.
 - A link in a message is opened only when clicked, only `http`/`https`
   with a host, through the system opener with the link as a single
   argument (no shell). Links are remote content: a click opens whatever

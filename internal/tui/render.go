@@ -42,12 +42,14 @@ func Banner(lines []string) []string {
 type spanKind int
 
 const (
-	spanChat  spanKind = iota // open the chat's window; target is the chat id
-	spanNick                  // open the chat named like the sender; target is the sender
-	spanURL                   // open the link; target is the URL
-	spanMedia                 // fetch and open the attachment; target is "chat\x00msg"
-	spanWin                   // focus window; target is its index
-	spanRow                   // list row; target is its index
+	spanChat    spanKind = iota // open the chat's window; target is the chat id
+	spanNick                    // open the chat named like the sender; target is the sender
+	spanURL                     // open the link; target is the URL
+	spanMedia                   // fetch and open the attachment; target is "chat\x00msg"
+	spanWin                     // focus window; target is its index
+	spanRow                     // list row; target is its index
+	spanEnd                     // jump to the newest line
+	spanButtons                 // a message's button line; target is the message key
 )
 
 // span is a clickable range of columns on one rendered line.
@@ -61,6 +63,46 @@ func (s span) hit(x int) bool { return x >= s.x0 && x < s.x1 }
 
 var urlRE = regexp.MustCompile(`https?://[^\s<>"']+`)
 
+// urlLocs finds links in s without the sentence punctuation that often
+// follows them.
+func urlLocs(s string) [][]int {
+	locs := urlRE.FindAllStringIndex(s, -1)
+	for _, loc := range locs {
+		for loc[1] > loc[0]+8 && strings.ContainsRune(".,;:!?)]'\"", rune(s[loc[1]-1])) {
+			loc[1]--
+		}
+	}
+	return locs
+}
+
+// urlsOf lists the links in s.
+func urlsOf(s string) []string {
+	var out []string
+	for _, loc := range urlLocs(s) {
+		out = append(out, s[loc[0]:loc[1]])
+	}
+	return out
+}
+
+// wholeURL maps a link fragment to its whole URL when wrapping cut it: an
+// exact entry wins; otherwise only a fragment that ends its line may be
+// the start of a longer URL.
+func wholeURL(fragment string, atLineEnd bool, full []string) string {
+	for _, u := range full {
+		if u == fragment {
+			return u
+		}
+	}
+	if atLineEnd {
+		for _, u := range full {
+			if strings.HasPrefix(u, fragment) {
+				return u
+			}
+		}
+	}
+	return fragment
+}
+
 // lineOpts controls how messages become terminal lines.
 type lineOpts struct {
 	width     int
@@ -69,6 +111,89 @@ type lineOpts struct {
 	nameW     int                        // padded chat column width
 	fullDate  bool                       // history pager shows the date on every line
 	highlight string                     // case-insensitive text to highlight
+	phase     int                        // running-light position; -1 means no animation
+	hover     string                     // hover key of the element under the pointer; only it animates
+	cache     *renderCache               // optional per-message cache
+}
+
+// hovered is the phase to render an element with: the running light when
+// it is the hovered one, none otherwise.
+func (o lineOpts) hovered(kind spanKind, target string) int {
+	if o.phase < 0 || o.hover == "" || o.hover != fmt.Sprintf("%d:%s", kind, target) {
+		return -1
+	}
+	return o.phase
+}
+
+// sparkPeriod is the distance between two lights running over a span.
+const sparkPeriod = 7
+
+// renderCache remembers rendered messages; a message without animated
+// spans renders once per width and theme, an animated one once per phase.
+type renderCache struct {
+	theme string
+	m     map[string]cached
+}
+
+type cached struct {
+	lines []string
+	spans [][]span
+	anim  bool
+}
+
+func (c *renderCache) get(key string) (cached, bool) {
+	if c == nil || c.theme != currentName {
+		return cached{}, false
+	}
+	v, ok := c.m[key]
+	return v, ok
+}
+
+func (c *renderCache) put(key string, v cached) {
+	if c == nil {
+		return
+	}
+	if c.theme != currentName || len(c.m) > 20000 {
+		c.theme, c.m = currentName, map[string]cached{}
+	}
+	c.m[key] = v
+}
+
+// clickable paints text as something the mouse can act on, with the
+// running light at phase (none when phase < 0).
+func clickable(text string, base lipgloss.Style, phase int) string {
+	if phase < 0 {
+		return base.Render(text)
+	}
+	var b strings.Builder
+	for i, r := range []rune(text) {
+		if (i+phase)%sparkPeriod == 0 {
+			b.WriteString(sparkStyle.Render(string(r)))
+		} else {
+			b.WriteString(base.Render(string(r)))
+		}
+	}
+	return b.String()
+}
+
+// styleText paints one plain line: search hits highlighted and links drawn
+// clickable, the hovered one with the running light. full maps a link cut
+// by wrapping to its whole URL.
+func styleText(l string, o lineOpts, full []string) string {
+	locs := urlLocs(l)
+	if len(locs) == 0 {
+		return highlight(l, o.highlight)
+	}
+	var b strings.Builder
+	last := 0
+	for _, loc := range locs {
+		b.WriteString(highlight(l[last:loc[0]], o.highlight))
+		target := wholeURL(l[loc[0]:loc[1]], loc[1] == len(l), full)
+		b.WriteString(clickable(l[loc[0]:loc[1]], linkStyle, o.hovered(spanURL, target)))
+		last = loc[1]
+	}
+	b.WriteString(highlight(l[last:], o.highlight))
+	return b.String()
 }
 
 // renderLines turns chronological messages and notes into wrapped, styled
@@ -114,12 +239,14 @@ func renderRich(msgs []domain.Message, notes []note, o lineOpts) ([]string, [][]
 			day(t)
 			prefix := stamp(t) + " "
 			room := max(o.width-len(prefix)-4, 10)
-			for k, l := range wrapText(sanitize(notes[j].text, true), room, room) {
+			text := sanitize(notes[j].text, true)
+			full := urlsOf(text)
+			for k, l := range wrapText(text, room, room) {
 				base := len(prefix) + 4
 				if k == 0 {
-					add(dimStyle.Render(prefix)+noteStyle.Render("-!- "+l), linkSpans(l, base, nil)...)
+					add(dimStyle.Render(prefix)+noteStyle.Render("-!- "+l), linkSpans(l, base, full)...)
 				} else {
-					add(strings.Repeat(" ", base)+noteStyle.Render(l), linkSpans(l, base, nil)...)
+					add(strings.Repeat(" ", base)+noteStyle.Render(l), linkSpans(l, base, full)...)
 				}
 			}
 			j++
@@ -127,56 +254,136 @@ func renderRich(msgs []domain.Message, notes []note, o lineOpts) ([]string, [][]
 		}
 		m := msgs[i]
 		i++
-		m.Sender, m.Text = sanitize(m.Sender, false), sanitize(m.Text, true)
 		t := m.Time.Local()
 		day(t)
-		plainPrefix := stamp(t) + " "
-		prefix := dimStyle.Render(stamp(t)) + " "
-		var first []span
-		if o.showChat {
-			name := o.nameOf(m.ChatID)
-			first = append(first, span{len(plainPrefix), len(plainPrefix) + lipgloss.Width(name), spanChat, m.ChatID})
-			plainPrefix += fmt.Sprintf("%-*s ", o.nameW, name)
-			prefix += lipgloss.NewStyle().Foreground(colorFor(m.ChatID)).Bold(true).Render(fmt.Sprintf("%-*s", o.nameW, name)) + " "
-		}
-		text := m.Text
-		nickX := lipgloss.Width(plainPrefix)
-		if action, ok := strings.CutPrefix(m.Text, "* "); ok && strings.TrimSpace(action) != "" {
-			// IRC-style action (/me): "* sender does something"
-			plainPrefix += "* " + m.Sender + " "
-			prefix += lipgloss.NewStyle().Foreground(colorFor(m.Sender)).Italic(true).Render("* "+m.Sender) + " "
-			text = action
-		} else {
-			plainPrefix += "<" + m.Sender + "> "
-			prefix += lipgloss.NewStyle().Foreground(colorFor(m.Sender)).Render("<"+m.Sender+">") + " "
-		}
-		first = append(first, span{nickX, lipgloss.Width(plainPrefix) - 1, spanNick, m.Sender})
-		prefixW := lipgloss.Width(plainPrefix)
-		if m.Media != nil { // the attachment token leads the text and is a click target
-			token := mediaToken(m.Media)
-			first = append(first, span{prefixW, prefixW + lipgloss.Width(token), spanMedia, m.ChatID + "\x00" + m.ID})
-			text = strings.TrimSpace(token + " " + text)
-		}
-		// Continuation lines sit just past the time column, BitchX style,
-		// rather than under the text, so long messages waste no width.
-		indent := strings.Repeat(" ", len(stamp(t))+1)
-		urls := urlRE.FindAllString(text, -1)
-		body := wrapText(text, max(o.width-prefixW, 10), max(o.width-len(indent), 10))
-		for k, l := range body {
-			styled := highlight(l, o.highlight)
-			if k == 0 {
-				add(prefix+styled, append(first, linkSpans(l, prefixW, urls)...)...)
-			} else {
-				add(indent+styled, linkSpans(l, len(indent), urls)...)
+		key := cacheKey(m, o)
+		if c, ok := o.cache.get(key); ok {
+			for k := range c.lines {
+				add(c.lines[k], c.spans[k]...)
 			}
+			continue
 		}
-		if len(m.Buttons) > 0 {
-			for _, l := range wrapText(buttonLine(m), max(o.width-len(indent), 10), max(o.width-len(indent), 10)) {
-				add(indent + buttonStyle.Render(l))
-			}
+		mark := len(out)
+		anim := renderMessage(m, o, add)
+		if o.cache != nil {
+			o.cache.put(key, cached{lines: append([]string(nil), out[mark:]...), spans: append([][]span(nil), spans[mark:]...), anim: anim})
 		}
 	}
 	return out, spans
+}
+
+// cacheKey identifies a rendered message: its identity and content, the
+// rendering options, and the phase only when the message holds the hovered
+// element.
+func cacheKey(m domain.Message, o lineOpts) string {
+	h := fnv.New32a()
+	h.Write([]byte(m.Sender))
+	h.Write([]byte{0})
+	h.Write([]byte(m.Text))
+	phase := -1
+	if o.phase >= 0 && o.hover != "" && hasElement(m, o.hover) {
+		phase = o.phase % sparkPeriod
+	}
+	return fmt.Sprintf("%s|%x|%d|%d|%t|%t|%s|%d|%d", m.Key(), h.Sum32(), len(m.Buttons), o.width, o.showChat, o.fullDate, o.highlight, o.nameW, phase)
+}
+
+// hasElement reports whether a message renders the element behind a hover
+// key: its chat name, its sender, one of its links, its attachment token or
+// its buttons.
+func hasElement(m domain.Message, hover string) bool {
+	keys := []string{
+		fmt.Sprintf("%d:%s", spanChat, m.ChatID),
+		fmt.Sprintf("%d:%s", spanNick, m.Sender),
+		fmt.Sprintf("%d:%s", spanMedia, m.ChatID+"\x00"+m.ID),
+		fmt.Sprintf("%d:%s", spanButtons, m.Key()),
+	}
+	for _, u := range urlsOf(m.Text) {
+		keys = append(keys, fmt.Sprintf("%d:%s", spanURL, u))
+	}
+	for _, k := range keys {
+		if k == hover {
+			return true
+		}
+	}
+	return false
+}
+
+// renderMessage emits one message's lines through add and reports whether
+// it holds anything clickable.
+func renderMessage(m domain.Message, o lineOpts, add func(string, ...span)) bool {
+	stamp := func(t time.Time) string {
+		if o.fullDate {
+			return t.Format("2006-01-02 15:04")
+		}
+		return t.Format("15:04")
+	}
+	anim := false
+	m.Sender, m.Text = sanitize(m.Sender, false), sanitize(m.Text, true)
+	t := m.Time.Local()
+	plainPrefix := stamp(t) + " "
+	prefix := dimStyle.Render(stamp(t)) + " "
+	var first []span
+	if o.showChat {
+		name := o.nameOf(m.ChatID)
+		first = append(first, span{len(plainPrefix), len(plainPrefix) + lipgloss.Width(name), spanChat, m.ChatID})
+		plainPrefix += fmt.Sprintf("%-*s ", o.nameW, name)
+		pad := strings.Repeat(" ", max(o.nameW-lipgloss.Width(name), 0))
+		prefix += clickable(name, lipgloss.NewStyle().Foreground(colorFor(m.ChatID)).Bold(true), o.hovered(spanChat, m.ChatID)) + pad + " "
+	}
+	text := m.Text
+	nickX := lipgloss.Width(plainPrefix)
+	if action, ok := strings.CutPrefix(m.Text, "* "); ok && strings.TrimSpace(action) != "" {
+		// IRC-style action (/me): "* sender does something"
+		plainPrefix += "* " + m.Sender + " "
+		prefix += clickable("* "+m.Sender, lipgloss.NewStyle().Foreground(colorFor(m.Sender)).Italic(true), o.hovered(spanNick, m.Sender)) + " "
+		text = action
+	} else {
+		plainPrefix += "<" + m.Sender + "> "
+		prefix += clickable("<"+m.Sender+">", lipgloss.NewStyle().Foreground(colorFor(m.Sender)), o.hovered(spanNick, m.Sender)) + " "
+	}
+	first = append(first, span{nickX, lipgloss.Width(plainPrefix) - 1, spanNick, m.Sender})
+	prefixW := lipgloss.Width(plainPrefix)
+	token := ""
+	if m.Media != nil { // the attachment token leads the text and is a click target
+		token = mediaToken(m.Media)
+		first = append(first, span{prefixW, prefixW + lipgloss.Width(token), spanMedia, m.ChatID + "\x00" + m.ID})
+		anim = true
+	}
+	// Continuation lines sit just past the time column, BitchX style,
+	// rather than under the text, so long messages waste no width.
+	indent := strings.Repeat(" ", len(stamp(t))+1)
+	urls := urlsOf(text)
+	firstW := max(o.width-prefixW, 10)
+	if token != "" {
+		firstW = max(firstW-lipgloss.Width(token)-1, 10)
+	}
+	body := wrapText(text, firstW, max(o.width-len(indent), 10))
+	anim = anim || len(urls) > 0
+	for k, l := range body {
+		styled := styleText(l, o, urls)
+		if k == 0 {
+			lead := prefix
+			base := prefixW
+			if token != "" {
+				lead += clickable(token, linkStyle.Bold(true), o.hovered(spanMedia, m.ChatID+"\x00"+m.ID))
+				base += lipgloss.Width(token)
+				if l != "" {
+					lead += " "
+					base++
+				}
+			}
+			add(lead+styled, append(first, linkSpans(l, base, urls)...)...)
+		} else {
+			add(indent+styled, linkSpans(l, len(indent), urls)...)
+		}
+	}
+	if len(m.Buttons) > 0 {
+		anim = true
+		for _, l := range wrapText(buttonLine(m), max(o.width-len(indent), 10), max(o.width-len(indent), 10)) {
+			add(indent+clickable(l, buttonStyle, o.hovered(spanButtons, m.Key())), span{len(indent), o.width, spanButtons, m.Key()})
+		}
+	}
+	return anim
 }
 
 // linkSpans finds the links in one plain line of text that starts at
@@ -184,14 +391,8 @@ func renderRich(msgs []domain.Message, notes []note, o lineOpts) ([]string, [][]
 // when full is given.
 func linkSpans(l string, base int, full []string) []span {
 	var out []span
-	for _, loc := range urlRE.FindAllStringIndex(l, -1) {
-		target := l[loc[0]:loc[1]]
-		for _, u := range full {
-			if strings.HasPrefix(u, target) {
-				target = u
-				break
-			}
-		}
+	for _, loc := range urlLocs(l) {
+		target := wholeURL(l[loc[0]:loc[1]], loc[1] == len(l), full)
 		out = append(out, span{base + lipgloss.Width(l[:loc[0]]), base + lipgloss.Width(l[:loc[1]]), spanURL, target})
 	}
 	return out

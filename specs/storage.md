@@ -66,13 +66,16 @@ id means all; limit <= 0 means all), `Count`, `Latest`, `Chats`,
 `SetChats` (replaces the list, keeping order), `SetState`/`State` (small
 sealed JSON documents such as the window layout, in `meta`), `Close`.
 
-## Media
+## Media vault
 
-`<data>/telegram/media/` holds fetched attachments (`/open`, clicks),
-0700 with 0600 files, named `<chat>-<msg>.<ext>`. They are plain files so
-the system viewer can open them; nothing cleans them up yet. The demo
-writes into a `lazygram-demo` directory under the system temporary
-directory.
+`<data>/telegram/media/` holds fetched attachments sealed like message
+rows: `AES-256-GCM(key, nonce, bytes, aad "media:"+name)` in a file named
+by a keyed hash of chat and message id (`<hash>.enc`), directory 0700,
+files 0600, written as `.part` then renamed. Nothing on disk reveals which
+message or chat a file belongs to, or its content. The demo keeps its
+attachments in memory. To view one, lazygram decrypts it into a private
+temporary directory (`lazygram-view-*`, 0700, file 0600) and removes those
+copies at exit; the vault copy stays. A download is capped at 64 MiB.
 
 ## Limits
 

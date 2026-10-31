@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -209,5 +210,41 @@ func TestReplaceKeepsButtonsRoundTrip(t *testing.T) {
 	}
 	if n, _ := s.Count("bot"); n != 1 {
 		t.Fatal("replace must not add a row")
+	}
+}
+
+func TestMediaVaultIsSealed(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cache.sqlite")
+	s := mustOpen(t, path, secret)
+	if _, found, err := s.Media("telegram:1", "5"); found || err != nil {
+		t.Fatalf("absent: %v %v", found, err)
+	}
+	photo := []byte("JFIF-THE-PHOTO-BYTES-telegram:1")
+	if err := s.PutMedia("telegram:1", "5", photo); err != nil {
+		t.Fatal(err)
+	}
+	got, found, err := s.Media("telegram:1", "5")
+	if err != nil || !found || string(got) != string(photo) {
+		t.Fatalf("%q %v %v", got, found, err)
+	}
+	entries, _ := os.ReadDir(filepath.Join(filepath.Dir(path), "media"))
+	if len(entries) != 1 || !strings.HasSuffix(entries[0].Name(), ".enc") || strings.Contains(entries[0].Name(), "telegram") {
+		t.Fatalf("vault entries: %v", entries)
+	}
+	raw, _ := os.ReadFile(filepath.Join(filepath.Dir(path), "media", entries[0].Name()))
+	if bytes.Contains(raw, []byte("JFIF")) || bytes.Contains(raw, []byte("telegram:1")) {
+		t.Fatal("attachment readable on disk")
+	}
+	info, _ := os.Stat(filepath.Join(filepath.Dir(path), "media", entries[0].Name()))
+	dinfo, _ := os.Stat(filepath.Join(filepath.Dir(path), "media"))
+	if info.Mode().Perm()&0o077 != 0 || dinfo.Mode().Perm()&0o077 != 0 {
+		t.Fatal("vault must be owner-only")
+	}
+	mem := mustOpen(t, Memory, secret)
+	if err := mem.PutMedia("a", "1", []byte("x")); err != nil {
+		t.Fatal(err)
+	}
+	if got, found, _ := mem.Media("a", "1"); !found || string(got) != "x" {
+		t.Fatal("memory vault")
 	}
 }

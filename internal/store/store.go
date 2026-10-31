@@ -14,6 +14,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -46,6 +47,9 @@ type Store struct {
 	db   *sql.DB
 	aead cipher.AEAD
 	mac  []byte
+
+	mediaDir string            // sealed attachments next to the file; empty for Memory
+	memMedia map[string][]byte // attachments of a Memory store
 }
 
 // Open opens or creates the cache at path (Memory for none on disk). secret
@@ -74,7 +78,10 @@ func Open(path string, secret []byte) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	s := &Store{db: db}
+	s := &Store{db: db, memMedia: map[string][]byte{}}
+	if path != Memory {
+		s.mediaDir = filepath.Join(filepath.Dir(path), "media")
+	}
 	if err := s.init(secret); err != nil {
 		_ = db.Close()
 		return nil, err
@@ -333,6 +340,63 @@ func (s *Store) State(key string, v any) (found bool, err error) {
 		return true, fmt.Errorf("store: state %s: %w", key, err)
 	}
 	return true, json.Unmarshal(plain, v)
+}
+
+// mediaKey names an attachment's sealed file: a keyed hash, so the file
+// names reveal nothing.
+func (s *Store) mediaKey(chatID, msgID string) string {
+	h := hmac.New(sha256.New, s.mac)
+	h.Write([]byte("media:" + chatID + "\x00" + msgID))
+	return hex.EncodeToString(h.Sum(nil))[:32]
+}
+
+// PutMedia seals an attachment into the media vault (0700 directory, 0600
+// files, names that are keyed hashes).
+func (s *Store) PutMedia(chatID, msgID string, data []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := s.mediaKey(chatID, msgID)
+	blob := s.seal(data, []byte("media:"+key))
+	if s.mediaDir == "" {
+		s.memMedia[key] = blob
+		return nil
+	}
+	if err := os.MkdirAll(s.mediaDir, 0o700); err != nil {
+		return err
+	}
+	path := filepath.Join(s.mediaDir, key+".enc")
+	if err := os.WriteFile(path+".part", blob, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(path+".part", path)
+}
+
+// Media opens an attachment from the vault. found is false when it was
+// never fetched.
+func (s *Store) Media(chatID, msgID string) (data []byte, found bool, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	key := s.mediaKey(chatID, msgID)
+	var blob []byte
+	if s.mediaDir == "" {
+		blob, found = s.memMedia[key]
+		if !found {
+			return nil, false, nil
+		}
+	} else {
+		blob, err = os.ReadFile(filepath.Join(s.mediaDir, key+".enc"))
+		if os.IsNotExist(err) {
+			return nil, false, nil
+		}
+		if err != nil {
+			return nil, false, err
+		}
+	}
+	data, err = s.open(blob, []byte("media:"+key))
+	if err != nil {
+		return nil, true, fmt.Errorf("store: attachment: %w", err)
+	}
+	return data, true, nil
 }
 
 // Chats returns the stored chat list in its stored order.

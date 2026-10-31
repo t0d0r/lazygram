@@ -8,6 +8,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"runtime"
 	"sort"
 	"strconv"
@@ -41,6 +43,8 @@ const (
 )
 
 const (
+	fxKey          = "fx" // store state key for the running lights
+	fxTick         = 120 * time.Millisecond
 	maxHistory     = 200
 	doubleCtrlX    = 600 * time.Millisecond
 	layoutKey      = "windows" // store state key for the window layout
@@ -90,6 +94,17 @@ type Model struct {
 	histSave []rune   // the line being typed when the walk began
 
 	clicks [][]span // what a click on each screen row does, as of the last View
+
+	viewDir   string   // private temporary directory holding plain copies for the viewer
+	viewFiles []string // the copies made so far
+
+	hover string // the clickable thing under the pointer, as a hover key
+
+	fx      bool         // running lights over clickable text
+	phase   int          // animation phase
+	ticking bool         // an fx tick is scheduled
+	animOn  bool         // the last View showed something animated
+	rcache  *renderCache // rendered messages, reused across ticks
 
 	escPending bool         // an Esc was just pressed: a digit now switches windows
 	escSaved   []rune       // the input as it was before that Esc cleared it
@@ -152,10 +167,12 @@ type (
 	sendLaterMsg struct{ seq int } // the double Ctrl-X window has passed
 	fetchedMsg   struct {
 		chatID, msgID string
-		path          string
+		name          string // file name for the viewer
+		data          []byte // the attachment
 		err           error
 	}
-	tickMsg time.Time
+	tickMsg   time.Time
+	fxTickMsg struct{}
 )
 
 // New builds a model. Chats and messages cached in the store are available
@@ -168,7 +185,10 @@ func New(opt Options) *Model {
 		opt.Open = opener.Open
 	}
 	m := &Model{opt: opt, width: 100, height: 30, loading: map[string]bool{}, visited: map[string]bool{},
-		wins: []*win{{}}, status: "type /help for commands", started: time.Now()}
+		wins: []*win{{}}, status: "type /help for commands", started: time.Now(), fx: true, rcache: &renderCache{}}
+	if found, err := opt.Store.State(fxKey, &m.fx); !found || err != nil {
+		m.fx = true
+	}
 	m.chats, _ = opt.Store.Chats()
 	m.msgs, _ = opt.Store.Messages("", opt.Backlog)
 	// The banner has the zero time so it stays above everything, however old
@@ -387,14 +407,112 @@ func (m *Model) pressCmd(chatID string, msg domain.Message, b domain.Button) tea
 	}
 }
 
+// fetchCmd gets an attachment: from the sealed vault when it is there,
+// else downloaded and sealed into the vault. A second request for the
+// same attachment while one is in flight is ignored.
 func (m *Model) fetchCmd(chatID, msgID string) tea.Cmd {
-	p := m.opt.Provider
-	return func() tea.Msg {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		defer cancel()
-		path, err := p.Fetch(ctx, chatID, msgID)
-		return fetchedMsg{chatID: chatID, msgID: msgID, path: path, err: err}
+	key := chatID + "\x00" + msgID
+	if m.loading[key] {
+		m.setInfo("already fetching")
+		return nil
 	}
+	m.loading[key] = true
+	p, st := m.opt.Provider, m.opt.Store
+	md := m.media(chatID, msgID)
+	return func() tea.Msg {
+		if data, found, err := st.Media(chatID, msgID); err != nil {
+			return fetchedMsg{chatID: chatID, msgID: msgID, err: err}
+		} else if found {
+			return fetchedMsg{chatID: chatID, msgID: msgID, name: viewName(md, msgID, ""), data: data}
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+		defer cancel()
+		data, got, err := p.Fetch(ctx, chatID, msgID)
+		if err != nil {
+			return fetchedMsg{chatID: chatID, msgID: msgID, err: err}
+		}
+		if err := st.PutMedia(chatID, msgID, data); err != nil {
+			return fetchedMsg{chatID: chatID, msgID: msgID, err: err}
+		}
+		return fetchedMsg{chatID: chatID, msgID: msgID, name: viewName(md, msgID, got), data: data}
+	}
+}
+
+// media is a message's attachment description, if any.
+func (m *Model) media(chatID, msgID string) *domain.Media {
+	for _, x := range m.msgs {
+		if x.ChatID == chatID && x.ID == msgID {
+			return x.Media
+		}
+	}
+	return nil
+}
+
+// viewName is the file name of the plain copy made for viewing. Images get
+// the provider's name (its extension follows the content type, never the
+// sender); other files keep the sender's base name, and are never opened.
+func viewName(md *domain.Media, msgID, fetched string) string {
+	switch {
+	case md != nil && !md.Image() && md.Name != "":
+		return filepath.Base(md.Name)
+	case fetched != "":
+		return filepath.Base(fetched)
+	case md.Image():
+		return msgID + ".jpg"
+	}
+	return msgID + ".bin"
+}
+
+// viewCopy writes a plain copy of an attachment into a private temporary
+// directory for the viewer; copies are removed by Cleanup.
+func (m *Model) viewCopy(name string, data []byte) (string, error) {
+	if m.viewDir == "" {
+		dir, err := os.MkdirTemp("", "lazygram-view-")
+		if err != nil {
+			return "", err
+		}
+		if err := os.Chmod(dir, 0o700); err != nil {
+			return "", err
+		}
+		m.viewDir = dir
+	}
+	path := filepath.Join(m.viewDir, fmt.Sprintf("%d-%s", len(m.viewFiles)+1, sanitizeName(name)))
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		return "", err
+	}
+	m.viewFiles = append(m.viewFiles, path)
+	return path, nil
+}
+
+// sanitizeName keeps a file name harmless: base name only, control
+// characters and leading dots dropped.
+func sanitizeName(name string) string {
+	name = strings.TrimLeft(filepath.Base(sanitize(name, false)), ".")
+	if name == "" || name == "/" || name == "\\" {
+		return "attachment"
+	}
+	return name
+}
+
+// imageFile reports whether a plain copy may go to the system viewer: only
+// raster image extensions, whatever the message claimed.
+func imageFile(path string) bool {
+	switch strings.ToLower(filepath.Ext(path)) {
+	case ".jpg", ".jpeg", ".png", ".gif", ".webp":
+		return true
+	}
+	return false
+}
+
+// Cleanup removes the plain copies made for viewing. Call it on exit.
+func (m *Model) Cleanup() {
+	for _, f := range m.viewFiles {
+		_ = os.Remove(f)
+	}
+	if m.viewDir != "" {
+		_ = os.Remove(m.viewDir)
+	}
+	m.viewFiles, m.viewDir = nil, ""
 }
 
 func (m *Model) openCmd(target string) tea.Cmd {
@@ -402,9 +520,26 @@ func (m *Model) openCmd(target string) tea.Cmd {
 	return func() tea.Msg { return openedMsg{target: target, err: open(target)} }
 }
 
-// Update handles messages.
+// Update handles messages. After every message the running lights are
+// kept going while something animated is on screen.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	model, cmd := m.update(msg)
+	if m.fx && m.animOn && !m.ticking {
+		m.ticking = true
+		tick := tea.Tick(fxTick, func(time.Time) tea.Msg { return fxTickMsg{} })
+		if cmd == nil {
+			return model, tick
+		}
+		return model, tea.Batch(cmd, tick)
+	}
+	return model, cmd
+}
+
+func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case fxTickMsg:
+		m.ticking = false
+		m.phase++
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 	case chatsMsg:
@@ -492,6 +627,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, tea.Batch(cmds...)
 	case fetchedMsg:
+		delete(m.loading, msg.chatID+"\x00"+msg.msgID)
 		_, w := m.winFor(msg.chatID)
 		if w == nil {
 			w = m.wins[0]
@@ -501,19 +637,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.note(w, "fetch: "+errText(msg.err))
 			break
 		}
-		var media *domain.Media
-		for _, x := range m.msgs {
-			if x.ChatID == msg.chatID && x.ID == msg.msgID {
-				media = x.Media
-			}
-		}
+		md := m.media(msg.chatID, msg.msgID)
 		m.fetchedN++
-		if media.Image() {
-			m.note(w, "opening "+msg.path)
-			return m, m.openCmd(msg.path)
+		path, err := m.viewCopy(msg.name, msg.data)
+		if err != nil {
+			m.setErr("view: " + err.Error())
+			m.note(w, "view: "+err.Error())
+			break
 		}
-		m.note(w, "saved "+msg.path)
-		m.setInfo("saved " + msg.path)
+		if md.Image() && imageFile(path) {
+			m.note(w, "opening "+path+" (plain copy, removed on exit; the vault keeps it encrypted)")
+			return m, m.openCmd(path)
+		}
+		m.note(w, "decrypted to "+path+" until exit; kept encrypted in the vault")
+		m.setInfo("decrypted to " + path)
 	case sendLaterMsg:
 		if p := m.pending; p != nil && p.seq == msg.seq {
 			m.pending = nil
@@ -536,9 +673,37 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// mouse handles wheel scrolling and clicks on the spans of the last View.
+// exactChat finds the one chat whose alias or title equals name (case
+// folded); a click on a nick never guesses by prefix.
+func (m *Model) exactChat(name string) (domain.Chat, bool) {
+	var hit domain.Chat
+	n := 0
+	for _, c := range m.chats {
+		if !c.Deleted && (strings.EqualFold(c.Alias, name) || strings.EqualFold(c.Title, name)) {
+			hit, n = c, n+1
+		}
+	}
+	return hit, n == 1
+}
+
+// hoverKey names what the pointer is over, for the running light.
+func hoverKey(s span) string { return fmt.Sprintf("%d:%s", s.kind, s.target) }
+
+// mouse handles wheel scrolling, hovering and clicks on the spans of the
+// last View.
 func (m *Model) mouse(e tea.MouseMsg) (tea.Model, tea.Cmd) {
 	w := m.wins[m.cur]
+	if e.Action == tea.MouseActionMotion {
+		m.hover = ""
+		if e.Y >= 0 && e.Y < len(m.clicks) {
+			for _, s := range m.clicks[e.Y] {
+				if s.hit(e.X) {
+					m.hover = hoverKey(s)
+				}
+			}
+		}
+		return m, nil
+	}
 	switch {
 	case e.Button == tea.MouseButtonWheelUp:
 		if m.mode == modeList {
@@ -574,8 +739,8 @@ func (m *Model) click(s span) (tea.Model, tea.Cmd) {
 		}
 		return m, m.switchTo(i)
 	case spanNick:
-		c, err := domain.ResolveChat(m.chats, s.target)
-		if err != nil {
+		c, ok := m.exactChat(s.target)
+		if !ok {
 			m.setErr("no chat named " + s.target)
 			return m, nil
 		}
@@ -591,6 +756,8 @@ func (m *Model) click(s span) (tea.Model, tea.Cmd) {
 		chatID, msgID, _ := strings.Cut(s.target, "\x00")
 		m.setInfo("fetching...")
 		return m, m.fetchCmd(chatID, msgID)
+	case spanEnd:
+		m.wins[m.cur].scroll = 0
 	case spanWin:
 		i, _ := strconv.Atoi(s.target)
 		return m, m.switchTo(i)
@@ -608,8 +775,10 @@ func errText(err error) string {
 	return err.Error()
 }
 
-func (m *Model) setInfo(s string) { m.status, m.isErr = s, false }
-func (m *Model) setErr(s string)  { m.status, m.isErr = s, true }
+// setInfo and setErr show a status; remote text in it is stripped of
+// control characters, as everywhere else.
+func (m *Model) setInfo(s string) { m.status, m.isErr = sanitize(s, false), false }
+func (m *Model) setErr(s string)  { m.status, m.isErr = sanitize(s, false), true }
 
 // note appends a client line to a window.
 func (m *Model) note(w *win, text string) {
@@ -807,10 +976,11 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch k.Type {
 	case tea.KeyEsc:
-		m.escPending, m.escSaved = true, append([]rune(nil), m.input...)
-		if m.mode != modeWin {
+		m.escPending, m.escSaved = true, nil
+		if m.mode != modeWin { // the input held a filter or search, not a draft
 			m.mode, m.input = modeWin, nil
 		} else {
+			m.escSaved = append([]rune(nil), m.input...)
 			m.input = nil
 		}
 	case tea.KeyEnter:
@@ -913,7 +1083,8 @@ type pendingSend struct {
 // sendable checks that the typed text can go to the current window's chat
 // and returns it; it reports errors in the status line.
 func (m *Model) sendable() (chatID, text string, ok bool) {
-	text = strings.TrimSpace(string(m.input))
+	raw := string(m.input)
+	text = strings.TrimSpace(raw)
 	w := m.wins[m.cur]
 	switch {
 	case m.mode != modeWin, text == "":
@@ -921,7 +1092,7 @@ func (m *Model) sendable() (chatID, text string, ok bool) {
 	case w.chatID == "":
 		m.setErr("the server window has no chat; /win to a chat first")
 		return "", "", false
-	case strings.HasPrefix(text, "/"):
+	case strings.HasPrefix(text, "/") && !strings.HasPrefix(raw, " "): // a leading space sends it as text
 		m.setErr("that looks like a command: Enter runs it; prefix a space to send it as text")
 		return "", "", false
 	}
@@ -1016,7 +1187,7 @@ func (m *Model) enter() (tea.Model, tea.Cmd) {
 		}
 		return m, m.switchTo(i)
 	}
-	if !strings.HasPrefix(line, "/") {
+	if !strings.HasPrefix(line, "/") || (strings.HasPrefix(string(m.input), " ") && m.wins[m.cur].enterSends) {
 		if line != "" {
 			w := m.wins[m.cur]
 			if w.enterSends && w.chatID != "" && m.mode == modeWin {
@@ -1080,6 +1251,14 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		return m.msg(c.Arg)
 	case command.About:
 		m.about()
+	case command.Fx:
+		m.fx = !m.fx
+		_ = m.opt.Store.SetState(fxKey, m.fx)
+		if m.fx {
+			m.setInfo("running lights on")
+		} else {
+			m.setInfo("running lights off")
+		}
 	case command.Move:
 		n, err := strconv.Atoi(c.Arg)
 		if err != nil {
@@ -1488,9 +1667,17 @@ func (m *Model) lines() []string {
 	return lines
 }
 
+// phaseOpt is the animation phase for rendering: -1 when lights are off.
+func (m *Model) phaseOpt() int {
+	if !m.fx {
+		return -1
+	}
+	return m.phase
+}
+
 func (m *Model) richLines() ([]string, [][]span) {
 	w := m.wins[m.cur]
-	o := lineOpts{width: m.width, nameOf: m.nameOf, nameW: m.nameWidth(), showChat: w.chatID == ""}
+	o := lineOpts{width: m.width, nameOf: m.nameOf, nameW: m.nameWidth(), showChat: w.chatID == "", phase: m.phaseOpt(), hover: m.hover, cache: m.rcache}
 	msgs := m.msgs
 	if w.chatID != "" {
 		msgs = domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})
@@ -1538,7 +1725,7 @@ func (m *Model) View() string {
 		q := string(m.input)
 		hits := domain.Filter(m.msgs, domain.Query{ChatID: w.chatID, Text: q})
 		lines, sp := renderRich(hits, nil, lineOpts{width: m.width, nameOf: m.nameOf, nameW: m.nameWidth(),
-			showChat: w.chatID == "", fullDate: true, highlight: q})
+			showChat: w.chatID == "", fullDate: true, highlight: q, phase: m.phaseOpt(), hover: m.hover, cache: m.rcache})
 		body, w.scroll = window(lines, h, w.scroll)
 		bodySpans, _ = window(sp, h, w.scroll)
 		topic = fmt.Sprintf("history of %s - %d of %d messages - type to search, PgUp/PgDn, Esc returns",
@@ -1549,6 +1736,11 @@ func (m *Model) View() string {
 		m.lastLines = len(lines)
 		body, w.scroll = window(lines, h, w.scroll)
 		bodySpans, _ = window(sp, h, w.scroll)
+		if w.scroll > 0 && h > 1 { // not at the bottom: say so where the eye is
+			marker := fmt.Sprintf("vvv %d more line(s) below - End or a click here jumps to the newest vvv", w.scroll)
+			body[h-1] = actStyle.Render(fitLine(marker, m.width))
+			bodySpans[h-1] = []span{{0, m.width, spanEnd, ""}}
+		}
 		topic = m.topic()
 		prompt = "[" + m.winName(m.cur) + "] "
 		if w.enterSends {
@@ -1571,6 +1763,7 @@ func (m *Model) View() string {
 	b.WriteString(m.inputLine(prompt))
 	// Screen rows: topic, h content rows, status, window bar, input.
 	m.clicks = append(append([][]span{nil}, bodySpans...), nil, barSpans, nil)
+	m.animOn = m.hover != "" // the light runs only under the pointer
 	return b.String()
 }
 
@@ -1647,7 +1840,7 @@ func (m *Model) activity() string {
 	if len(act) == 0 {
 		return ""
 	}
-	return "[Act: " + strings.Join(act, ",") + "] "
+	return "Act: " + strings.Join(act, ",")
 }
 
 // seg paints one status segment in a palette colour on the status
@@ -1666,15 +1859,18 @@ func (m *Model) statusLine() string {
 		sync, syncColor = "synced "+m.lastSync.Format("15:04:05"), 2
 	}
 	w := m.wins[m.cur]
+	gap := infoStyle.Render("  ")
 	text := infoStyle.Render(" ") +
-		seg("["+time.Now().Format("15:04")+"]", 5, false) + infoStyle.Render(" ") +
-		seg("["+m.opt.Provider.Name()+"]", 0, false) + infoStyle.Render(" ") +
-		seg(fmt.Sprintf("[%d:%s]", m.cur, m.winName(m.cur)), 3, true) + infoStyle.Render(" ") +
-		actStyle.Render(m.activity()) +
-		seg(fmt.Sprintf("[%d msgs]", len(m.msgs)), 1, false) + infoStyle.Render(" ") +
-		seg("["+sync+"]", syncColor, false) + infoStyle.Render(" ")
+		seg(time.Now().Format("15:04"), 5, false) + gap +
+		seg(m.opt.Provider.Name(), 0, false) + gap +
+		seg(fmt.Sprintf("[%d:%s]", m.cur, m.winName(m.cur)), 3, true) + gap
+	if act := m.activity(); act != "" {
+		text += actStyle.Render(act) + gap
+	}
+	text += seg(fmt.Sprintf("%d msgs", len(m.msgs)), 1, false) + gap +
+		seg(sync, syncColor, false) + gap
 	if w.scroll > 0 && m.mode == modeWin {
-		text += seg(fmt.Sprintf("[-%d lines]", w.scroll), 7, false) + infoStyle.Render(" ")
+		text += actStyle.Render(fmt.Sprintf("scrolled up %d lines", w.scroll)) + gap
 	}
 	if m.status != "" {
 		if m.isErr {
@@ -1682,11 +1878,12 @@ func (m *Model) statusLine() string {
 		} else {
 			text += infoStyle.Render(m.status)
 		}
+		text += gap
 	}
 	if w.chatID != "" && m.mode == modeWin {
-		how := " ctrl-x: to send"
+		how := "ctrl-x: to send"
 		if w.enterSends {
-			how = " enter: to send"
+			how = "enter: to send"
 		}
 		text += seg(how, 2, false)
 	}
@@ -1704,13 +1901,17 @@ func (m *Model) windowBar() (string, []span) {
 		tag := fmt.Sprintf("[%d:%s]", i, m.winName(i))
 		spans = append(spans, span{x, x + lipgloss.Width(tag), spanWin, strconv.Itoa(i)})
 		x += lipgloss.Width(tag) + 1
+		st := infoStyle
 		switch {
 		case i == m.cur: // only the active window stands out
-			b.WriteString(hiStyle.Render(tag))
+			st = hiStyle
 		case w.unread > 0: // the indicator for new messages
-			b.WriteString(actStyle.Render(tag))
-		default:
-			b.WriteString(infoStyle.Render(tag))
+			st = actStyle
+		}
+		if m.fx && m.hover == hoverKey(span{kind: spanWin, target: strconv.Itoa(i)}) {
+			b.WriteString(clickable(tag, st, m.phase))
+		} else {
+			b.WriteString(st.Render(tag))
 		}
 		b.WriteString(infoStyle.Render(" "))
 	}
@@ -1742,6 +1943,8 @@ const keyHelp = `Keys
   Esc                    close the list or pager; clear the input
   Ctrl-C                 quit
 Themes: /theme lists the colour schemes, /theme <name> switches (kept).
+Clickable text is bright and underlined; a running light plays over the
+one under the mouse pointer. /fx turns the light on or off (kept).
 Mouse: click a chat name or nick in window 0 to open its window, a tag in
 the window bar to focus it, a row in a list to open it, a link or a
 [photo] / [file] token to open it with the system; the wheel scrolls.

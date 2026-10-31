@@ -29,6 +29,7 @@ const (
 	Move         // move the current window to position Arg
 	Msg          // send a message: Arg is "<@user|#chan> <text>"; the window opens if missing
 	About        // print version, author and build information
+	Fx           // toggle the running lights over clickable text
 )
 
 // Command is a parsed slash command.
@@ -55,6 +56,7 @@ var table = map[string]Kind{
 	"move": Move, "mv": Move,
 	"msg": Msg, "say": Msg, "tell": Msg,
 	"about": About, "version": About,
+	"fx": Fx, "lights": Fx, "anim": Fx,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -107,4 +109,5 @@ const HelpText = `Commands
   /open [msg]            fetch a photo or file and open it (images) or
                          show where it was saved
   /theme [name]          list the colour themes, or switch to one
-  /about                 version, author and build information`
+  /about                 version, author and build information
+  /fx                    running lights over links and buttons on or off`

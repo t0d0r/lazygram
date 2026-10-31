@@ -95,7 +95,6 @@ func (c *MTProto) run(ctx context.Context) error {
 		raw := tg.NewClient(cl)
 		c.svc = newService(floodAPI{api: raw, sleep: sleepCtx})
 		c.svc.files = raw
-		c.svc.mediaDir = filepath.Join(c.cfg.SessionDir, "media")
 		close(c.ready)
 		<-ctx.Done()
 		return nil
@@ -164,14 +163,19 @@ func (c *MTProto) Press(ctx context.Context, chatID, msgID string, b domain.Butt
 	return c.svc.Press(ctx, chatID, msgID, b)
 }
 
-// Fetch implements Client.
-func (c *MTProto) Fetch(ctx context.Context, chatID, msgID string) (string, error) {
+// Fetch implements Client. Only the lookup holds the client lock; the
+// transfer itself runs unlocked so syncs and sends go on meanwhile.
+func (c *MTProto) Fetch(ctx context.Context, chatID, msgID string) ([]byte, string, error) {
 	if err := c.wait(ctx); err != nil {
-		return "", err
+		return nil, "", err
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.svc.Fetch(ctx, chatID, msgID)
+	ent, id, err := c.svc.locate(chatID, msgID)
+	c.mu.Unlock()
+	if err != nil {
+		return nil, "", err
+	}
+	return c.svc.download(ctx, ent, id, msgID)
 }
 
 // Recent implements Client.

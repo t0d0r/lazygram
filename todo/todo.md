@@ -47,6 +47,8 @@
 - [x] GitHub repository (github.com/t0d0r/lazygram), releases v0.3.0, v0.4.0, v0.4.2, v0.4.3, Homebrew formula in t0d0r/homebrew-tap
 - [x] figlet banners at start and exit (specs/ui.md)
 - [x] /theme with nine colour schemes, persisted (specs/ui.md)
+- [x] attachments sealed in the vault; plain copies only while viewing; image names from content type (specs/storage.md)
+- [x] clickable text bright; running light under the pointer, /fx; scrolled-up marker; status line without brackets (specs/ui.md)
 - [x] Up/Down walk the input history (specs/ui.md)
 - [x] /about; exit statistics
 - [x] /msg <@user|#chan> <text> sends and opens the window
@@ -59,7 +61,7 @@
 
 ## Next
 
-- [ ] clean up or cap the media directory (specs/storage.md)
+- [ ] cap the media vault size (specs/storage.md)
 
 - [ ] sending messages (post-v0.1)
 - [ ] unread markers and mention highlight

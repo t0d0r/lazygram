@@ -18,7 +18,8 @@ import (
 )
 
 const (
-	maxDialogs   = 100 // most recent dialogs listed
+	editGrace    = 800 * time.Millisecond // time a bot gets to edit its message after a press
+	maxDialogs   = 100                    // most recent dialogs listed
 	pageSize     = 100
 	maxPerChat   = 300 // messages fetched per chat per Sync call
 	maxRecent    = 100 // cap for Recent
@@ -43,15 +44,15 @@ type api interface {
 type service struct {
 	api api
 
-	files    downloader.Client // nil: attachments cannot be fetched
-	mediaDir string            // where fetched attachments go (0700, files 0600)
+	files downloader.Client                          // nil: attachments cannot be fetched
+	wait  func(context.Context, time.Duration) error // sleeps; tests replace it
 
 	known map[string]entity // chat id -> entity, filled by Dialogs
 	top   map[string]int    // chat id -> top message id already fetched
 }
 
 func newService(a api) *service {
-	return &service{api: a, known: map[string]entity{}, top: map[string]int{}}
+	return &service{api: a, known: map[string]entity{}, top: map[string]int{}, wait: sleepCtx}
 }
 
 // dialog is one row of getDialogs.
@@ -209,13 +210,22 @@ func (s *service) Press(ctx context.Context, chatID, msgID string, b domain.Butt
 	req := &tg.MessagesGetBotCallbackAnswerRequest{Peer: ent.peer, MsgID: id}
 	req.SetData(b.Data)
 	res, err := s.api.MessagesGetBotCallbackAnswer(ctx, req)
-	if err != nil {
+	var a domain.PressAnswer
+	switch {
+	case err == nil:
+		if res != nil {
+			a.Text, _ = res.GetMessage()
+			a.URL, _ = res.GetURL()
+		}
+	case tgerr.Is(err, "BOT_RESPONSE_TIMEOUT"):
+		// Many bots never answer the callback query but still act on it.
+		a.Text = "(the bot gave no answer in time)"
+	default:
 		return domain.PressAnswer{}, fmt.Errorf("telegram: press: %w", err)
 	}
-	var a domain.PressAnswer
-	if res != nil {
-		a.Text, _ = res.GetMessage()
-		a.URL, _ = res.GetURL()
+	// Bots edit their message right after answering; give them a moment.
+	if err := s.wait(ctx, editGrace); err != nil {
+		return a, err
 	}
 	a.Updated, err = s.message(ctx, chatID, ent, id)
 	if err != nil {

@@ -3,13 +3,12 @@
 package demo
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"image"
 	"image/color"
 	"image/png"
-	"os"
-	"path/filepath"
 	"sync"
 	"time"
 
@@ -187,9 +186,9 @@ func (p *Provider) Press(_ context.Context, chatID, msgID string, b domain.Butto
 	return domain.PressAnswer{}, fmt.Errorf("demo: no message %s in %s", msgID, chatID)
 }
 
-// Fetch implements provider.Provider: it draws a small PNG into a private
-// temporary directory, so the preview flow works without a service.
-func (p *Provider) Fetch(_ context.Context, chatID, msgID string) (string, error) {
+// Fetch implements provider.Provider: it draws a small PNG in memory, so
+// the preview flow works without a service and without writing anything.
+func (p *Provider) Fetch(_ context.Context, chatID, msgID string) ([]byte, string, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	for _, m := range p.msgs {
@@ -197,15 +196,7 @@ func (p *Provider) Fetch(_ context.Context, chatID, msgID string) (string, error
 			continue
 		}
 		if m.Media == nil {
-			return "", fmt.Errorf("demo: message %s has no attachment", msgID)
-		}
-		dir := filepath.Join(os.TempDir(), "lazygram-demo")
-		if err := os.MkdirAll(dir, 0o700); err != nil {
-			return "", err
-		}
-		path := filepath.Join(dir, msgID+".png")
-		if _, err := os.Stat(path); err == nil {
-			return path, nil
+			return nil, "", fmt.Errorf("demo: message %s has no attachment", msgID)
 		}
 		img := image.NewRGBA(image.Rect(0, 0, 160, 100))
 		for y := 0; y < 100; y++ {
@@ -213,15 +204,11 @@ func (p *Provider) Fetch(_ context.Context, chatID, msgID string) (string, error
 				img.Set(x, y, color.RGBA{uint8(x * 255 / 160), uint8(y * 255 / 100), 160, 255})
 			}
 		}
-		f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-		if err != nil {
-			return "", err
+		var buf bytes.Buffer
+		if err := png.Encode(&buf, img); err != nil {
+			return nil, "", err
 		}
-		if err := png.Encode(f, img); err != nil {
-			_ = f.Close()
-			return "", err
-		}
-		return path, f.Close()
+		return buf.Bytes(), msgID + ".png", nil
 	}
-	return "", fmt.Errorf("demo: no message %s in %s", msgID, chatID)
+	return nil, "", fmt.Errorf("demo: no message %s in %s", msgID, chatID)
 }

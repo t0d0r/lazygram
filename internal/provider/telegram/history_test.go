@@ -3,8 +3,7 @@ package telegram
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -124,7 +123,10 @@ func (f *fakeAPI) MessagesGetBotCallbackAnswer(_ context.Context, r *tg.Messages
 	data, _ := r.GetData()
 	f.pressed = append(f.pressed, string(data))
 	if string(data) == "boom" {
-		return nil, errors.New("BOT_RESPONSE_TIMEOUT")
+		return nil, errors.New("BOT_RESPONSE_FAILED")
+	}
+	if string(data) == "slow" {
+		return nil, tgerr.New(400, "BOT_RESPONSE_TIMEOUT")
 	}
 	// The bot edits its message in response, as bots do.
 	for key, msgs := range f.msgs {
@@ -484,6 +486,8 @@ func TestPressAnswersAndRefetches(t *testing.T) {
 	f.msgs[7] = []tg.MessageClass{withButtons(tmsg(5, 5, "deploy?"))}
 	f.msgs[-9] = []tg.MessageClass{withButtons(tmsg(8, 8, "channel post"))}
 	s := newService(f)
+	waited := 0
+	s.wait = func(context.Context, time.Duration) error { waited++; return nil }
 	if _, err := s.Press(context.Background(), "telegram:7", "5", domain.Button{Kind: domain.ButtonCallback, Data: []byte("ok")}); err == nil {
 		t.Fatal("press before Dialogs must fail")
 	}
@@ -510,6 +514,14 @@ func TestPressAnswersAndRefetches(t *testing.T) {
 	if _, err := s.Press(context.Background(), "telegram:7", "5", domain.Button{Kind: domain.ButtonCallback, Data: []byte("boom")}); err == nil {
 		t.Fatal("bot error must surface")
 	}
+	if waited == 0 {
+		t.Fatal("a press waits for the bot's edit before refetching")
+	}
+	// A bot that never answers the query still gets its edit picked up.
+	a, err = s.Press(context.Background(), "telegram:7", "5", domain.Button{Kind: domain.ButtonCallback, Data: []byte("slow")})
+	if err != nil || a.Updated == nil || !strings.Contains(a.Text, "no answer") {
+		t.Fatalf("timeout: %+v %v", a, err)
+	}
 }
 
 func withPhoto(m *tg.Message) *tg.Message {
@@ -532,6 +544,17 @@ func TestMediaConversion(t *testing.T) {
 	if img.Media == nil || img.Media.Kind != "image" || img.Media.Name != "cat.png" || img.Text != "look" {
 		t.Fatalf("%+v", img.Media)
 	}
+	// A sender-chosen name never decides what gets opened: the mime type does.
+	trap := tmsg(6, 0, "")
+	trap.SetMedia(&tg.MessageMediaDocument{Document: &tg.Document{ID: 8, MimeType: "image/png", Attributes: []tg.DocumentAttributeClass{&tg.DocumentAttributeFilename{FileName: "photo.html"}}}})
+	if _, ext, err := location(trap); err != nil || ext != ".png" {
+		t.Fatalf("image extension must follow the mime type: %q %v", ext, err)
+	}
+	svg := tmsg(7, 0, "")
+	svg.SetMedia(&tg.MessageMediaDocument{Document: &tg.Document{ID: 9, MimeType: "image/svg+xml", Attributes: []tg.DocumentAttributeClass{&tg.DocumentAttributeFilename{FileName: "a.svg"}}}})
+	if g := convert("telegram:7", entity{}, svg, collect(nil, nil)); g.Media == nil || g.Media.Kind != "file" {
+		t.Fatalf("svg is a file, never auto-opened: %+v", g.Media)
+	}
 	pdf := tmsg(3, 0, "")
 	pdf.SetMedia(&tg.MessageMediaDocument{Document: &tg.Document{ID: 6, MimeType: "application/pdf"}})
 	if f := convert("telegram:7", entity{}, pdf, collect(nil, nil)); f.Media == nil || f.Media.Kind != "file" || f.Text != "" {
@@ -551,7 +574,7 @@ func TestMediaConversion(t *testing.T) {
 	}
 }
 
-func TestFetchDownloadsOnceIntoPrivateDir(t *testing.T) {
+func TestFetchStreamsIntoMemory(t *testing.T) {
 	f := newFakeAPI()
 	f.file = []byte("JPEGDATA-JPEGDATA")
 	f.msgs[7] = []tg.MessageClass{withPhoto(tmsg(5, 5, ""))}
@@ -559,30 +582,19 @@ func TestFetchDownloadsOnceIntoPrivateDir(t *testing.T) {
 	if _, err := s.Dialogs(context.Background()); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Fetch(context.Background(), "telegram:7", "5"); err == nil {
+	if _, _, err := s.Fetch(context.Background(), "telegram:7", "5"); err == nil {
 		t.Fatal("no downloader configured")
 	}
-	s.files, s.mediaDir = f, filepath.Join(t.TempDir(), "media")
-	path, err := s.Fetch(context.Background(), "telegram:7", "5")
-	if err != nil {
-		t.Fatal(err)
+	s.files = f
+	data, name, err := s.Fetch(context.Background(), "telegram:7", "5")
+	if err != nil || string(data) != "JPEGDATA-JPEGDATA" || name != "5.jpg" {
+		t.Fatalf("%q %q %v", data, name, err)
 	}
-	got, err := os.ReadFile(path)
-	if err != nil || string(got) != "JPEGDATA-JPEGDATA" || !strings.HasSuffix(path, "telegram_7-5.jpg") {
-		t.Fatalf("%q %v %s", got, err, path)
-	}
-	st, _ := os.Stat(path)
-	if st.Mode().Perm()&0o077 != 0 {
-		t.Fatal("downloaded file must be owner-only")
-	}
-	if dst, _ := os.Stat(s.mediaDir); dst.Mode().Perm()&0o077 != 0 {
-		t.Fatal("media dir must be private")
-	}
-	n := f.downloads
-	if again, err := s.Fetch(context.Background(), "telegram:7", "5"); err != nil || again != path || f.downloads != n {
-		t.Fatalf("second fetch must use the file: %v %v %d", again, err, f.downloads-n)
-	}
-	if _, err := s.Fetch(context.Background(), "telegram:7", "404"); err == nil {
+	if _, _, err := s.Fetch(context.Background(), "telegram:7", "404"); err == nil {
 		t.Fatal("unknown message")
+	}
+	lw := &limitWriter{w: io.Discard, left: 3}
+	if _, err := lw.Write([]byte("abcd")); err == nil {
+		t.Fatal("the size cap must hold")
 	}
 }

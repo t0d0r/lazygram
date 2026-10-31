@@ -19,7 +19,8 @@ func TestThemesAreComplete(t *testing.T) {
 			t.Errorf("%s: name mismatch %q", name, th.Name)
 		}
 		for role, v := range map[string]string{"dim": th.Dim, "day": th.Day, "note": th.Note, "button": th.Button,
-			"barbg": th.BarBG, "barfg": th.BarFG, "statusbg": th.StatusBG, "statusfg": th.StatusFG, "act": th.Act, "error": th.Error} {
+			"barbg": th.BarBG, "barfg": th.BarFG, "statusbg": th.StatusBG, "statusfg": th.StatusFG, "act": th.Act, "error": th.Error,
+			"link": th.Link, "spark": th.Spark} {
 			if v == "" {
 				t.Errorf("%s: %s is empty", name, role)
 			}

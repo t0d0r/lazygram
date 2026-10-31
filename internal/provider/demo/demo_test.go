@@ -1,9 +1,9 @@
 package demo
 
 import (
+	"bytes"
 	"context"
 	"image/png"
-	"os"
 	"strings"
 	"testing"
 	"time"
@@ -102,7 +102,7 @@ func TestPressAnswersAndEditsTheMessage(t *testing.T) {
 	}
 }
 
-func TestFetchWritesAPrivatePNG(t *testing.T) {
+func TestFetchReturnsAPNG(t *testing.T) {
 	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
 	p := newAt(func() time.Time { return clock })
 	all, _ := p.Sync(context.Background(), time.Time{})
@@ -115,22 +115,14 @@ func TestFetchWritesAPrivatePNG(t *testing.T) {
 	if photo.ID == "" || photo.Media.Kind != "photo" {
 		t.Fatal("demo should carry one photo")
 	}
-	path, err := p.Fetch(context.Background(), photo.ChatID, photo.ID)
-	if err != nil {
-		t.Fatal(err)
+	data, name, err := p.Fetch(context.Background(), photo.ChatID, photo.ID)
+	if err != nil || !strings.HasSuffix(name, ".png") {
+		t.Fatal(err, name)
 	}
-	f, err := os.Open(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = f.Close() }()
-	if _, err := png.Decode(f); err != nil {
+	if _, err := png.Decode(bytes.NewReader(data)); err != nil {
 		t.Fatal("not a PNG:", err)
 	}
-	if st, _ := os.Stat(path); st.Mode().Perm()&0o077 != 0 {
-		t.Fatal("file must be owner-only")
-	}
-	if _, err := p.Fetch(context.Background(), "demo-1", "1"); err == nil {
+	if _, _, err := p.Fetch(context.Background(), "demo-1", "1"); err == nil {
 		t.Fatal("a message without media")
 	}
 }

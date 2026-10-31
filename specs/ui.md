@@ -66,8 +66,8 @@ titles and notices are stripped of control characters before rendering.
 - list (`/list [--show-deleted|-a] [text]`): one row per chat: its window
   number when open, name, title, unread count, `(deleted)`. Up/Down (or
   Tab/Shift-Tab) move, Enter opens or focuses that chat's window, typing
-  narrows the rows, Esc returns. Deleted accounts are hidden unless asked
-  for. Tab completes the typed filter like anywhere else and never moves
+  narrows the rows, Esc returns (it also arms the Esc-digit prefix, but never restores the
+  filter as a draft). Deleted accounts are hidden unless asked for. Tab completes the typed filter like anywhere else and never moves
   the cursor. `/win` (or `/win list`) shows the same kind of list for the
   open windows (number, name, title, unread, `(current)`); Enter focuses.
   Scrolling: the cursor moves down the screen until it reaches the middle,
@@ -103,6 +103,7 @@ as notices; there is no separate help view.
 | `/open [msg]`                 | fetch an attachment; open it when it is an image     |
 | `/theme [name]`               | list the colour themes or switch (see Themes)        |
 | `/about`, `/version`          | version, author, repository, license, build, libraries, uptime |
+| `/fx`                         | running lights over clickable text on or off (kept) |
 
 Short forms: `/w`, `/j`, `/join`, `/query` for `/win`; `/wc`, `/part` for
 `/close`; `/history` for `/last`; `/find`, `/log` for `/search`; `/wi`,
@@ -141,26 +142,42 @@ hex values, downsampled by lipgloss on 256-colour terminals.
 
 ## Mouse
 
-Clicks act on what is under the pointer as of the last render: a chat name
+Clickable text looks clickable: links are underlined in the theme's link
+colour, attachment tokens bold in the same colour, bot buttons in the
+button colour. A running light (one bright character every seven, moving
+every 120 ms) plays over the element under the mouse pointer only: a chat
+name, a nick, a link, an attachment token, a button line or a window-bar
+tag. Hovering needs the terminal to report pointer motion (all-motion
+mouse mode). The animation ticks only while something is hovered, and
+rendered messages are cached per width, theme and phase so only the
+hovered message re-renders. `/fx` turns the light off or on; the choice is
+kept. Clicks act on what is under the pointer as of the last render: a chat name
 in the server window opens or focuses that chat's window; a nick opens the
-chat of the same name when one exists (otherwise "no chat named ..."); a
+chat whose alias or title equals it exactly (otherwise "no chat named ..."); a
 `[N:name]` tag in the window bar focuses window N; a row in `/list` or
 `/win` opens it; an `http(s)` link in a message or notice is handed to the
-system opener (`open`, `xdg-open`, `rundll32`), which starts the browser or
-preview app for the link's content. The wheel scrolls the window three
+system opener (`open`, `xdg-open`, `rundll32`), which starts the default
+browser (links always go to the browser; only fetched attachments go to
+the image viewer). The wheel scrolls the window three
 lines (the cursor in a list). Opening happens only on a click, only for
 http and https links with a host; nothing is opened automatically.
 
 ## Attachments
 
 A message with a photo or file shows a token before its caption:
-`[photo]`, `[image: name]` or `[file: name]`. Clicking the token, or
-`/open` (the latest such message in the window's chat; `/open <msg>` for a
-given one), fetches the attachment through `Provider.Fetch` into the
-provider's private media directory (0700, files 0600; fetched once, then
-reused) and then: an image (`photo`, `image`) is handed to the system
-opener, which starts the preview app; any other file only gets
-`-!- saved <path>`, it is never opened. Media lazygram cannot fetch (polls,
+`[photo]`, `[image: name]` or `[file: name]`. Nothing is downloaded when
+the message arrives. Clicking the token, or `/open` (the latest such
+message in the window's chat; `/open <msg>` for a given one), fetches the
+attachment through `Provider.Fetch` into memory, seals it into the vault
+(specs/storage.md: encrypted file, hashed name; fetched once, served from
+the vault afterwards), then writes a plain copy into a private temporary
+directory (0700, file 0600). An image (`photo`, or `image`: a document
+whose mime type is image/jpeg, png, gif or webp) is handed to the system
+opener, which starts the preview app; its copy is named by the content
+type, never by the sender, and only raster image extensions are ever
+opened. Any other file only gets `-!- decrypted to <path> until exit`
+under its (sanitized) sender name and is never opened. The plain copies
+are removed when lazygram exits. Media lazygram cannot fetch (polls,
 locations, ...) shows as `[media]`. Fetch errors land in the window.
 
 ## Sending
@@ -177,7 +194,8 @@ window (the prompt becomes `[@name]> `); with Enter sends on, Enter sends
 at once. Commands still run, and Ctrl-X still sends. The toggle is per
 window and is saved with the layout, so it survives restarts; the status
 line ends with `ctrl-x: to send` or `enter: to send` in a chat window. Ctrl-X refuses in the server window, on empty text, and on text that
-starts with `/` (prefix a space to send such text). Send errors go to the
+starts with `/` unless the line begins with a space (the space is
+dropped, the rest is sent as text). Send errors go to the
 status line and the window.
 
 ## Keys
@@ -222,11 +240,15 @@ window as a notice. There is no cycling.
 ## Scrolling
 
 Scroll is lines above the bottom, per window. At 0 the window follows new
-messages. When scrolled back, arriving messages keep the view anchored.
+messages. When scrolled back, arriving messages keep the view anchored,
+the last content row becomes a marker in the activity colour (`vvv N more
+line(s) below - End or a click here jumps to the newest vvv`, clickable)
+and the status line shows `[scrolled up N lines]` in the same colour.
 
 ## Status line
 
-`[time] [provider] [N:name] [Act: ...] [M msgs] [sync state] [-K lines] message ctrl-x: to send`
+`time  provider  [N:name]  Act: ...  M msgs  sync state  scrolled up K lines  message  ctrl-x: to send`
+(brackets only around the window tag; two spaces between segments)
 (the last item says how text is sent in a chat window: `ctrl-x` or `enter`).
 Each segment has its own palette colour from the theme (the sync state
 changes colour: syncing, synced, never); the window bar stays in one

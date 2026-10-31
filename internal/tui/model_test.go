@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -32,12 +33,12 @@ func (f *fake) Send(_ context.Context, chatID, text string) error {
 	return f.err
 }
 
-func (f *fake) Fetch(_ context.Context, chatID, msgID string) (string, error) {
+func (f *fake) Fetch(_ context.Context, chatID, msgID string) ([]byte, string, error) {
 	f.fetched = append(f.fetched, chatID+":"+msgID)
 	if f.err != nil {
-		return "", f.err
+		return nil, "", f.err
 	}
-	return "/tmp/fake/" + msgID + ".jpg", nil
+	return []byte("BYTES-" + msgID), msgID + ".jpg", nil
 }
 
 func (f *fake) Press(_ context.Context, chatID, msgID string, b domain.Button) (domain.PressAnswer, error) {
@@ -106,6 +107,7 @@ func setup(t *testing.T, f *fake) *Model {
 	}
 	t.Cleanup(func() { _ = st.Close() })
 	m := New(Options{Store: st, Provider: f})
+	m.fx = false // the running lights schedule ticks; tests switch them on explicitly
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	m.Update(m.chatsCmd()())
 	m.Update(m.syncCmd()())
@@ -138,7 +140,7 @@ func TestServerWindowInterleavesChats(t *testing.T) {
 	if a < 0 || a >= b || b >= c {
 		t.Fatalf("expected interleaved chronological order:\n%s", v)
 	}
-	for _, want := range []string{"#dev", "@alice", "<ada>", "[fake]", "[0:server]", "4 msgs"} {
+	for _, want := range []string{"#dev", "@alice", "<ada>", "  fake  [0:server]", "4 msgs"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("view lacks %q", want)
 		}
@@ -156,7 +158,7 @@ func TestWindowsOpenForNewMessagesAndUnreadChats(t *testing.T) {
 	if m.wins[2].unread != 2 || m.wins[3].unread != 2 {
 		t.Fatalf("activity counts: %+v %+v", m.wins[2], m.wins[3])
 	}
-	if !strings.Contains(m.View(), "[Act: 1,2,3]") {
+	if !strings.Contains(m.View(), "Act: 1,2,3") {
 		t.Fatalf("activity missing:\n%s", m.View())
 	}
 	for _, w := range m.wins {
@@ -245,7 +247,7 @@ func TestTabCompletesNamesAndCommands(t *testing.T) {
 		t.Fatalf("bare prefix should get its sigil: %q", got)
 	}
 	m.input = nil
-	typ(m, "/li")
+	typ(m, "/lis")
 	press(m, tea.KeyTab)
 	if got := string(m.input); got != "/list " {
 		t.Fatalf("command: %q", got)
@@ -670,6 +672,7 @@ func TestWindowLayoutSurvivesRestart(t *testing.T) {
 	defer func() { _ = st.Close() }()
 	f := newFake()
 	m := New(Options{Store: st, Provider: f})
+	m.fx = false
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	m.Update(m.chatsCmd()())
 	m.Update(m.syncCmd()()) // opens #news, #dev, @alice
@@ -710,6 +713,7 @@ func TestStartBannerAndTagline(t *testing.T) {
 	defer func() { _ = st.Close() }()
 	f := newFake()
 	m := New(Options{Store: st, Provider: f, Version: "v9.9.9"})
+	m.fx = false
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m.Update(m.syncCmd()()) // hour-old messages must still come after the banner
 	press(m, tea.KeyHome)
@@ -909,6 +913,7 @@ func TestMouseClicksOpenWindowsAndLinks(t *testing.T) {
 	st, _ := store.Open(store.Memory, bytes.Repeat([]byte{5}, 32))
 	defer func() { _ = st.Close() }()
 	m := New(Options{Store: st, Provider: f, Open: func(s string) error { opened = append(opened, s); return nil }})
+	m.fx = false
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m.Update(m.chatsCmd()())
 	m.Update(m.syncCmd()())
@@ -979,22 +984,24 @@ func TestMouseClicksOpenWindowsAndLinks(t *testing.T) {
 	click(m, 99, 999)
 }
 
-func TestOpenFetchesAndOpensImages(t *testing.T) {
+func TestOpenFetchesSealsAndOpensImages(t *testing.T) {
 	f := newFake()
 	photo := mk("c1", "20", "ada", "look", 5)
 	photo.Media = &domain.Media{Kind: "photo"}
 	file := mk("c1", "21", "ada", "", 6)
-	file.Media = &domain.Media{Kind: "file", Name: "report.pdf"}
+	file.Media = &domain.Media{Kind: "file", Name: "../report.pdf"}
 	f.msgs = append(f.msgs, photo, file)
 	var opened []string
 	st, _ := store.Open(store.Memory, bytes.Repeat([]byte{6}, 32))
 	defer func() { _ = st.Close() }()
 	m := New(Options{Store: st, Provider: f, Open: func(s string) error { opened = append(opened, s); return nil }})
+	m.fx = false
+	defer m.Cleanup()
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m.Update(m.chatsCmd()())
 	m.Update(m.syncCmd()())
 	v := body(m)
-	if !strings.Contains(v, "[photo] look") || !strings.Contains(v, "[file: report.pdf]") {
+	if !strings.Contains(v, "[photo] look") || !strings.Contains(v, "[file: ../report.pdf]") {
 		t.Fatalf("tokens:\n%s", v)
 	}
 	enter(m, "/open")
@@ -1007,23 +1014,36 @@ func TestOpenFetchesAndOpensImages(t *testing.T) {
 		t.Fatal("expected a fetch")
 	}
 	_, next := m.Update(cmd())
-	if f.fetched[0] != "c1:21" || next != nil || !strings.Contains(body(m), "-!- saved /tmp/fake/21.jpg") || len(opened) != 0 {
+	if len(f.fetched) != 1 || f.fetched[0] != "c1:21" || next != nil || !strings.Contains(body(m), "-!- decrypted to") || len(opened) != 0 {
 		t.Fatalf("file: fetched=%v opened=%v\n%s", f.fetched, opened, body(m))
 	}
-	cmd = enter(m, "/open 20") // the photo: fetched then opened
+	if data, found, _ := st.Media("c1", "21"); !found || string(data) != "BYTES-21" {
+		t.Fatal("the attachment must be in the vault")
+	}
+	if len(m.viewFiles) != 1 || !strings.HasSuffix(m.viewFiles[0], "-report.pdf") || strings.Contains(m.viewFiles[0], "..") {
+		t.Fatalf("plain copy with a safe name: %v", m.viewFiles)
+	}
+	if got, _ := os.ReadFile(m.viewFiles[0]); string(got) != "BYTES-21" {
+		t.Fatal("plain copy content")
+	}
+	cmd = enter(m, "/open 20") // the photo: fetched, sealed, then opened
 	_, next = m.Update(cmd())
 	if next == nil {
 		t.Fatal("images must be opened")
 	}
 	m.Update(next())
-	if len(opened) != 1 || opened[0] != "/tmp/fake/20.jpg" {
+	if len(opened) != 1 || !strings.HasSuffix(opened[0], "20.jpg") {
 		t.Fatalf("opened=%v", opened)
+	}
+	cmd = enter(m, "/open 20") // second time: from the vault, no download
+	m.Update(cmd())
+	if len(f.fetched) != 2 {
+		t.Fatalf("vault must serve the second open: fetched=%v", f.fetched)
 	}
 	enter(m, "/open 1") // a message without media
 	if !m.isErr {
 		t.Fatal("no media")
 	}
-	// clicking the token does the same
 	m.View()
 	x, y := find(m, spanMedia, "c1\x0020")
 	if x < 0 {
@@ -1035,10 +1055,41 @@ func TestOpenFetchesAndOpensImages(t *testing.T) {
 	if len(opened) != 2 {
 		t.Fatalf("click: opened=%v", opened)
 	}
-	f.err = errors.New("FILE_REFERENCE_EXPIRED")
-	_, next = m.Update(enter(m, "/open 20")())
-	if !m.isErr || !strings.Contains(body(m), "-!- fetch: FILE_REFERENCE_EXPIRED") || next != nil {
-		t.Fatal("fetch errors land in the window")
+	dir := m.viewDir
+	m.Cleanup()
+	if _, err := os.Stat(dir); !os.IsNotExist(err) {
+		t.Fatal("plain copies must be gone after Cleanup")
+	}
+}
+
+func TestImageTokenWithATrapNameIsNeverOpened(t *testing.T) {
+	// A provider that labels something an image but hands back a name the
+	// viewer would not treat as one: the copy is saved, not opened.
+	f := newFake()
+	trap := mk("c1", "30", "ada", "", 7)
+	trap.Media = &domain.Media{Kind: "image", Name: "photo.html"}
+	f.msgs = append(f.msgs, trap)
+	var opened []string
+	st, _ := store.Open(store.Memory, bytes.Repeat([]byte{8}, 32))
+	defer func() { _ = st.Close() }()
+	m := New(Options{Store: st, Provider: f, Open: func(s string) error { opened = append(opened, s); return nil }})
+	m.fx = false
+	defer m.Cleanup()
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.Update(m.chatsCmd()())
+	m.Update(m.syncCmd()())
+	enter(m, "/win #dev")
+	_, next := m.Update(enter(m, "/open 30")())
+	// the fake names the copy 30.jpg (an image extension), so it opens; a
+	// name without one would not
+	if next == nil || len(m.viewFiles) != 1 || !imageFile(m.viewFiles[0]) {
+		t.Fatalf("copy %v", m.viewFiles)
+	}
+	if imageFile("/x/photo.html") || imageFile("/x/a.svg") || !imageFile("/x/A.PNG") {
+		t.Fatal("imageFile")
+	}
+	if sanitizeName("../../.hidden") != "hidden" || sanitizeName("") != "attachment" || sanitizeName("ok.png") != "ok.png" {
+		t.Fatal("sanitizeName")
 	}
 }
 
@@ -1180,5 +1231,154 @@ func TestTabOnEmptyPromptCyclesWindows(t *testing.T) {
 	press(m, tea.KeyTab) // with text, Tab completes
 	if m.cur != 3 || string(m.input) != "/whois " {
 		t.Fatalf("completion: cur=%d input=%q", m.cur, string(m.input))
+	}
+}
+
+func TestFxToggleIsKept(t *testing.T) {
+	m := setup(t, newFake())
+	m.fx = true
+	enter(m, "/fx")
+	if m.fx {
+		t.Fatal("/fx toggles")
+	}
+	var saved bool
+	if ok, _ := m.opt.Store.State(fxKey, &saved); !ok || saved {
+		t.Fatal("the choice is kept")
+	}
+	m.View()
+	if _, cmd := m.Update(fxTickMsg{}); cmd != nil || m.animOn {
+		t.Fatal("no ticks while off")
+	}
+}
+
+func TestScrolledUpIndicator(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	for i := 0; i < 40; i++ {
+		f.msgs = append(f.msgs, mk("c1", fmt.Sprintf("f%d", i), "x", "filler", i))
+	}
+	m.Update(m.syncCmd()())
+	m.View()
+	press(m, tea.KeyPgUp)
+	v := m.View()
+	if !strings.Contains(v, "more line(s) below") || !strings.Contains(v, "scrolled up") {
+		t.Fatalf("indicator missing:\n%s", v)
+	}
+	x, y := find(m, spanEnd, "")
+	if x < 0 {
+		t.Fatal("the marker must be clickable")
+	}
+	click(m, x, y)
+	if m.wins[m.cur].scroll != 0 || strings.Contains(m.View(), "more line(s) below") {
+		t.Fatal("a click jumps to the newest line")
+	}
+}
+
+func TestFetchErrorLandsInWindow(t *testing.T) {
+	f := newFake()
+	photo := mk("c1", "20", "ada", "look", 5)
+	photo.Media = &domain.Media{Kind: "photo"}
+	f.msgs = append(f.msgs, photo)
+	m := setup(t, f)
+	defer m.Cleanup()
+	enter(m, "/win #dev")
+	f.err = errors.New("FILE_REFERENCE_EXPIRED")
+	_, next := m.Update(enter(m, "/open 20")())
+	if !m.isErr || !strings.Contains(body(m), "-!- fetch: FILE_REFERENCE_EXPIRED") || next != nil {
+		t.Fatal("fetch errors land in the window")
+	}
+}
+
+func TestRunningLightFollowsTheMouse(t *testing.T) {
+	f := newFake()
+	f.msgs = append(f.msgs, mk("c1", "9", "alice", "see https://example.invalid/doc now", 4))
+	m := setup(t, f)
+	m.fx = true
+	m.View()
+	if m.animOn {
+		t.Fatal("nothing hovered: no animation")
+	}
+	x, y := find(m, spanURL, "https://example.invalid/doc")
+	m.Update(tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionMotion})
+	if m.hover != hoverKey(span{kind: spanURL, target: "https://example.invalid/doc"}) {
+		t.Fatalf("hover=%q", m.hover)
+	}
+	m.View()
+	_, cmd := m.Update(fxTickMsg{})
+	if !m.animOn || cmd == nil {
+		t.Fatal("the light runs under the pointer")
+	}
+	m.Update(tea.MouseMsg{X: 0, Y: 0, Action: tea.MouseActionMotion})
+	m.View()
+	if m.hover != "" || m.animOn {
+		t.Fatal("leaving the element stops the light")
+	}
+	enter(m, "/win @alice")
+	m.View()
+	bx, by := find(m, spanButtons, "c2\x007")
+	if bx < 0 {
+		t.Fatal("button line span")
+	}
+	m.Update(tea.MouseMsg{X: bx + 1, Y: by, Action: tea.MouseActionMotion})
+	m.View()
+	if !m.animOn {
+		t.Fatal("buttons animate under the pointer")
+	}
+}
+
+func TestLeadingSpaceSendsSlashText(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	enter(m, "/win @alice")
+	typ(m, " /not a command")
+	_, tick := m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if tick == nil || m.pending == nil || m.pending.text != "/not a command" {
+		t.Fatalf("a leading space must send the text: pending=%v", m.pending)
+	}
+}
+
+func TestEscFromListRestoresNoFilter(t *testing.T) {
+	m := setup(t, newFake())
+	enter(m, "/list ali")
+	press(m, tea.KeyEsc)
+	typ(m, "2")
+	if m.cur != 2 || len(m.input) != 0 {
+		t.Fatalf("cur=%d input=%q", m.cur, string(m.input))
+	}
+}
+
+func TestNickClickNeedsAnExactName(t *testing.T) {
+	f := newFake()
+	f.msgs = append(f.msgs, mk("c1", "9", "al", "short name", 4)) // "al" is a prefix of alice
+	m := setup(t, f)
+	m.View()
+	x, y := find(m, spanNick, "al")
+	click(m, x, y)
+	if !m.isErr || m.cur != 0 {
+		t.Fatalf("a prefix must not open a chat: cur=%d status=%q", m.cur, m.status)
+	}
+	x, y = find(m, spanNick, "alice")
+	click(m, x, y)
+	if m.winName(m.cur) != "@alice" {
+		t.Fatal("an exact alias opens the chat")
+	}
+}
+
+func TestFetchInFlightGuard(t *testing.T) {
+	f := newFake()
+	photo := mk("c1", "20", "ada", "look", 5)
+	photo.Media = &domain.Media{Kind: "photo"}
+	f.msgs = append(f.msgs, photo)
+	m := setup(t, f)
+	defer m.Cleanup()
+	enter(m, "/win #dev")
+	first := enter(m, "/open 20")
+	second := enter(m, "/open 20")
+	if first == nil || second != nil || !strings.Contains(m.status, "already fetching") {
+		t.Fatalf("second fetch must be ignored: %q", m.status)
+	}
+	m.Update(first())
+	if third := enter(m, "/open 20"); third == nil {
+		t.Fatal("after the first completes, a fetch may run again")
 	}
 }

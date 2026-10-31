@@ -20,8 +20,8 @@ last call (`since` is the newest cached time; a provider may ignore it).
 returned, it arrives through `Sync`. `Press` presses a callback button and
 returns the bot's answer (text, optional URL) and the message as it is
 afterwards (`Updated`), since bots edit their message in response; the
-caller replaces the message. `Fetch` downloads a message's attachment to a
-private local file and returns its path (reused when present). `Sync` may return messages together with an error
+caller replaces the message. `Fetch` downloads a message's attachment into memory and returns its
+bytes and a file name; the caller seals it into the vault. `Sync` may return messages together with an error
 (a batch that failed part-way); the caller stores them before showing the
 error. The store de-duplicates by (chat id, message id), so calls may
 overlap. Message times are absolute; the UI converts to local
@@ -36,8 +36,7 @@ past and replayed by the first Sync, later lines "arrive" over about 4
 minutes. `Recent` serves the chat's past lines; `Send` appends a line from
 `me` that the next `Sync` returns. `@demobot` asks a question with
 `Deploy`, `Hold` and a `Runbook` link; `Press` answers and edits the
-question. `@linus` sends one photo; `Fetch` draws a small PNG into a
-private temporary directory for it. Started with `lazygram demo`; nothing
+question. `@linus` sends one photo; `Fetch` draws a small PNG in memory for it. Started with `lazygram demo`; nothing
 is kept on disk.
 
 ## telegram
@@ -135,15 +134,21 @@ used when a window opens and for `/last`. `Send` is one
 the next poll as the chat's top message moved. Own messages (`out`) show
 as `me`. Inline and reply keyboards are converted to buttons row by row
 (callback, URL, plain text; others unsupported). `Press` is
-`messages.getBotCallbackAnswer` with the button's data, followed by
-`messages.getMessages` (or `channels.getMessages` for channels and
-supergroups) to return the edited message. Message edits are otherwise not
+`messages.getBotCallbackAnswer` with the button's data (a
+BOT_RESPONSE_TIMEOUT, common with bots that never answer the query, is
+reported as "no answer" and not as a failure), then a short grace period
+for the bot's edit, then `messages.getMessages` (or
+`channels.getMessages` for channels and supergroups) to return the edited
+message. Message edits are otherwise not
 tracked. Photos and documents become `Media` (`photo`; `image` for a
-document with an image mime type; `file` otherwise, with the file name);
+document whose mime type is image/jpeg, image/png, image/gif or
+image/webp; `file` otherwise, with the sender's file name for display);
 `Fetch` fetches the message again for a fresh file reference, picks the
-largest photo size (or the document), downloads through gotd's downloader
-to `<data>/telegram/media/<chat>-<msg>.<ext>` (dir 0700, file 0600, written
-as `.part` then renamed) and returns the path. Other media (polls,
+largest photo size (or the document), streams it through gotd's
+downloader into memory (64 MiB cap, four threads, without holding the
+client lock so syncs and sends continue) and returns the bytes with a name
+whose extension follows the content type for images (never the sender's
+name, which decides nothing about what gets opened). Other media (polls,
 locations, ...) shows as `[media]` and cannot be fetched. The only calls the connector makes: messages.getDialogs,
 messages.getHistory, messages.sendMessage (Ctrl-X, /me, reply buttons),
 messages.getBotCallbackAnswer, messages.getMessages and

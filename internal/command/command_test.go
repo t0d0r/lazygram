@@ -35,6 +35,7 @@ func TestParse(t *testing.T) {
 		{"/move 3", Command{Move, "3"}, false},
 		{"/msg @ada hello there", Command{Msg, "@ada hello there"}, false},
 		{"/about", Command{About, ""}, false},
+		{"/fx", Command{Fx, ""}, false},
 		{"/bogus", Command{}, true},
 		{"/", Command{}, true},
 		{"hello", Command{}, true},

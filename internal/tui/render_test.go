@@ -245,3 +245,28 @@ func TestWindowGenericPadsAtTop(t *testing.T) {
 		t.Fatalf("%v %d", got, off)
 	}
 }
+
+func TestLinksTrimPunctuationAndPreferExactMatches(t *testing.T) {
+	if got := urlsOf("see https://a.example/x. and (https://b.example/y), ok"); len(got) != 2 || got[0] != "https://a.example/x" || got[1] != "https://b.example/y" {
+		t.Fatalf("%v", got)
+	}
+	full := []string{"https://a.example/x", "https://a.example/xyz"}
+	if wholeURL("https://a.example/x", false, full) != "https://a.example/x" {
+		t.Fatal("an exact entry wins over a longer one")
+	}
+	if wholeURL("https://a.exam", true, full) != "https://a.example/x" {
+		t.Fatal("a fragment at the end of a line maps to the first URL starting with it")
+	}
+	if wholeURL("https://a.exam", false, full) != "https://a.exam" {
+		t.Fatal("a fragment inside a line is left alone")
+	}
+	note := []note{{at: time.Now(), text: "open https://example.invalid/" + strings.Repeat("abc/", 30) + "end"}}
+	_, spans := renderRich(nil, note, lineOpts{width: 60, nameW: 4, nameOf: nameX})
+	for _, row := range spans {
+		for _, s := range row {
+			if s.kind == spanURL && !strings.HasSuffix(s.target, "/end") {
+				t.Fatalf("a wrapped link in a notice must map to the whole URL: %q", s.target)
+			}
+		}
+	}
+}

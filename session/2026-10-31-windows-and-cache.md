@@ -180,3 +180,25 @@ at the hidden password prompt takes effect only after Enter.
 - v0.4.3 released from 776b2ff (single-colour window bar, Tab cycles
   windows on an empty prompt): assets verified, no registration inside;
   formula at 0.4.3, brew upgrade and brew test passed, tap pushed.
+- Clickable text styled (link colour, underline; tokens bold; buttons) with
+  a running light (sparkStyle, period 7, 120 ms tick only while visible;
+  per-message render cache keyed by content, options and phase). `/fx`
+  toggles, kept in state. Scrolled-up windows show a clickable marker row
+  and a bright status segment.
+- Attachments: providers return bytes (64 MiB cap); `Store.PutMedia`/
+  `Media` seal them into `<state>/telegram/media/<hash>.enc`; viewing
+  writes a plain copy into a private temp dir removed by `Model.Cleanup`
+  at exit. Review finding (high) fixed: an image's extension follows the
+  mime allowlist (jpeg/png/gif/webp), never the sender's name; svg and
+  other image types are plain files; only raster extensions are opened.
+- Running light plays only under the mouse pointer (all-motion mouse
+  mode, hover key per span); status line uses brackets only around the
+  window tag, two spaces between segments.
+- Second review (64 agents, 19 confirmed) applied: mime allowlist for
+  auto-opened images (high); BOT_RESPONSE_TIMEOUT treated as "no answer";
+  grace period before the post-press refetch; downloads unlocked and
+  4-threaded; fetch in-flight guard; exact nick clicks; trailing
+  punctuation trimmed from links, exact URL preferred over prefix mapping,
+  notice links whole; status text sanitized; " /text" sends; Esc from a
+  list restores no filter; more extensions; docs say links open in the
+  browser. Refetch of the pressed message still races a very slow bot.
