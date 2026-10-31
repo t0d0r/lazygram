@@ -125,8 +125,19 @@ func (o lineOpts) hovered(kind spanKind, target string) int {
 	return o.phase
 }
 
-// sparkPeriod is the distance between two lights running over a span.
-const sparkPeriod = 7
+// bouncePos is where the single light sits on an element of n characters
+// at a given phase: it runs to the end and back, ping-pong.
+func bouncePos(phase, n int) int {
+	if n <= 1 {
+		return 0
+	}
+	period := 2 * (n - 1)
+	pos := phase % period
+	if pos >= n {
+		pos = period - pos
+	}
+	return pos
+}
 
 // renderCache remembers rendered messages; a message without animated
 // spans renders once per width and theme, an animated one once per phase.
@@ -159,15 +170,17 @@ func (c *renderCache) put(key string, v cached) {
 	c.m[key] = v
 }
 
-// clickable paints text as something the mouse can act on, with the
-// running light at phase (none when phase < 0).
+// clickable paints text as something the mouse can act on, with one bright
+// character bouncing back and forth over it at phase (none when phase < 0).
 func clickable(text string, base lipgloss.Style, phase int) string {
 	if phase < 0 {
 		return base.Render(text)
 	}
+	runes := []rune(text)
+	at := bouncePos(phase, len(runes))
 	var b strings.Builder
-	for i, r := range []rune(text) {
-		if (i+phase)%sparkPeriod == 0 {
+	for i, r := range runes {
+		if i == at {
 			b.WriteString(sparkStyle.Render(string(r)))
 		} else {
 			b.WriteString(base.Render(string(r)))
@@ -257,7 +270,7 @@ func renderRich(msgs []domain.Message, notes []note, o lineOpts) ([]string, [][]
 		t := m.Time.Local()
 		day(t)
 		key := cacheKey(m, o)
-		if c, ok := o.cache.get(key); ok {
+		if c, ok := o.cache.get(key); ok && key != "" {
 			for k := range c.lines {
 				add(c.lines[k], c.spans[k]...)
 			}
@@ -265,7 +278,7 @@ func renderRich(msgs []domain.Message, notes []note, o lineOpts) ([]string, [][]
 		}
 		mark := len(out)
 		anim := renderMessage(m, o, add)
-		if o.cache != nil {
+		if o.cache != nil && key != "" {
 			o.cache.put(key, cached{lines: append([]string(nil), out[mark:]...), spans: append([][]span(nil), spans[mark:]...), anim: anim})
 		}
 	}
@@ -280,11 +293,10 @@ func cacheKey(m domain.Message, o lineOpts) string {
 	h.Write([]byte(m.Sender))
 	h.Write([]byte{0})
 	h.Write([]byte(m.Text))
-	phase := -1
 	if o.phase >= 0 && o.hover != "" && hasElement(m, o.hover) {
-		phase = o.phase % sparkPeriod
+		return "" // the hovered message changes every tick: not cached
 	}
-	return fmt.Sprintf("%s|%x|%d|%d|%t|%t|%s|%d|%d", m.Key(), h.Sum32(), len(m.Buttons), o.width, o.showChat, o.fullDate, o.highlight, o.nameW, phase)
+	return fmt.Sprintf("%s|%x|%d|%d|%t|%t|%s|%d", m.Key(), h.Sum32(), len(m.Buttons), o.width, o.showChat, o.fullDate, o.highlight, o.nameW)
 }
 
 // hasElement reports whether a message renders the element behind a hover

@@ -44,7 +44,7 @@ const (
 
 const (
 	fxKey          = "fx" // store state key for the running lights
-	fxTick         = 120 * time.Millisecond
+	fxTick         = 60 * time.Millisecond
 	maxHistory     = 200
 	doubleCtrlX    = 600 * time.Millisecond
 	layoutKey      = "windows" // store state key for the window layout

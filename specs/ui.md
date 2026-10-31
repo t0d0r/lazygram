@@ -144,13 +144,14 @@ hex values, downsampled by lipgloss on 256-colour terminals.
 
 Clickable text looks clickable: links are underlined in the theme's link
 colour, attachment tokens bold in the same colour, bot buttons in the
-button colour. A running light (one bright character every seven, moving
-every 120 ms) plays over the element under the mouse pointer only: a chat
+button colour. A running light (a single bright character bouncing back and forth
+over the element, moving every 60 ms) plays over the element under the
+mouse pointer only: a chat
 name, a nick, a link, an attachment token, a button line or a window-bar
 tag. Hovering needs the terminal to report pointer motion (all-motion
 mouse mode). The animation ticks only while something is hovered, and
-rendered messages are cached per width, theme and phase so only the
-hovered message re-renders. `/fx` turns the light off or on; the choice is
+rendered messages are cached per width and theme and the hovered message
+is simply not cached, so only it re-renders each tick. `/fx` turns the light off or on; the choice is
 kept. Clicks act on what is under the pointer as of the last render: a chat name
 in the server window opens or focuses that chat's window; a nick opens the
 chat whose alias or title equals it exactly (otherwise "no chat named ..."); a

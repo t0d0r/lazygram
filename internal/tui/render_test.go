@@ -5,6 +5,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
+
 	"lazygram/internal/domain"
 )
 
@@ -268,5 +270,21 @@ func TestLinksTrimPunctuationAndPreferExactMatches(t *testing.T) {
 				t.Fatalf("a wrapped link in a notice must map to the whole URL: %q", s.target)
 			}
 		}
+	}
+}
+
+func TestBouncePos(t *testing.T) {
+	want := []int{0, 1, 2, 3, 2, 1, 0, 1, 2}
+	for phase, w := range want {
+		if got := bouncePos(phase, 4); got != w {
+			t.Fatalf("phase %d: got %d want %d", phase, got, w)
+		}
+	}
+	if bouncePos(5, 1) != 0 || bouncePos(5, 0) != 0 {
+		t.Fatal("short elements")
+	}
+	a, b := clickable("abcd", linkStyle, 0), clickable("abcd", linkStyle, 1)
+	if a == b && lipgloss.Width(a) > 0 && strings.Contains(a, "\x1b") {
+		t.Fatal("the light must move")
 	}
 }

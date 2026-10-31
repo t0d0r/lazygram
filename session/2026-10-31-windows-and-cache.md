@@ -202,3 +202,5 @@ at the hidden password prompt takes effect only after Enter.
   notice links whole; status text sanitized; " /text" sends; Esc from a
   list restores no filter; more extensions; docs say links open in the
   browser. Refetch of the pressed message still races a very slow bot.
+- Running light: one character bouncing ping-pong over the hovered element
+  at 60 ms; the hovered message is not cached.
