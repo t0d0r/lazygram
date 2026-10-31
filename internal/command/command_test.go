@@ -33,6 +33,8 @@ func TestParse(t *testing.T) {
 		{"/theme", Command{Theme, ""}, false},
 		{"/colors nord", Command{Theme, "nord"}, false},
 		{"/move 3", Command{Move, "3"}, false},
+		{"/msg @ada hello there", Command{Msg, "@ada hello there"}, false},
+		{"/about", Command{About, ""}, false},
 		{"/bogus", Command{}, true},
 		{"/", Command{}, true},
 		{"hello", Command{}, true},

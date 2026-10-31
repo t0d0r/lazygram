@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -97,8 +98,13 @@ type Model struct {
 	lastLines     int // rendered line count of the current window at the last View
 
 	started  time.Time
-	seen     int // messages that arrived this session
-	sentN    int // messages sent this session
+	seen     int             // messages that arrived this session
+	sentN    int             // messages sent this session
+	pressedN int             // bot buttons pressed
+	fetchedN int             // attachments fetched
+	openedN  int             // windows opened this session
+	cmdsN    int             // commands run
+	visited  map[string]bool // chat ids of windows shown
 	syncing  bool
 	loading  map[string]bool // chat ids with a Recent fetch in flight
 	lastSync time.Time
@@ -153,7 +159,7 @@ func New(opt Options) *Model {
 	if opt.Open == nil {
 		opt.Open = opener.Open
 	}
-	m := &Model{opt: opt, width: 100, height: 30, loading: map[string]bool{},
+	m := &Model{opt: opt, width: 100, height: 30, loading: map[string]bool{}, visited: map[string]bool{},
 		wins: []*win{{}}, status: "type /help for commands", started: time.Now()}
 	m.chats, _ = opt.Store.Chats()
 	m.msgs, _ = opt.Store.Messages("", opt.Backlog)
@@ -208,17 +214,45 @@ func ExitBanner(version string, width int, summary string) string {
 	if width >= logo.Width(logo.ExitWide) {
 		art = logo.ExitWide
 	}
-	out := strings.Join(Banner(logo.Lines(art)), "\n") + "\n" + dimStyle.Render(Tagline(version)+" - thanks for using lazygram")
-	if summary != "" {
-		out += "\n" + dimStyle.Render(summary)
+	out := strings.Join(Banner(logo.Lines(art)), "\n") + "\n" + dimStyle.Render(Tagline(version)+" by t0d0r - thanks for using lazygram")
+	for _, l := range strings.Split(summary, "\n") {
+		if l != "" {
+			out += "\n" + dimStyle.Render("  "+l)
+		}
 	}
 	return out + "\n"
 }
 
-// Summary is one line about the session, for the exit banner.
+// Summary is the session's statistics for the exit banner, one item per
+// line, in the spirit of BitchX's parting words.
 func (m *Model) Summary() string {
-	return fmt.Sprintf("up %s, %d windows, %d messages arrived, %d sent",
-		time.Since(m.started).Truncate(time.Second), len(m.wins)-1, m.seen, m.sentN)
+	cached, _ := m.opt.Store.Count("")
+	return strings.Join([]string{
+		fmt.Sprintf("time wasted: %s", time.Since(m.started).Truncate(time.Second)),
+		fmt.Sprintf("messages: %d arrived, %d sent, %d buttons pressed, %d files fetched, %d in the cache",
+			m.seen, m.sentN, m.pressedN, m.fetchedN, cached),
+		fmt.Sprintf("windows: %d open at exit, %d opened, %d chats visited; %d commands run",
+			len(m.wins)-1, m.openedN, len(m.visited), m.cmdsN),
+	}, "\n")
+}
+
+// About prints what lazygram is, who made it and what it runs on.
+func (m *Model) about() {
+	w := m.wins[m.cur]
+	v := m.opt.Version
+	if v == "" {
+		v = "dev"
+	}
+	for _, l := range []string{
+		"lazygram " + v + " - IRC-style terminal client for Telegram, in the spirit of BitchX and nchat",
+		"  by t0d0r (Todor Dragnev) - https://github.com/t0d0r/lazygram - BSD-2-Clause",
+		"  built with " + runtime.Version() + " for " + runtime.GOOS + "/" + runtime.GOARCH +
+			"; gotd/td (MTProto), bubbletea, lipgloss, modernc.org/sqlite",
+		fmt.Sprintf("  provider %s, theme %s, up %s", m.opt.Provider.Name(), currentName, time.Since(m.started).Truncate(time.Second)),
+		"  /help for commands, lazygram update for the latest release",
+	} {
+		m.note(w, l)
+	}
 }
 
 // Width is the terminal width as last reported.
@@ -424,6 +458,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			text += " (open: " + msg.answer.URL + ")"
 		}
 		m.note(w, text)
+		m.pressedN++
 		m.setInfo("pressed " + msg.label)
 	case sentMsg:
 		_, w := m.winFor(msg.chatID)
@@ -464,6 +499,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				media = x.Media
 			}
 		}
+		m.fetchedN++
 		if media.Image() {
 			m.note(w, "opening "+msg.path)
 			return m, m.openCmd(msg.path)
@@ -645,6 +681,7 @@ func (m *Model) winFor(chatID string) (int, *win) {
 func (m *Model) openWin(chatID string) (int, *win) {
 	w := &win{chatID: chatID}
 	m.wins = append(m.wins, w)
+	m.openedN++
 	i := len(m.wins) - 1
 	m.note(m.wins[0], fmt.Sprintf("window %d opened for %s", i, m.nameOf(chatID)))
 	m.saveLayout()
@@ -662,6 +699,9 @@ func (m *Model) switchTo(i int) tea.Cmd {
 	m.lastCtrlX = time.Time{} // a double Ctrl-X never spans two windows
 	w := m.wins[i]
 	w.unread = 0
+	if w.chatID != "" {
+		m.visited[w.chatID] = true
+	}
 	m.setInfo("window " + strconv.Itoa(i) + ": " + m.winName(i))
 	if w.chatID != "" && !w.loaded && !m.loading[w.chatID] {
 		m.note(w, fmt.Sprintf("fetching the last %d messages", recentOnOpen))
@@ -893,6 +933,7 @@ func (m *Model) enter() (tea.Model, tea.Cmd) {
 		m.setErr(err.Error())
 		return m, nil
 	}
+	m.cmdsN++
 	return m.run(cmd)
 }
 
@@ -930,6 +971,10 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 			i = n
 		}
 		m.closeWin(i)
+	case command.Msg:
+		return m.msg(c.Arg)
+	case command.About:
+		m.about()
 	case command.Move:
 		n, err := strconv.Atoi(c.Arg)
 		if err != nil {
@@ -1069,6 +1114,33 @@ func (m *Model) press(arg string) (tea.Model, tea.Cmd) {
 		m.setErr("button " + b.Label + " is of a kind lazygram cannot press")
 	}
 	return m, nil
+}
+
+// msg implements /msg: send text to a chat named by @user or #chan,
+// opening and focusing its window when it has none.
+func (m *Model) msg(arg string) (tea.Model, tea.Cmd) {
+	target, text, _ := strings.Cut(strings.TrimSpace(arg), " ")
+	text = strings.TrimSpace(text)
+	if target == "" || text == "" {
+		m.setErr("usage: /msg <@user|#chan> <text>")
+		return m, nil
+	}
+	c, err := domain.ResolveChat(m.chats, target)
+	if err != nil {
+		m.setErr(err.Error())
+		return m, nil
+	}
+	var cmds []tea.Cmd
+	i, w := m.winFor(c.ID)
+	if w == nil {
+		i, _ = m.openWin(c.ID)
+	}
+	if cmd := m.switchTo(i); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
+	m.setInfo("sending to " + c.Name() + "...")
+	cmds = append(cmds, m.sendCmd(c.ID, text))
+	return m, tea.Batch(cmds...)
 }
 
 // stats prints client statistics into the current window.

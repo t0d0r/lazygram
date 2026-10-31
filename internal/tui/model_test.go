@@ -735,8 +735,18 @@ func TestStartBannerAndTagline(t *testing.T) {
 	if wide, narrow := ExitBanner("v1", 120, ""), ExitBanner("v1", 60, ""); wide == narrow {
 		t.Fatal("a narrow terminal gets the small banner")
 	}
-	if s := m.Summary(); !strings.Contains(s, "windows") || !strings.Contains(s, "arrived") {
-		t.Fatal(s)
+	enter(m, "/win 1")
+	enter(m, "/stats")
+	m.Update(sentMsg{chatID: "c3"})
+	s := m.Summary()
+	for _, want := range []string{"time wasted:", "arrived", "1 sent", "buttons pressed", "files fetched", "in the cache", "opened", "1 chats visited", "2 commands run"} {
+		if !strings.Contains(s, want) {
+			t.Fatalf("summary lacks %q:\n%s", want, s)
+		}
+	}
+	enter(m, "/about")
+	if v := body(m); !strings.Contains(v, "by t0d0r") || !strings.Contains(v, "lazygram v9.9.9") || !strings.Contains(v, "gotd/td") {
+		t.Fatalf("about:\n%s", v)
 	}
 	if Tagline("") != Tagline("dev") {
 		t.Fatal("empty version reads dev")
@@ -1024,5 +1034,49 @@ func TestOpenFetchesAndOpensImages(t *testing.T) {
 	_, next = m.Update(enter(m, "/open 20")())
 	if !m.isErr || !strings.Contains(body(m), "-!- fetch: FILE_REFERENCE_EXPIRED") || next != nil {
 		t.Fatal("fetch errors land in the window")
+	}
+}
+
+func TestMsgSendsAndOpensTheWindow(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	enter(m, "/close 3") // @alice has no window now
+	cmd := enter(m, "/msg @alice hello from the server window")
+	if cmd == nil || m.winName(m.cur) != "@alice" {
+		t.Fatalf("window must open and focus: %s", m.winName(m.cur))
+	}
+	// the batch holds the recent fetch for the new window and the send
+	for _, msg := range []tea.Msg{} {
+		m.Update(msg)
+	}
+	run := func(c tea.Cmd) {
+		if c == nil {
+			return
+		}
+		switch r := c().(type) {
+		case tea.BatchMsg:
+			for _, x := range r {
+				m.Update(x())
+			}
+		default:
+			m.Update(r)
+		}
+	}
+	run(cmd)
+	if len(f.sent) != 1 || f.sent[0] != "c2:hello from the server window" {
+		t.Fatalf("sent=%v", f.sent)
+	}
+	enter(m, "/msg #dev")
+	if !m.isErr || !strings.Contains(m.status, "usage") {
+		t.Fatalf("usage: %q", m.status)
+	}
+	enter(m, "/msg #nope hi")
+	if !m.isErr {
+		t.Fatal("unknown chat")
+	}
+	cmd = enter(m, "/msg #dev ping") // existing window: just send and focus
+	run(cmd)
+	if m.winName(m.cur) != "#dev" || len(f.sent) != 2 || f.sent[1] != "c1:ping" {
+		t.Fatalf("sent=%v win=%s", f.sent, m.winName(m.cur))
 	}
 }

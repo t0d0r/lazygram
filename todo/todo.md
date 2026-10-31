@@ -47,6 +47,7 @@
 - [x] GitHub repository (github.com/t0d0r/lazygram), v0.3.0 release, Homebrew formula in t0d0r/homebrew-tap
 - [x] figlet banners at start and exit (specs/ui.md)
 - [x] /theme with nine colour schemes, persisted (specs/ui.md)
+- [x] /msg <@user|#chan> <text> sends and opens the window
 - [x] bash-style Tab completion (common prefix, second Tab lists)
 - [x] server window is 0 and permanent; /move N; Enter-sends saved and shown; wide exit banner with summary and release check (specs/ui.md)
 - [x] attachments: [photo]/[file] tokens, /open and click fetch; images open in the system viewer (specs/ui.md)

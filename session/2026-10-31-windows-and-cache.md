@@ -152,3 +152,11 @@ at the hidden password prompt takes effect only after Enter.
   session summary; a release build checks GitHub (3s) for a newer version.
 - Tab completion is bash-like: unique match filled in, else the longest
   common prefix; a second Tab that cannot extend prints the candidates.
+- `/msg <@user|#chan> <text>` resolves the chat, opens and focuses its
+  window when missing (fetching its recent messages) and sends.
+- v0.4.0 tagged and released on GitHub (four tarballs + SHA256SUMS);
+  Homebrew formula bumped to 0.4.0 in t0d0r/homebrew-tap.
+- Exit statistics: time wasted, messages arrived/sent, buttons pressed,
+  files fetched, cache size, windows open/opened, chats visited, commands.
+  `/about` prints version, author, repository, license, Go/OS/arch,
+  libraries, provider, theme and uptime.

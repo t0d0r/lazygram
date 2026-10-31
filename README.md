@@ -102,9 +102,11 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/whois [name]`            | what is known about a chat                    |
 | `/stats`                   | client statistics                             |
 | `/me <text>`               | send an action line (`* you waves`)           |
+| `/msg <@user|#chan> <text>` | send to a chat, opening its window if needed |
 | `/press N`                 | press button N under the latest bot message; `/press <msg> N` for an older one |
 | `/open [msg]`              | fetch a `[photo]`/`[file]`; images open in the system viewer |
 | `/theme [name]`            | colour themes: default, solarized, gruvbox, dracula, nord, monokai, tokyonight, vim, emacs |
+| `/about`                   | version, author, build and libraries          |
 | `/refresh`, `/help`, `/quit` | sync now; print the help into the window; leave |
 
 In a chat window, type text and press **Ctrl-X** to send it to that chat;

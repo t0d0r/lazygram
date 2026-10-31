@@ -13,10 +13,12 @@ completion, and an activity indicator.
   sync errors, `/win` output. It opens with a figlet banner (font slant,
   plain ASCII, coloured top to bottom) and a tagline with the version;
   after the program ends a banner is printed to the terminal, BitchX style
-  (font lean on 80 columns or more, smslant below), with the tagline, a
-  session summary (uptime, windows, messages arrived and sent) and, for a
-  release build, a one-line hint when GitHub has a newer release (checked
-  within 3 seconds, silently skipped offline). Not in smoke mode.
+  (font lean on 80 columns or more, smslant below), with the tagline (`by t0d0r`), the
+  session statistics (time wasted; messages arrived, sent, buttons
+  pressed, files fetched, cached; windows open at exit, opened, chats
+  visited, commands run) and, for a release build, a one-line hint when
+  GitHub has a newer release (checked within 3 seconds, silently skipped
+  offline). Not in smoke mode.
 - A window opens for a chat when a message arrives for it and no window
   exists, and at start for every chat the service reports as unread
   (deleted accounts never open windows). `/win @user`, `/win #chan` and
@@ -96,9 +98,11 @@ as notices; there is no separate help view.
 | `/whois [name]`               | print what is known about a chat (default: this window's) |
 | `/stats`                      | print client statistics                              |
 | `/me <text>`                  | send `* text` to this window's chat (shown as `* you text`) |
+| `/msg <@user|#chan> <text>`   | send to that chat, opening and focusing its window if missing |
 | `/press N`, `/press <msg> N`  | press a bot button (see Buttons)                     |
 | `/open [msg]`                 | fetch an attachment; open it when it is an image     |
 | `/theme [name]`               | list the colour themes or switch (see Themes)        |
+| `/about`, `/version`          | version, author, repository, license, build, libraries, uptime |
 
 Short forms: `/w`, `/j`, `/join`, `/query` for `/win`; `/wc`, `/part` for
 `/close`; `/history` for `/last`; `/find`, `/log` for `/search`; `/wi`,
