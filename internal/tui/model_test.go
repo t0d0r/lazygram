@@ -1039,8 +1039,11 @@ func TestTabInListOnlyCompletes(t *testing.T) {
 	}
 }
 
+// click presses and releases the left button on a cell; the click acts on
+// the release, so a drag can start on a link without opening it.
 func click(m *Model, x, y int) tea.Cmd {
-	_, cmd := m.Update(tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	m.Update(tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionPress, Button: tea.MouseButtonLeft})
+	_, cmd := m.Update(tea.MouseMsg{X: x, Y: y, Action: tea.MouseActionRelease, Button: tea.MouseButtonNone})
 	return cmd
 }
 

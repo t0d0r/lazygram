@@ -160,6 +160,7 @@ names `/keys`, so the keys are one step away from either.
 | `/about`, `/version`          | version, author, repository, license, build, libraries, uptime |
 | `/fx`                         | running lights over clickable text on or off (kept) |
 | `/mouse`                      | mouse reporting on or off; off lets the terminal select text (kept) |
+| `/clip [mode]`                | where a mouse selection is copied: `auto`, `osc52`, `tool`, `off`; no argument shows the mode and the tool (kept) |
 | `/names`                      | show chats by nick (`@alias`) or by name (`@Title`), kept |
 
 Short forms: `/h` for `/help`; `/shortcuts`, `/bindings` for `/keys`;
@@ -253,7 +254,8 @@ kept. While lazygram reports the mouse, the terminal's own drag-select
 needs a modifier: Shift in most Linux terminals, Option in macOS
 Terminal and iTerm2. `/mouse` turns mouse reporting off (drag selects as
 usual, clicks do nothing) and on again; the choice is kept and applied at
-start. Clicks act on what is under the pointer as of the last render: a chat name
+start. Clicks act on release, on what was under the pointer when the
+button went down, as of the last render: a chat name
 in the server window opens or focuses that chat's window; a nick opens the
 chat whose alias or title equals it exactly (otherwise "no chat named ..."); a
 `[N:name]` tag in the window bar focuses window N; a row in `/list` or
@@ -263,6 +265,49 @@ browser (links always go to the browser; only fetched attachments go to
 the image viewer). The wheel scrolls the window three
 lines (the cursor in a list). Opening happens only on a click, only for
 http and https links with a host; nothing is opened automatically.
+
+### Selection and clipboard
+
+A left-button drag selects text, so the mouse mode costs nothing that
+the terminal's own drag gave: the selection is a stream from the cell
+where the button went down to the cell under the pointer, in reading
+order (the first row from the anchor to its end, whole rows between,
+the last row up to and including the pointer's cell), over any screen
+row including the status rows and the input line. While the button is
+down the selected cells show in reverse video. On release the text is
+put on the clipboard and the status says `copied N characters` (one
+row) or `copied N lines`, naming the channels used; a press and release
+on the same cell is a click, so a drag that starts on a link selects
+instead of opening it, and a drag that moved copies nothing else. The
+text is the plain characters of the rendered rows: a cell inside a
+wide character takes the whole character, trailing blanks are dropped
+from each row, rows are joined with newlines. Blank selections say
+`nothing to copy`.
+
+Two channels carry the text, and `/clip` chooses (the choice is kept):
+
+- `osc52`: the OSC 52 escape sequence, base64 payload, written into the
+  frame so it reaches the terminal in order with the rendering. The
+  terminal, not lazygram, sets the clipboard, so it works over SSH when
+  the terminal allows OSC 52 writes (iTerm2, kitty, WezTerm, foot,
+  Alacritty, Windows Terminal, Ghostty; macOS Terminal does not; tmux
+  passes it on with `set-clipboard on` or `external`; GNU screen gets it
+  DCS-wrapped). The sequence rides on the rule row for 250 ms and is
+  then dropped from the frames.
+- `tool`: a system clipboard command on stdin, chosen by platform:
+  `pbcopy` on macOS, `clip` on Windows, `wl-copy` under Wayland
+  (`WAYLAND_DISPLAY` set), `xclip -selection clipboard -in` or `xsel
+  --clipboard --input` under X11 (`DISPLAY` set), `clip.exe` under WSL;
+  only fixed names looked up on PATH, never a shell, and never on a
+  headless host. The tool runs in the background with a 5 s limit; a
+  failure lands in the status as an error.
+- `auto` (default): both; whichever the environment honours wins.
+- `off`: dragging selects and copies nothing; clicks still work.
+
+Shift-drag (Option on macOS) still reaches the terminal's own
+selection, as does `/mouse` off. Reason for the in-app selection: the
+terminal's drag is gone while the mouse is reported, and copying a
+line from a chat is the most common reason to reach for the mouse.
 
 ## Attachments
 
@@ -316,6 +361,7 @@ status line and the window.
 | Alt-0 .. Alt-9       | window 0 .. 9; Esc followed by the digit does the same (the typed input survives) |
 | Up / Down            | walk the input history (commands and sent lines; in the pager they scroll) |
 | PgUp / PgDn          | scroll a page (the wheel scrolls three lines)     |
+| mouse drag           | select text; copied to the clipboard on release (see Mouse) |
 | Home / End           | oldest / newest                                   |
 | Ctrl-R               | sync now                                          |
 | F1                   | focus the server window and print the command reference there (as `/help`) |

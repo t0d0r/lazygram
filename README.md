@@ -30,7 +30,10 @@ in a searchable pager. Feature goals are inspired by nchat.
   it is unreadable without `session.json`; see specs/security.md for the
   full list of what is and is not stored
 - Mouse: clickable names, links, window tags, list rows and `[photo]`
-  tokens with running lights under the pointer; `/mouse` and `/fx` toggles
+  tokens with running lights under the pointer; drag to select text and
+  copy it to the clipboard (OSC 52 through the terminal, so it works over
+  SSH, plus pbcopy / wl-copy / xclip when present; see
+  [docs/clipboard.md](docs/clipboard.md)); `/mouse`, `/clip` and `/fx`
 - Looks: nine colour themes, BitchX-style banners that roll in like a slow
   serial line, a random parting face and session statistics at exit
 - `lazygram demo` with invented data, `lazygram update` (brew or binary,
@@ -164,7 +167,8 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/theme [name]`            | colour themes: default, solarized, gruvbox, dracula, nord, monokai, tokyonight, vim, emacs; for light terminals: light, solarized-light, gruvbox-light |
 | `/about`                   | version, author, build and libraries          |
 | `/fx`                      | running lights over links and buttons on/off  |
-| `/mouse`                   | mouse reporting on/off (off: drag selects text; or hold Shift/Option while dragging) |
+| `/mouse`                   | mouse reporting on/off (off: the terminal's own drag selects; or hold Shift/Option while dragging) |
+| `/clip [mode]`             | where a mouse selection is copied: `auto` (terminal and system tool), `osc52`, `tool`, `off`; no argument shows the mode (see [docs/clipboard.md](docs/clipboard.md)) |
 | `/redraw`, `/clear`        | drop notices, help text and pictures from this window; messages stay |
 | `/refresh`, `/help`, `/quit` | sync now; print the command list, with every short form, into the server window (it ends by naming `/keys`); leave |
 | `/keys`                    | print the keyboard shortcuts into the server window |
@@ -196,7 +200,7 @@ viewer instead.
 | Ctrl-X              | send the typed text to this window's chat          |
 | Ctrl-X twice        | toggle "Enter sends" for this window               |
 | Ctrl-C              | quit                                               |
-| mouse               | click chat names, nicks, window tags, list rows, links and `[photo]` tokens (a running light shows what is under the pointer); wheel scrolls |
+| mouse               | click chat names, nicks, window tags, list rows, links and `[photo]` tokens (a running light shows what is under the pointer); wheel scrolls; drag selects text and copies it on release |
 
 ## Development
 

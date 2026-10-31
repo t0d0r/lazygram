@@ -3,6 +3,7 @@ module lazygram
 go 1.27.3
 
 require (
+	github.com/aymanbagabas/go-osc52/v2 v2.0.1
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.10.1
@@ -15,7 +16,6 @@ require (
 
 require (
 	github.com/andybalholm/brotli v1.2.1 // indirect
-	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/charmbracelet/colorprofile v0.2.3-0.20250311203215-f60798e515dc // indirect

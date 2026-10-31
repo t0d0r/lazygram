@@ -31,6 +31,7 @@ const (
 	About         // print version, author and build information
 	Fx            // toggle the running lights over clickable text
 	Mouse         // toggle mouse reporting (off lets the terminal select text)
+	Clip          // clipboard mode for the mouse selection: Arg is auto, osc52, tool or off; empty shows
 	Edit          // edit the last own message in this window: Arg is the new text (empty: prefill)
 	Delete        // delete the last own message in this window
 	Nicks         // toggle showing chats by nick (@alias) or by name (@title)
@@ -65,7 +66,8 @@ var table = map[string]Kind{
 	"about": About, "version": About,
 	"fx": Fx, "lights": Fx, "anim": Fx,
 	"mouse": Mouse,
-	"edit":  Edit, "e": Edit,
+	"clip":  Clip, "clipboard": Clip,
+	"edit": Edit, "e": Edit,
 	"delete": Delete, "del": Delete, "rm": Delete,
 	"names": Nicks, "nicks": Nicks,
 	"send": SendFile, "file": SendFile, "upload": SendFile,
@@ -151,7 +153,9 @@ const HelpText = `Commands
   /fx                    running lights over links and buttons
                          on or off; also /lights, /anim
   /mouse                 mouse reporting on or off
-                         (off: drag selects text)
+                         (off: the terminal selects text)
+  /clip [mode]           selection clipboard: auto (terminal/tool),
+                         osc52, tool or off (kept); also /clipboard
   /names                 show chats by nick (@alias) or name (@Title);
                          also /nicks
 Keyboard shortcuts: type /keys.`

@@ -40,6 +40,8 @@ func TestParse(t *testing.T) {
 		{"/about", Command{About, ""}, false},
 		{"/fx", Command{Fx, ""}, false},
 		{"/mouse", Command{Mouse, ""}, false},
+		{"/clip osc52", Command{Clip, "osc52"}, false},
+		{"/clipboard", Command{Clip, ""}, false},
 		{"/edit new text", Command{Edit, "new text"}, false},
 		{"/e", Command{Edit, ""}, false},
 		{"/delete", Command{Delete, ""}, false},
