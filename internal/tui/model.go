@@ -945,7 +945,12 @@ func (m *Model) arrived(fresh []domain.Message) {
 	m.absorb(fresh)
 	var order []int // windows that got something, in order of appearance
 	count := map[int]int{}
+	n := 0 // messages from others; what this account sent comes back through sync and is not news
 	for _, msg := range fresh {
+		if msg.Sender == "me" {
+			continue
+		}
+		n++
 		i, w := m.winFor(msg.ChatID)
 		if w == nil {
 			if c, ok := m.chat(msg.ChatID); ok && c.Deleted {
@@ -961,7 +966,10 @@ func (m *Model) arrived(fresh []domain.Message) {
 		}
 		count[i]++
 	}
-	m.seen += len(fresh)
+	m.seen += n
+	if n == 0 {
+		return
+	}
 	sort.Ints(order)
 	// The status says where the messages went: "3 new messages in 2:#dev,
 	// 4:@alice (2)"; a long list is cut after four windows.
@@ -978,14 +986,14 @@ func (m *Model) arrived(fresh []domain.Message) {
 		where = append(where, s)
 	}
 	word := "messages"
-	if len(fresh) == 1 {
+	if n == 1 {
 		word = "message"
 	}
 	if len(where) == 0 {
-		m.setInfo(fmt.Sprintf("%d new %s", len(fresh), word))
+		m.setInfo(fmt.Sprintf("%d new %s", n, word))
 		return
 	}
-	m.setInfo(fmt.Sprintf("%d new %s in %s", len(fresh), word, strings.Join(where, ", ")))
+	m.setInfo(fmt.Sprintf("%d new %s in %s", n, word, strings.Join(where, ", ")))
 }
 
 // openUnread opens windows for chats the service reports as unread.

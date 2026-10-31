@@ -1784,6 +1784,24 @@ func TestArrivalStatusNamesTheWindows(t *testing.T) {
 	if m.status != "1 new message in 3:@alice" {
 		t.Fatalf("status %q", m.status)
 	}
+	// What this account sent comes back through sync: no news, no unread.
+	m.setInfo("")
+	_, w := m.winFor("c2")
+	unread, seen := w.unread, m.seen
+	m.Update(syncedMsg{at: now, fresh: []domain.Message{{ID: "n5", ChatID: "c2", Sender: "me", Text: "mine", Time: now}}})
+	if m.status != "" || w.unread != unread || m.seen != seen {
+		t.Fatalf("own message counted: status %q unread %d->%d seen %d->%d", m.status, unread, w.unread, seen, m.seen)
+	}
+	if !strings.Contains(strings.Join(m.lines(), "\n"), "<me> mine") {
+		t.Fatal("the own message still shows in the window")
+	}
+	m.Update(syncedMsg{at: now, fresh: []domain.Message{
+		{ID: "n6", ChatID: "c2", Sender: "me", Text: "mine too", Time: now},
+		{ID: "n7", ChatID: "c1", Sender: "ada", Text: "five", Time: now},
+	}})
+	if m.status != "1 new message in 2:#dev" {
+		t.Fatalf("status %q", m.status)
+	}
 }
 
 func TestFirstHistoryOfAWindowRollsIn(t *testing.T) {

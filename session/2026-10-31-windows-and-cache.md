@@ -274,3 +274,9 @@ at the hidden password prompt takes effect only after Enter.
   SHA256SUMS); the Homebrew formula builds from the v0.4.11 source
   tarball. dist/ holds the v0.4.11 tarballs; `make release` at the
   v0.4.11 tag is the open step (it is refused from the agent session).
+- `make release` now requires `git describe` to be exactly `vX.Y.Z`
+  (grep -E), after a run one commit past v0.4.11 created a release and
+  tag named `v0.4.11-1-gd0bdc3f` on GitHub; that release and tag are to
+  be deleted (`gh release delete v0.4.11-1-gd0bdc3f --cleanup-tag`).
+- Own messages coming back through sync no longer count as news: no
+  "new message" status, no unread, no window opened for them.

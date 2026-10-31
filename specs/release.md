@@ -24,7 +24,11 @@ specs/providers.md).
 
 ## Publishing
 
-1. `make check`, commit, `git tag -a vX.Y.Z -m "lazygram vX.Y.Z"`.
+1. `make check`, commit, `git tag -a vX.Y.Z -m "lazygram vX.Y.Z"`. HEAD
+   must be exactly at that tag when releasing: `make release` checks
+   that `git describe` is `vX.Y.Z` with nothing after it (a commit past
+   the tag would otherwise create a release and a tag named like
+   `v0.4.11-1-gd0bdc3f`, which `lazygram update` cannot parse).
 2. `make dist`, then `make release`: `gh release create` with the tarballs
    and `SHA256SUMS`, notes generated from the commits. HEAD must be at a
    clean tag.

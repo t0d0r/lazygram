@@ -73,7 +73,7 @@ dist: ## build release tarballs and SHA256SUMS into dist/ for every DIST_PLATFOR
 	cat SHA256SUMS
 
 release: ## publish dist/ as the GitHub release for the current tag (needs gh and a clean vX.Y.Z tag)
-	@case "$(VERSION)" in v[0-9]*.[0-9]*.[0-9]*) ;; *) echo "release: HEAD must be at a clean vX.Y.Z tag, got $(VERSION)"; exit 1;; esac
+	@echo "$(VERSION)" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$' || { echo "release: HEAD must be at a clean vX.Y.Z tag, got $(VERSION)"; exit 1; }
 	@command -v gh >/dev/null || { echo "release: gh is required"; exit 1; }
 	@test -f dist/SHA256SUMS || { echo "release: run make dist first"; exit 1; }
 	gh release create $(VERSION) dist/*.tar.gz dist/SHA256SUMS --title "lazygram $(VERSION)" --generate-notes
