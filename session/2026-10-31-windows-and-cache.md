@@ -215,3 +215,8 @@ at the hidden password prompt takes effect only after Enter.
   api id and hash as byte slices (decision recorded in specs/providers.md
   with the shared-use risk); it is the last fallback after app.json, the
   environment and a private embed. Brew and source builds need no setup.
+- v0.4.5 tagged (built-in registration, media vault, hover light, /mouse,
+  review fixes). Homebrew formula at 0.4.5, brew upgrade and brew test
+  passed, tap pushed. The GitHub release assets for v0.4.4 and v0.4.5 are
+  built in dist/ but not uploaded (upload refused from this session);
+  `make release` at the tag publishes them. Brew does not need them.
