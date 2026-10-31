@@ -184,7 +184,7 @@ status line and the window.
 
 | key                  | action                                            |
 |----------------------|---------------------------------------------------|
-| Tab                  | complete like bash; a second Tab lists the candidates (nothing else, in every view) |
+| Tab / Shift-Tab      | empty prompt: next / previous window; else complete like bash (a second Tab lists) |
 | Ctrl-X twice         | toggle "Enter sends" for this window              |
 | Ctrl-N / Ctrl-P      | next / previous window (Alt-Right / Alt-Left too) |
 | Alt-0 .. Alt-9       | window 0 .. 9; Esc followed by the digit does the same (the typed input survives) |
@@ -208,7 +208,9 @@ the walk. In a list Up/Down move the cursor, in the pager they scroll.
 
 ## Completion
 
-Tab completes the last word of the input like bash. A line that is one
+On an empty prompt in a window, Tab switches to the next window and
+Shift-Tab to the previous one. With text typed, Tab completes the last
+word of the input like bash. A line that is one
 word starting with `/` completes command names; after `/theme ` theme
 names; otherwise chat names: every non-deleted chat whose `@name`/`#name`
 starts with the word, or whose bare alias starts with it when the word has

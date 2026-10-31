@@ -175,3 +175,5 @@ at the hidden password prompt takes effect only after Enter.
   chat's colour.
 - Window bar back to one colour: active window reversed, unread in the
   activity colour, nothing else coloured.
+- Tab on an empty prompt cycles windows (Shift-Tab backwards); with text
+  it completes as before.

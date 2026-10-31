@@ -122,7 +122,7 @@ reply-keyboard buttons send their label.
 
 | key                 | action                                             |
 |---------------------|----------------------------------------------------|
-| Tab                 | complete a command, `@`/`#` name or theme like bash; Tab again lists |
+| Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash |
 | Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
 | Alt-0 .. Alt-9      | window 0 .. 9 (Esc then the digit works too)       |
 | Up / Down           | input history (commands and sent lines)            |

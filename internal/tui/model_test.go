@@ -1159,3 +1159,26 @@ func TestFastDoubleCtrlXKeepsTheTextAndOnlyToggles(t *testing.T) {
 		t.Fatalf("sent=%v", f.sent)
 	}
 }
+
+func TestTabOnEmptyPromptCyclesWindows(t *testing.T) {
+	m := setup(t, newFake()) // 0 server, 1 #news, 2 #dev, 3 @alice
+	press(m, tea.KeyTab)
+	if m.cur != 1 {
+		t.Fatalf("tab: %d", m.cur)
+	}
+	press(m, tea.KeyTab)
+	press(m, tea.KeyTab)
+	press(m, tea.KeyTab)
+	if m.cur != 0 {
+		t.Fatalf("wraps to the server window: %d", m.cur)
+	}
+	press(m, tea.KeyShiftTab)
+	if m.cur != 3 {
+		t.Fatalf("shift-tab goes back: %d", m.cur)
+	}
+	typ(m, "/wh")
+	press(m, tea.KeyTab) // with text, Tab completes
+	if m.cur != 3 || string(m.input) != "/whois " {
+		t.Fatalf("completion: cur=%d input=%q", m.cur, string(m.input))
+	}
+}

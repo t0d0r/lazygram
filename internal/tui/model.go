@@ -837,7 +837,14 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.lastCtrlX = now
 		return m.holdSend()
 	case tea.KeyTab:
-		m.complete() // Tab only ever completes
+		if m.mode == modeWin && len(m.input) == 0 { // an empty prompt: Tab walks the windows
+			return m, m.switchTo((m.cur + 1) % len(m.wins))
+		}
+		m.complete()
+	case tea.KeyShiftTab:
+		if m.mode == modeWin && len(m.input) == 0 {
+			return m, m.switchTo((m.cur + len(m.wins) - 1) % len(m.wins))
+		}
 	case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
 		if len(m.input) > 0 {
 			m.input = m.input[:len(m.input)-1]
@@ -1720,8 +1727,9 @@ func (m *Model) inputLine(prompt string) string {
 }
 
 const keyHelp = `Keys
-  Tab                    complete like bash: a command, a @user / #chan or
-                         a theme; Tab again lists the possibilities
+  Tab                    on an empty prompt: next window (Shift-Tab previous);
+                         otherwise complete like bash: a command, a @user /
+                         #chan or a theme; Tab again lists the possibilities
   Ctrl-X                 send the typed text to this chat (after a short pause)
   Ctrl-X twice (fast)    toggle "Enter sends" for this window; nothing is sent
   Ctrl-N / Ctrl-P        next / previous window (Alt-Right / Alt-Left too)
