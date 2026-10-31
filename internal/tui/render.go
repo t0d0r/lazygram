@@ -27,6 +27,7 @@ type note struct {
 	text  string
 	raw   bool // the banner: coloured lines, no stamp
 	plain bool // text as it is in the note colour, no stamp or marker (help)
+	pre   bool // lines already styled (a picture): emitted as they are, indented
 }
 
 // Banner colours figlet lines with the gradient; used for the start banner
@@ -250,6 +251,13 @@ func renderRich(msgs []domain.Message, notes []note, o lineOpts) ([]string, [][]
 			if notes[j].raw {
 				for _, l := range Banner(strings.Split(sanitize(notes[j].text, true), "\n")) {
 					add(l)
+				}
+				j++
+				continue
+			}
+			if notes[j].pre {
+				for _, l := range strings.Split(notes[j].text, "\n") {
+					add("      " + l)
 				}
 				j++
 				continue

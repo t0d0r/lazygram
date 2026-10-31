@@ -188,6 +188,7 @@ type (
 		chatID, msgID string
 		name          string // file name for the viewer
 		data          []byte // the attachment
+		external      bool   // open with the system viewer instead of in the terminal
 		err           error
 	}
 	tickMsg     time.Time
@@ -437,7 +438,7 @@ func (m *Model) pressCmd(chatID string, msg domain.Message, b domain.Button) tea
 // fetchCmd gets an attachment: from the sealed vault when it is there,
 // else downloaded and sealed into the vault. A second request for the
 // same attachment while one is in flight is ignored.
-func (m *Model) fetchCmd(chatID, msgID string) tea.Cmd {
+func (m *Model) fetchCmd(chatID, msgID string, external bool) tea.Cmd {
 	key := chatID + "\x00" + msgID
 	if m.loading[key] {
 		m.setInfo("already fetching")
@@ -450,7 +451,7 @@ func (m *Model) fetchCmd(chatID, msgID string) tea.Cmd {
 		if data, found, err := st.Media(chatID, msgID); err != nil {
 			return fetchedMsg{chatID: chatID, msgID: msgID, err: err}
 		} else if found {
-			return fetchedMsg{chatID: chatID, msgID: msgID, name: viewName(md, msgID, ""), data: data}
+			return fetchedMsg{chatID: chatID, msgID: msgID, name: viewName(md, msgID, ""), data: data, external: external}
 		}
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
 		defer cancel()
@@ -461,7 +462,7 @@ func (m *Model) fetchCmd(chatID, msgID string) tea.Cmd {
 		if err := st.PutMedia(chatID, msgID, data); err != nil {
 			return fetchedMsg{chatID: chatID, msgID: msgID, err: err}
 		}
-		return fetchedMsg{chatID: chatID, msgID: msgID, name: viewName(md, msgID, got), data: data}
+		return fetchedMsg{chatID: chatID, msgID: msgID, name: viewName(md, msgID, got), data: data, external: external}
 	}
 }
 
@@ -696,6 +697,18 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		md := m.media(msg.chatID, msg.msgID)
 		m.fetchedN++
+		if md.Image() && !msg.external { // the picture stays in memory: rendered as cells
+			lines, size, err := renderImage(msg.data, min(m.width-8, 80), maxImageRows)
+			if err != nil {
+				m.fail("picture: " + err.Error() + "; /open out shows it in the system viewer")
+				break
+			}
+			w.notes = append(w.notes, note{at: time.Now(), text: strings.Join(lines, "\n"), pre: true})
+			m.note(w, fmt.Sprintf("picture %s, %dx%d px (msg %s); /open out %s shows it in the system viewer", msg.name, size.X, size.Y, msg.msgID, msg.msgID))
+			w.scroll = 0
+			m.setInfo("picture shown")
+			break
+		}
 		path, err := m.viewCopy(msg.name, msg.data)
 		if err != nil {
 			m.fail("view: " + err.Error())
@@ -836,7 +849,7 @@ func (m *Model) click(s span) (tea.Model, tea.Cmd) {
 	case spanMedia:
 		chatID, msgID, _ := strings.Cut(s.target, "\x00")
 		m.setInfo("fetching...")
-		return m, m.fetchCmd(chatID, msgID)
+		return m, m.fetchCmd(chatID, msgID, false)
 	case spanEnd:
 		m.wins[m.cur].scroll = 0
 	case spanWin:
@@ -1463,11 +1476,16 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 			m.setErr("the server window has no chat; /win to the chat first")
 			break
 		}
+		external := false
+		arg := c.Arg
+		if f := strings.Fields(arg); len(f) > 0 && (f[0] == "out" || f[0] == "ext" || f[0] == "viewer") {
+			external, arg = true, strings.Join(f[1:], " ")
+		}
 		msg, ok := domain.LatestWithMedia(m.msgs, w.chatID)
-		if c.Arg != "" {
+		if arg != "" {
 			ok = false
 			for _, x := range m.msgs {
-				if x.ChatID == w.chatID && x.ID == c.Arg {
+				if x.ChatID == w.chatID && x.ID == arg {
 					msg, ok = x, x.Media != nil
 				}
 			}
@@ -1477,7 +1495,7 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 			break
 		}
 		m.setInfo("fetching...")
-		return m, m.fetchCmd(w.chatID, msg.ID)
+		return m, m.fetchCmd(w.chatID, msg.ID, external)
 	case command.Me:
 		if w.chatID == "" {
 			m.setErr("the server window has no chat; /win to a chat first")

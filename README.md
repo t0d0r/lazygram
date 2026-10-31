@@ -110,7 +110,7 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/edit [text]`, `/delete`  | change or remove your last message in this chat |
 | `/names`                   | show chats by nick (`@alias`) or by name (`@Title`) |
 | `/press N`                 | press button N under the latest bot message; `/press <msg> N` for an older one |
-| `/open [msg]`              | fetch a `[photo]`/`[file]` into the encrypted vault; images open in the system viewer |
+| `/open [msg]`              | fetch a `[photo]`/`[file]` into the encrypted vault; pictures are shown in the window (`/open out` for the system viewer) |
 | `/theme [name]`            | colour themes: default, solarized, gruvbox, dracula, nord, monokai, tokyonight, vim, emacs |
 | `/about`                   | version, author, build and libraries          |
 | `/fx`                      | running lights over links and buttons on/off  |
@@ -125,7 +125,10 @@ it only switches; the status line ends with `ctrl-x: to send` or
 has it. Bot messages with buttons show them underneath as
 `[1] Yes  [2] Docs (link)  (msg 1234)`; `/press 1` answers the bot and the
 edited message replaces the old line, link buttons only print their URL,
-reply-keyboard buttons send their label.
+reply-keyboard buttons send their label. Photos show as `[photo]`: click
+the token or `/open` and the picture is painted inside the window from
+memory (nothing is written to disk); `/open out` opens it in the system
+viewer instead.
 
 | key                 | action                                             |
 |---------------------|----------------------------------------------------|

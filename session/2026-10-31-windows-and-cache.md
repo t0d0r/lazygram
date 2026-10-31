@@ -238,3 +238,6 @@ at the hidden password prompt takes effect only after Enter.
   through a slow-print queue (28 ms per line).
 - `/names` toggles chat display between `@alias` and `@Title` everywhere
   (kept in state); commands keep accepting aliases and titles.
+- Pictures render inside the window (`internal/tui/image.go`: half-block
+  cells, box filter, 24 rows max; jpeg/png/gif/webp via x/image) from
+  memory; `/open out` keeps the system-viewer path with the temp copy.

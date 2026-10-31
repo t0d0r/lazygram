@@ -7,6 +7,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.10.1
 	github.com/gotd/td v0.163.0
+	golang.org/x/image v0.47.0
 	golang.org/x/term v0.47.0
 	modernc.org/sqlite v1.61.0
 	rsc.io/qr v0.2.0

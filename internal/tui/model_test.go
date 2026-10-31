@@ -28,6 +28,7 @@ type fake struct {
 	fetched []string // Fetch calls as "chat:msg"
 	edited  []string // Edit calls as "chat:msg:text"
 	deleted []string // Delete calls as "chat:msg"
+	picture []byte   // what Fetch returns when set
 }
 
 func (f *fake) Send(_ context.Context, chatID, text string) error {
@@ -39,6 +40,9 @@ func (f *fake) Fetch(_ context.Context, chatID, msgID string) ([]byte, string, e
 	f.fetched = append(f.fetched, chatID+":"+msgID)
 	if f.err != nil {
 		return nil, "", f.err
+	}
+	if f.picture != nil {
+		return f.picture, msgID + ".png", nil
 	}
 	return []byte("BYTES-" + msgID), msgID + ".jpg", nil
 }
@@ -1086,7 +1090,7 @@ func TestOpenFetchesSealsAndOpensImages(t *testing.T) {
 	if got, _ := os.ReadFile(m.viewFiles[0]); string(got) != "BYTES-21" {
 		t.Fatal("plain copy content")
 	}
-	cmd = enter(m, "/open 20") // the photo: fetched, sealed, then opened
+	cmd = enter(m, "/open out 20") // the photo: fetched, sealed, then opened outside
 	_, next = m.Update(cmd())
 	if next == nil {
 		t.Fatal("images must be opened")
@@ -1095,7 +1099,7 @@ func TestOpenFetchesSealsAndOpensImages(t *testing.T) {
 	if len(opened) != 1 || !strings.HasSuffix(opened[0], "20.jpg") {
 		t.Fatalf("opened=%v", opened)
 	}
-	cmd = enter(m, "/open 20") // second time: from the vault, no download
+	cmd = enter(m, "/open out 20") // second time: from the vault, no download
 	m.Update(cmd())
 	if len(f.fetched) != 2 {
 		t.Fatalf("vault must serve the second open: fetched=%v", f.fetched)
@@ -1109,11 +1113,10 @@ func TestOpenFetchesSealsAndOpensImages(t *testing.T) {
 	if x < 0 {
 		t.Fatal("no media span")
 	}
-	cmd = click(m, x, y)
+	cmd = click(m, x, y) // a click shows it in the terminal: the bytes are not a picture here
 	_, next = m.Update(cmd())
-	m.Update(next())
-	if len(opened) != 2 {
-		t.Fatalf("click: opened=%v", opened)
+	if next != nil || !m.isErr || len(opened) != 1 {
+		t.Fatalf("click: opened=%v status=%q", opened, m.status)
 	}
 	dir := m.viewDir
 	m.Cleanup()
@@ -1139,7 +1142,7 @@ func TestImageTokenWithATrapNameIsNeverOpened(t *testing.T) {
 	m.Update(m.chatsCmd()())
 	m.Update(m.syncCmd()())
 	enter(m, "/win #dev")
-	_, next := m.Update(enter(m, "/open 30")())
+	_, next := m.Update(enter(m, "/open out 30")())
 	// the fake names the copy 30.jpg (an image extension), so it opens; a
 	// name without one would not
 	if next == nil || len(m.viewFiles) != 1 || !imageFile(m.viewFiles[0]) {
@@ -1563,5 +1566,38 @@ func TestNamesTogglesNickOrTitle(t *testing.T) {
 	enter(m, "/names")
 	if m.byName || !strings.Contains(m.View(), "[3:@alice]") {
 		t.Fatal("back to nicks")
+	}
+}
+
+func TestOpenShowsPicturesInTheTerminal(t *testing.T) {
+	f := newFake()
+	photo := mk("c1", "20", "ada", "look", 5)
+	photo.Media = &domain.Media{Kind: "photo"}
+	f.msgs = append(f.msgs, photo)
+	f.picture = testPNG(t, 200, 100)
+	var opened []string
+	m := setup(t, f)
+	m.opt.Open = func(s string) error { opened = append(opened, s); return nil }
+	defer m.Cleanup()
+	enter(m, "/win #dev")
+	_, next := m.Update(enter(m, "/open")())
+	if next != nil || m.isErr || len(opened) != 0 || len(m.viewFiles) != 0 {
+		t.Fatalf("in-terminal: next=%v err=%q files=%v", next, m.status, m.viewFiles)
+	}
+	n := m.wins[m.cur].notes
+	var pic *note
+	for i := range n {
+		if n[i].pre {
+			pic = &n[i]
+		}
+	}
+	if pic == nil || strings.Count(pic.text, "\u2580") == 0 || !strings.Contains(n[len(n)-1].text, "200x100 px") {
+		t.Fatalf("picture note missing:\n%+v", n[len(n)-1])
+	}
+	if !strings.Contains(body(m), "\u2580") {
+		t.Fatal("the picture renders in the window")
+	}
+	if got, found, _ := m.opt.Store.Media("c1", "20"); !found || !bytes.Equal(got, f.picture) {
+		t.Fatal("the vault keeps the picture")
 	}
 }

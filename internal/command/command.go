@@ -116,8 +116,9 @@ const HelpText = `Commands
   /edit [text]           edit your last message here (no text: put it in the prompt)
   /delete                delete your last message here, for everyone
   /press N | <msg> N     press a bot button (numbers shown under it)
-  /open [msg]            fetch a photo or file and open it (images) or
-                         show where it was saved
+  /open [msg]            fetch a photo and show it here, in the terminal
+                         (a file: decrypt a copy and show where)
+  /open out [msg]        the same, but in the system viewer
   /theme [name]          list the colour themes, or switch to one
   /about                 version, author and build information
   /fx                    running lights over links and buttons on or off

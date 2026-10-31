@@ -120,7 +120,8 @@ there is no separate help view.
 | `/edit [text]`                | edit your last message in this chat; without text it is put in the prompt as `/edit <text>` |
 | `/delete`                     | delete your last message in this chat, for everyone  |
 | `/press N`, `/press <msg> N`  | press a bot button (see Buttons)                     |
-| `/open [msg]`                 | fetch an attachment; open it when it is an image     |
+| `/open [msg]`                 | fetch an attachment; a picture is shown in the window |
+| `/open out [msg]`             | the same, but a picture goes to the system viewer    |
 | `/theme [name]`               | list the colour themes or switch (see Themes)        |
 | `/about`, `/version`          | version, author, repository, license, build, libraries, uptime |
 | `/fx`                         | running lights over clickable text on or off (kept) |
@@ -209,14 +210,17 @@ the message arrives. Clicking the token, or `/open` (the latest such
 message in the window's chat; `/open <msg>` for a given one), fetches the
 attachment through `Provider.Fetch` into memory, seals it into the vault
 (specs/storage.md: encrypted file, hashed name; fetched once, served from
-the vault afterwards), then writes a plain copy into a private temporary
-directory (0700, file 0600). An image (`photo`, or `image`: a document
-whose mime type is image/jpeg, png, gif or webp) is handed to the system
-opener, which starts the preview app; its copy is named by the content
-type, never by the sender, and only raster image extensions are ever
-opened. Any other file only gets `-!- decrypted to <path> until exit`
-under its (sanitized) sender name and is never opened. The plain copies
-are removed when lazygram exits. Media lazygram cannot fetch (polls,
+the vault afterwards), then shows it. A picture (`photo`, or `image`: a document whose mime
+type is image/jpeg, png, gif or webp) is decoded in memory and painted
+into the window as colour cells (upper half blocks, two pixel rows per
+text row, box-filtered, at most 24 rows and 80 columns, aspect kept),
+followed by a notice with its size; nothing is written to disk. `/open
+out [msg]` instead writes a plain copy into a private temporary directory
+(0700, file 0600) and hands it to the system opener, which starts the
+preview app; that copy is named by the content type, never by the
+sender, only raster image extensions are ever opened, and the copies are
+removed when lazygram exits. Any other file only gets `-!- decrypted to
+<path> until exit` under its (sanitized) sender name and is never opened. Media lazygram cannot fetch (polls,
 locations, ...) shows as `[media]`. Fetch errors land in the window.
 
 ## Sending
