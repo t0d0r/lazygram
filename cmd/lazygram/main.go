@@ -304,7 +304,7 @@ func runTUI(o options, prov provider.Provider, st *store.Store, poll time.Durati
 	if m, ok := final.(*tui.Model); ok {
 		width, summary = m.Width(), m.Summary()
 	}
-	fmt.Print(tui.ExitBanner(version, width, summary))
+	tui.PrintSlowly(os.Stdout, tui.ExitBanner(version, width, summary))
 	if hint := updateHint(version, 3*time.Second); hint != "" {
 		fmt.Println(hint)
 	}

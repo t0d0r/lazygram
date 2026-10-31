@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"lazygram/internal/domain"
+	"lazygram/internal/logo"
 )
 
 func colorFor(s string) lipgloss.Color {
@@ -248,8 +249,8 @@ func renderRich(msgs []domain.Message, notes []note, o lineOpts) ([]string, [][]
 	i, j := 0, 0
 	for i < len(msgs) || j < len(notes) {
 		if j < len(notes) && (i >= len(msgs) || !notes[j].at.After(msgs[i].Time)) {
-			if notes[j].raw {
-				for _, l := range Banner(strings.Split(sanitize(notes[j].text, true), "\n")) {
+			if notes[j].raw { // the banner, in the widest face that fits
+				for _, l := range Banner(strings.Split(sanitize(logo.Pick(o.width), true), "\n")) {
 					add(l)
 				}
 				j++

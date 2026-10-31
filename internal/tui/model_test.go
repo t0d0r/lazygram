@@ -12,6 +12,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"lazygram/internal/domain"
 	"lazygram/internal/provider"
@@ -131,6 +132,7 @@ func setup(t *testing.T, f *fake) *Model {
 	t.Cleanup(func() { _ = st.Close() })
 	m := New(Options{Store: st, Provider: f})
 	m.fx = false // the running lights schedule ticks; tests switch them on explicitly
+	m.revealAll()
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	m.Update(m.chatsCmd()())
 	m.Update(m.syncCmd()())
@@ -746,6 +748,7 @@ func TestWindowLayoutSurvivesRestart(t *testing.T) {
 	defer func() { _ = st.Close() }()
 	f := newFake()
 	m := New(Options{Store: st, Provider: f})
+	m.revealAll()
 	m.fx = false
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	m.Update(m.chatsCmd()())
@@ -759,6 +762,7 @@ func TestWindowLayoutSurvivesRestart(t *testing.T) {
 	}
 
 	again := New(Options{Store: st, Provider: f})
+	again.revealAll()
 	if len(again.wins) != 3 || again.wins[1].chatID != "c3" || again.wins[2].chatID != "c2" || again.cur != 2 {
 		t.Fatalf("restored wins=%d cur=%d", len(again.wins), again.cur)
 	}
@@ -787,19 +791,21 @@ func TestStartBannerAndTagline(t *testing.T) {
 	defer func() { _ = st.Close() }()
 	f := newFake()
 	m := New(Options{Store: st, Provider: f, Version: "v9.9.9"})
+	m.revealAll()
 	m.fx = false
+	m.revealAll()
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m.Update(m.syncCmd()()) // hour-old messages must still come after the banner
 	press(m, tea.KeyHome)
 	v := m.View()
-	for _, want := range []string{"/_/\\__,_/", "-!- lazygram v9.9.9"} {
+	for _, want := range []string{"######## ##    ##", "-!- lazygram v9.9.9"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("banner lacks %q:\n%s", want, v)
 		}
 	}
 	first := -1
 	for i, l := range strings.Split(v, "\n") {
-		if strings.Contains(l, "/ /___") {
+		if strings.Contains(l, "##          ###") {
 			first = i
 			if strings.Contains(l, "-!-") {
 				t.Fatalf("banner line carries the notice marker: %q", l)
@@ -809,13 +815,13 @@ func TestStartBannerAndTagline(t *testing.T) {
 	if first < 1 {
 		t.Fatal("banner line not found")
 	}
-	if a, b := strings.Index(v, "/_/\\__,_/"), strings.Index(v, "first dev line"); a < 0 || b < 0 || a > b {
+	if a, b := strings.Index(v, "######## ##    ##"), strings.Index(v, "first dev line"); a < 0 || b < 0 || a > b {
 		t.Fatal("banner must precede the messages")
 	}
 	if out := ExitBanner("v9.9.9", 100, "up 1s"); !strings.Contains(out, "lazygram v9.9.9") || !strings.Contains(out, "thanks") || !strings.Contains(out, "up 1s") || strings.Count(out, "\n") < 6 {
 		t.Fatalf("exit banner:\n%s", out)
 	}
-	if wide, narrow := ExitBanner("v1", 120, ""), ExitBanner("v1", 60, ""); wide == narrow {
+	if wide, narrow := ExitBanner("v1", 120, ""), ExitBanner("v1", 60, ""); wide == narrow || !strings.Contains(wide, "##") {
 		t.Fatal("a narrow terminal gets the small banner")
 	}
 	enter(m, "/win 1")
@@ -989,6 +995,7 @@ func TestMouseClicksOpenWindowsAndLinks(t *testing.T) {
 	st, _ := store.Open(store.Memory, bytes.Repeat([]byte{5}, 32))
 	defer func() { _ = st.Close() }()
 	m := New(Options{Store: st, Provider: f, Open: func(s string) error { opened = append(opened, s); return nil }})
+	m.revealAll()
 	m.fx = false
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	m.Update(m.chatsCmd()())
@@ -1071,6 +1078,7 @@ func TestOpenFetchesSealsAndOpensImages(t *testing.T) {
 	st, _ := store.Open(store.Memory, bytes.Repeat([]byte{6}, 32))
 	defer func() { _ = st.Close() }()
 	m := New(Options{Store: st, Provider: f, Open: func(s string) error { opened = append(opened, s); return nil }})
+	m.revealAll()
 	m.fx = false
 	defer m.Cleanup()
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -1148,6 +1156,7 @@ func TestImageTokenWithATrapNameIsNeverOpened(t *testing.T) {
 	st, _ := store.Open(store.Memory, bytes.Repeat([]byte{8}, 32))
 	defer func() { _ = st.Close() }()
 	m := New(Options{Store: st, Provider: f, Open: func(s string) error { opened = append(opened, s); return nil }})
+	m.revealAll()
 	m.fx = false
 	defer m.Cleanup()
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -1466,6 +1475,7 @@ func TestMouseToggleIsKeptAndAppliedAtStart(t *testing.T) {
 	st, _ := store.Open(store.Memory, bytes.Repeat([]byte{9}, 32))
 	defer func() { _ = st.Close() }()
 	m := New(Options{Store: st, Provider: newFake()})
+	m.revealAll()
 	m.fx = false
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	cmd := enter(m, "/mouse")
@@ -1477,6 +1487,7 @@ func TestMouseToggleIsKeptAndAppliedAtStart(t *testing.T) {
 		t.Fatal("kept")
 	}
 	again := New(Options{Store: st, Provider: newFake()})
+	again.revealAll()
 	if again.mouseOn || again.Init() == nil {
 		t.Fatal("a saved off state is applied at start")
 	}
@@ -1693,5 +1704,51 @@ func TestCompleteArgumentsAndPaths(t *testing.T) {
 	m.complete()
 	if got := string(m.input); got != "/send "+filepath.Join(dir, "cat.png")+" my ca" {
 		t.Fatalf("caption untouched: %q", got)
+	}
+}
+
+func TestStartupRevealsTheWindowLineByLine(t *testing.T) {
+	st, err := store.Open(store.Memory, bytes.Repeat([]byte{1}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = st.Close() }()
+	m := New(Options{Store: st, Provider: newFake()})
+	m.fx = false
+	_, cmd := m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	if cmd == nil || !m.wins[0].revealing {
+		t.Fatal("the server window rolls in at start, a tick is scheduled")
+	}
+	if b := strings.TrimSpace(ansi.Strip(body(m))); b != "" {
+		t.Fatalf("nothing shown before the first tick: %q", b)
+	}
+	m.Update(revealTickMsg{})
+	rows := strings.Split(ansi.Strip(body(m)), "\n")
+	if strings.TrimSpace(rows[0]) == "" || strings.TrimSpace(rows[1]) != "" {
+		t.Fatalf("one line at the top of the screen after one tick:\n%s", body(m))
+	}
+	for i := 0; i < 200 && m.wins[0].revealing; i++ {
+		m.Update(revealTickMsg{})
+		m.View()
+	}
+	if m.wins[0].revealing {
+		t.Fatal("the reveal ends")
+	}
+	full := body(m)
+	m.revealAll()
+	if body(m) != full || !strings.Contains(ansi.Strip(full), "/help lists commands") {
+		t.Fatalf("after the reveal the window looks as usual:\n%s", full)
+	}
+	_, cmd = m.Update(revealTickMsg{})
+	if cmd != nil {
+		t.Fatal("no more ticks once revealed")
+	}
+}
+
+func TestPrintSlowlyKeepsEveryLine(t *testing.T) {
+	var b bytes.Buffer
+	PrintSlowly(&b, "one\ntwo\nthree\n")
+	if b.String() != "one\ntwo\nthree\n" {
+		t.Fatalf("%q", b.String())
 	}
 }

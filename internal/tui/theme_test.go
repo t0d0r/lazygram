@@ -50,6 +50,7 @@ func TestThemeCommandSwitchesListsAndPersists(t *testing.T) {
 	st, _ := store.Open(store.Memory, bytes.Repeat([]byte{7}, 32))
 	defer func() { _ = st.Close() }()
 	m := New(Options{Store: st, Provider: newFake()})
+	m.revealAll()
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
 	enter(m, "/theme")
 	v := body(m)
@@ -65,6 +66,7 @@ func TestThemeCommandSwitchesListsAndPersists(t *testing.T) {
 		t.Fatalf("unknown theme: %q", m.status)
 	}
 	again := New(Options{Store: st, Provider: newFake()})
+	again.revealAll()
 	_ = again
 	if currentName != "nord" {
 		t.Fatal("theme must be restored from the store")

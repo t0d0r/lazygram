@@ -253,3 +253,10 @@ at the hidden password prompt takes effect only after Enter.
   `/list --show-deleted`) and local paths after `/send` (directories end
   with `/` and descend on the next Tab; listing shows base names).
 - `/help` and F1 switch to the server window and print there.
+- Banners regenerated with figlet banner3 (76 cols) and chunky (49 cols);
+  `logo.Pick(width)` chooses, so the start banner note is rendered in the
+  face that fits the window. Start-up reveal: windows that exist at start
+  (`win.revealing`) show their lines one per `slowDelay` tick from the top
+  of the screen, with a step so a long scrollback finishes within 2 s;
+  `revealAll` for snapshots and tests. `tui.PrintSlowly` prints the exit
+  banner one line per 56 ms.

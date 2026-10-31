@@ -1,47 +1,43 @@
 // Package logo holds the figlet banners shown when lazygram starts and
-// exits, BitchX style. Generated with figlet (fonts slant, lean and
-// smslant); plain ASCII only. The lines are double-quoted because the
-// fonts contain backticks.
+// exits, BitchX style: a solid block face (figlet font banner3) where the
+// terminal has room and a compact one (font chunky) below that. Plain
+// ASCII only. The lines are double-quoted because the fonts contain
+// backticks and backslashes.
 package logo
 
 import "strings"
 
-var startLines = []string{
-	"    __",
-	"   / /___ _____  __  ______ __________ _____ ___",
-	"  / / __ `/_  / / / / / __ `/ ___/ __ `/ __ `__ \\",
-	" / / /_/ / / /_/ /_/ / /_/ / /  / /_/ / / / / / /",
-	"/_/\\__,_/ /___/\\__, /\\__, /_/   \\__,_/_/ /_/ /_/",
-	"              /____//____/",
+var wideLines = []string{
+	"##          ###    ######## ##    ##  ######   ########     ###    ##     ##",
+	"##         ## ##        ##   ##  ##  ##    ##  ##     ##   ## ##   ###   ###",
+	"##        ##   ##      ##     ####   ##        ##     ##  ##   ##  #### ####",
+	"##       ##     ##    ##       ##    ##   #### ########  ##     ## ## ### ##",
+	"##       #########   ##        ##    ##    ##  ##   ##   ######### ##     ##",
+	"##       ##     ##  ##         ##    ##    ##  ##    ##  ##     ## ##     ##",
+	"######## ##     ## ########    ##     ######   ##     ## ##     ## ##     ##",
 }
 
-var exitWideLines = []string{
-	"    _/",
-	"   _/    _/_/_/  _/_/_/_/  _/    _/    _/_/_/  _/  _/_/    _/_/_/  _/_/_/  _/_/",
-	"  _/  _/    _/      _/    _/    _/  _/    _/  _/_/      _/    _/  _/    _/    _/",
-	" _/  _/    _/    _/      _/    _/  _/    _/  _/        _/    _/  _/    _/    _/",
-	"_/    _/_/_/  _/_/_/_/    _/_/_/    _/_/_/  _/          _/_/_/  _/    _/    _/",
-	"                             _/        _/",
-	"                        _/_/      _/_/",
+var narrowLines = []string{
+	" __",
+	"|  |.---.-.-----.--.--.-----.----.---.-.--------.",
+	"|  ||  _  |-- __|  |  |  _  |   _|  _  |        |",
+	"|__||___._|_____|___  |___  |__| |___._|__|__|__|",
+	"                |_____|_____|",
 }
 
-var exitLines = []string{
-	"   __",
-	"  / /__ ____ __ _____ ________ ___ _",
-	" / / _ `/_ // // / _ `/ __/ _ `/  ' \\",
-	"/_/\\_,_//__/\\_, /\\_, /_/  \\_,_/_/_/_/",
-	"           /___//___/",
+// Wide is the banner for terminals of about 80 columns or more.
+var Wide = strings.Join(wideLines, "\n")
+
+// Narrow is the compact banner for anything smaller.
+var Narrow = strings.Join(narrowLines, "\n")
+
+// Pick returns the widest banner that fits in width columns.
+func Pick(width int) string {
+	if width >= Width(Wide) {
+		return Wide
+	}
+	return Narrow
 }
-
-// Start is the banner for the server window at start-up.
-var Start = strings.Join(startLines, "\n")
-
-// ExitWide is the banner printed to a terminal of 80 columns or more
-// after the program ends.
-var ExitWide = strings.Join(exitWideLines, "\n")
-
-// Exit is the narrower exit banner.
-var Exit = strings.Join(exitLines, "\n")
 
 // Lines splits a banner into its lines without a trailing empty one.
 func Lines(banner string) []string {

@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -46,6 +47,8 @@ const (
 const (
 	fxKey          = "fx"                  // store state key for the running lights
 	slowDelay      = 28 * time.Millisecond // between two lines of a slow print
+	exitDelay      = 2 * slowDelay         // between two lines of the exit banner
+	revealTime     = 2 * time.Second       // the longest a window's start-up reveal takes
 	mouseKey       = "mouse"               // store state key for mouse reporting
 	namesKey       = "names"               // store state key for showing chats by name
 	fxTick         = 30 * time.Millisecond
@@ -78,6 +81,10 @@ type win struct {
 	loaded bool // recent history fetched once
 
 	enterSends bool // Enter sends plain text (toggled by a double Ctrl-X)
+
+	revealing   bool // the content still rolls in line by line, as at start-up
+	revealed    int  // rendered lines shown so far while revealing
+	revealTotal int  // rendered lines at the last View, for the step size
 }
 
 // Model is the bubbletea model.
@@ -107,6 +114,8 @@ type Model struct {
 	slow     []string // lines still to print, one per slowTick, like a slow serial line
 	slowWin  *win     // the window they go to
 	slowTick bool     // a slowTickMsg is scheduled
+
+	revealTick bool // a revealTickMsg is scheduled
 
 	mouseOn bool         // mouse reporting; off lets the terminal select text
 	byName  bool         // show chats as @Title instead of @alias
@@ -191,9 +200,10 @@ type (
 		external      bool   // open with the system viewer instead of in the terminal
 		err           error
 	}
-	tickMsg     time.Time
-	fxTickMsg   struct{}
-	slowTickMsg struct{} // the next line of a slow print is due
+	tickMsg       time.Time
+	fxTickMsg     struct{}
+	slowTickMsg   struct{} // the next line of a slow print is due
+	revealTickMsg struct{} // one more line of a window still rolling in is due
 )
 
 // New builds a model. Chats and messages cached in the store are available
@@ -218,7 +228,8 @@ func New(opt Options) *Model {
 	m.msgs, _ = opt.Store.Messages("", opt.Backlog)
 	// The banner has the zero time so it stays above everything, however old
 	// the cached messages are.
-	m.wins[0].notes = append(m.wins[0].notes, note{text: logo.Start, raw: true})
+	m.wins[0].notes = append(m.wins[0].notes, note{text: logo.Wide, raw: true})
+	m.wins[0].revealing = true
 	m.note(m.wins[0], Tagline(opt.Version))
 	m.note(m.wins[0], "/help lists commands, /list the chats")
 	m.restoreLayout()
@@ -263,17 +274,24 @@ func Tagline(version string) string {
 // the wide logo when the terminal has room, then the tagline and the
 // session summary.
 func ExitBanner(version string, width int, summary string) string {
-	art := logo.Exit
-	if width >= logo.Width(logo.ExitWide) {
-		art = logo.ExitWide
-	}
-	out := strings.Join(Banner(logo.Lines(art)), "\n") + "\n" + dimStyle.Render(Tagline(version)+" by t0d0r - thanks for using lazygram")
+	out := strings.Join(Banner(logo.Lines(logo.Pick(width))), "\n") + "\n" + dimStyle.Render(Tagline(version)+" by t0d0r - thanks for using lazygram")
 	for _, l := range strings.Split(summary, "\n") {
 		if l != "" {
 			out += "\n" + dimStyle.Render("  "+l)
 		}
 	}
 	return out + "\n"
+}
+
+// PrintSlowly writes text one line at a time with a pause between them,
+// like a terminal on a slow serial line; the exit banner is shown so.
+func PrintSlowly(w io.Writer, text string) {
+	for i, l := range strings.Split(strings.TrimSuffix(text, "\n"), "\n") {
+		if i > 0 {
+			time.Sleep(exitDelay)
+		}
+		_, _ = fmt.Fprintln(w, l)
+	}
 }
 
 // Summary is the session's statistics for the exit banner, one item per
@@ -354,7 +372,7 @@ func (m *Model) restoreLayout() {
 	}
 	for i, id := range l.Windows {
 		if _, w := m.winFor(id); id != "" && w == nil {
-			m.wins = append(m.wins, &win{chatID: id, enterSends: i < len(l.Enter) && l.Enter[i]})
+			m.wins = append(m.wins, &win{chatID: id, enterSends: i < len(l.Enter) && l.Enter[i], revealing: true})
 		}
 	}
 	m.cur = min(max(l.Current, 0), len(m.wins)-1)
@@ -588,6 +606,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			cmd = tea.Batch(cmd, tick)
 		}
 	}
+	if m.mode == modeWin && m.wins[m.cur].revealing && !m.revealTick { // keep a start-up reveal going
+		m.revealTick = true
+		tick := tea.Tick(slowDelay, func(time.Time) tea.Msg { return revealTickMsg{} })
+		if cmd == nil {
+			cmd = tick
+		} else {
+			cmd = tea.Batch(cmd, tick)
+		}
+	}
 	// Decide from the hover state as it is now, not from the last render:
 	// the first hover after an idle screen must start the clock at once.
 	if m.fx && m.hover != "" && !m.ticking {
@@ -606,6 +633,13 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case slowTickMsg:
 		m.slowTick = false
 		m.slowStep()
+	case revealTickMsg:
+		m.revealTick = false
+		if w := m.wins[m.cur]; w.revealing {
+			// A long scrollback rolls in several lines per tick so the whole
+			// reveal stays within revealTime.
+			w.revealed += max(1, int((time.Duration(w.revealTotal)*slowDelay+revealTime-1)/revealTime))
+		}
 	case fxTickMsg:
 		m.ticking = false // the next View reads the hover clock
 	case tea.WindowSizeMsg:
@@ -2012,6 +2046,14 @@ func (m *Model) richLines() ([]string, [][]span) {
 	return renderRich(msgs, w.notes, o)
 }
 
+// revealAll shows every window's content at once: snapshots and tests
+// have no slow line to imitate.
+func (m *Model) revealAll() {
+	for _, w := range m.wins {
+		w.revealing = false
+	}
+}
+
 // Quitting reports whether the user asked to leave.
 func (m *Model) Quitting() bool { return m.quitting }
 
@@ -2062,6 +2104,19 @@ func (m *Model) View() string {
 	default:
 		lines, sp := m.richLines()
 		m.lastLines = len(lines)
+		if w.revealing { // start-up: the lines roll in from the top of the screen
+			w.revealTotal = len(lines)
+			if w.revealed >= len(lines) {
+				w.revealing = false
+			} else {
+				lines, sp = lines[:w.revealed], sp[:w.revealed]
+				w.scroll = 0
+				if len(lines) < h {
+					lines = append(lines, make([]string, h-len(lines))...)
+					sp = append(sp, make([][]span, h-len(sp))...)
+				}
+			}
+		}
 		body, w.scroll = window(lines, h, w.scroll)
 		bodySpans, _ = window(sp, h, w.scroll)
 		if w.scroll > 0 && h > 1 { // not at the bottom: a short centred marker

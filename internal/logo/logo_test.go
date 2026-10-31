@@ -3,7 +3,7 @@ package logo
 import "testing"
 
 func TestBannersArePlainASCIIAndFit(t *testing.T) {
-	for name, b := range map[string]string{"start": Start, "exit": Exit, "exit-wide": ExitWide} {
+	for name, b := range map[string]string{"wide": Wide, "narrow": Narrow} {
 		lines := Lines(b)
 		if len(lines) < 3 {
 			t.Errorf("%s: too few lines", name)
@@ -18,5 +18,14 @@ func TestBannersArePlainASCIIAndFit(t *testing.T) {
 				}
 			}
 		}
+	}
+	if Width(Narrow) >= Width(Wide) || Width(Narrow) > 50 {
+		t.Errorf("narrow %d, wide %d", Width(Narrow), Width(Wide))
+	}
+}
+
+func TestPick(t *testing.T) {
+	if Pick(120) != Wide || Pick(Width(Wide)) != Wide || Pick(Width(Wide)-1) != Narrow || Pick(20) != Narrow {
+		t.Fatal("Pick chooses by width")
 	}
 }

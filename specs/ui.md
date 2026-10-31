@@ -18,10 +18,18 @@ completion, and an activity indicator.
 - Window 0 is the server window: every chat interleaved by time, plus
   client notices (`-!-`): start-up, chat counts, windows opened or closed,
   and every error (sync, history, send, press, fetch, open), whatever
-  window was current; errors also show in the status line. It opens with a figlet banner (font slant,
-  plain ASCII, coloured top to bottom) and a tagline with the version;
-  after the program ends a banner is printed to the terminal, BitchX style
-  (font lean on 80 columns or more, smslant below), with the tagline (`by t0d0r`), the
+  window was current; errors also show in the status line. It opens with a figlet banner (font banner3
+  where the window is at least its 76 columns wide, chunky below that,
+  chosen at render time; plain ASCII, coloured top to bottom) and a
+  tagline with the version. At start the content rolls in like on a slow
+  serial line: the server window and every window reopened from the last
+  session show their rendered lines one by one from the top of the screen
+  the first time they are current (one line per 28 ms, several per tick
+  when the scrollback is long so the whole reveal takes at most 2 s);
+  windows opened later appear at once, and smoke mode shows everything.
+  After the program ends the banner is printed to the terminal the same
+  way (one line per 56 ms), BitchX style, in the same faces (banner3 on
+  76 columns or more, chunky below), with the tagline (`by t0d0r`), the
   session statistics (time wasted; messages arrived, sent, buttons
   pressed, files fetched, cached; windows open at exit, opened, chats
   visited, commands run) and, for a release build, a one-line hint when

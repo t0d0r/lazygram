@@ -6,6 +6,7 @@ import tea "github.com/charmbracelet/bubbletea"
 // terminal. It backs the non-interactive smoke mode and the model tests.
 func Snapshot(opt Options, width, height int) string {
 	m := New(opt)
+	m.revealAll()
 	m.Update(tea.WindowSizeMsg{Width: width, Height: height})
 	for _, c := range []tea.Cmd{m.chatsCmd(), m.syncCmd()} {
 		m.Update(c())
