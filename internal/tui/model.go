@@ -42,6 +42,7 @@ const (
 const (
 	doubleCtrlX    = 600 * time.Millisecond
 	layoutKey      = "windows" // store state key for the window layout
+	themeKey       = "theme"   // store state key for the colour theme
 	defaultBacklog = 2000      // cached messages loaded at start
 	recentOnOpen   = 10        // messages fetched when a chat window first opens
 	maxRecent      = 100
@@ -96,6 +97,8 @@ type Model struct {
 	lastLines     int // rendered line count of the current window at the last View
 
 	started  time.Time
+	seen     int // messages that arrived this session
+	sentN    int // messages sent this session
 	syncing  bool
 	loading  map[string]bool // chat ids with a Recent fetch in flight
 	lastSync time.Time
@@ -160,7 +163,33 @@ func New(opt Options) *Model {
 	m.note(m.wins[0], Tagline(opt.Version))
 	m.note(m.wins[0], "/help lists commands, /list the chats")
 	m.restoreLayout()
+	m.restoreTheme()
 	return m
+}
+
+func (m *Model) restoreTheme() {
+	var name string
+	if found, err := m.opt.Store.State(themeKey, &name); !found || err != nil {
+		return
+	}
+	if t, ok := lookupTheme(name); ok {
+		applyTheme(t)
+	}
+}
+
+// setTheme switches the colours and remembers the choice.
+func (m *Model) setTheme(name string) {
+	t, ok := lookupTheme(name)
+	if !ok {
+		m.setErr("no theme " + name + "; /theme lists them")
+		return
+	}
+	applyTheme(t)
+	if err := m.opt.Store.SetState(themeKey, t.Name); err != nil {
+		m.setErr("theme not saved: " + err.Error())
+		return
+	}
+	m.setInfo("theme: " + t.Name)
 }
 
 // Tagline is the one-line description under the banners.
@@ -171,11 +200,29 @@ func Tagline(version string) string {
 	return "lazygram " + version + " - IRC-style Telegram client"
 }
 
-// ExitBanner is what the terminal shows after lazygram ends, BitchX style.
-func ExitBanner(version string) string {
-	lines := Banner(logo.Lines(logo.Exit))
-	return strings.Join(lines, "\n") + "\n" + dimStyle.Render(Tagline(version)+" - bye") + "\n"
+// ExitBanner is what the terminal shows after lazygram ends, BitchX style:
+// the wide logo when the terminal has room, then the tagline and the
+// session summary.
+func ExitBanner(version string, width int, summary string) string {
+	art := logo.Exit
+	if width >= logo.Width(logo.ExitWide) {
+		art = logo.ExitWide
+	}
+	out := strings.Join(Banner(logo.Lines(art)), "\n") + "\n" + dimStyle.Render(Tagline(version)+" - thanks for using lazygram")
+	if summary != "" {
+		out += "\n" + dimStyle.Render(summary)
+	}
+	return out + "\n"
 }
+
+// Summary is one line about the session, for the exit banner.
+func (m *Model) Summary() string {
+	return fmt.Sprintf("up %s, %d windows, %d messages arrived, %d sent",
+		time.Since(m.started).Truncate(time.Second), len(m.wins)-1, m.seen, m.sentN)
+}
+
+// Width is the terminal width as last reported.
+func (m *Model) Width() int { return m.width }
 
 // Init starts the first chat fetch, sync, and poll timer, and loads the
 // restored current window.
@@ -191,16 +238,19 @@ func (m *Model) Init() tea.Cmd {
 	return tea.Batch(cmds...)
 }
 
-// layout is what survives a restart: the open windows and the current one.
+// layout is what survives a restart: the open windows, the current one
+// and which windows send on Enter.
 type layout struct {
-	Windows []string `json:"windows"` // chat ids of windows 2..N
+	Windows []string `json:"windows"` // chat ids of windows 1..N
 	Current int      `json:"current"`
+	Enter   []bool   `json:"enter,omitempty"` // Enter sends, per window in Windows
 }
 
 func (m *Model) saveLayout() {
 	l := layout{Current: m.cur}
 	for _, w := range m.wins[1:] {
 		l.Windows = append(l.Windows, w.chatID)
+		l.Enter = append(l.Enter, w.enterSends)
 	}
 	if err := m.opt.Store.SetState(layoutKey, l); err != nil {
 		m.setErr("layout not saved: " + err.Error())
@@ -212,9 +262,9 @@ func (m *Model) restoreLayout() {
 	if found, err := m.opt.Store.State(layoutKey, &l); !found || err != nil {
 		return
 	}
-	for _, id := range l.Windows {
+	for i, id := range l.Windows {
 		if _, w := m.winFor(id); id != "" && w == nil {
-			m.wins = append(m.wins, &win{chatID: id})
+			m.wins = append(m.wins, &win{chatID: id, enterSends: i < len(l.Enter) && l.Enter[i]})
 		}
 	}
 	m.cur = min(max(l.Current, 0), len(m.wins)-1)
@@ -385,6 +435,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.note(w, "send failed: "+errText(msg.err))
 			break
 		}
+		m.sentN++
 		m.setInfo("sent")
 		if !m.syncing { // show it as soon as the service has it
 			m.syncing = true
@@ -545,6 +596,7 @@ func (m *Model) arrived(fresh []domain.Message) {
 			w.unread++
 		}
 	}
+	m.seen += len(fresh)
 	m.setInfo(fmt.Sprintf("%d new message(s)", len(fresh)))
 }
 
@@ -594,7 +646,7 @@ func (m *Model) openWin(chatID string) (int, *win) {
 	w := &win{chatID: chatID}
 	m.wins = append(m.wins, w)
 	i := len(m.wins) - 1
-	m.note(m.wins[0], fmt.Sprintf("window %d opened for %s", i+1, m.nameOf(chatID)))
+	m.note(m.wins[0], fmt.Sprintf("window %d opened for %s", i, m.nameOf(chatID)))
 	m.saveLayout()
 	return i, w
 }
@@ -610,7 +662,7 @@ func (m *Model) switchTo(i int) tea.Cmd {
 	m.lastCtrlX = time.Time{} // a double Ctrl-X never spans two windows
 	w := m.wins[i]
 	w.unread = 0
-	m.setInfo("window " + strconv.Itoa(i+1) + ": " + m.winName(i))
+	m.setInfo("window " + strconv.Itoa(i) + ": " + m.winName(i))
 	if w.chatID != "" && !w.loaded && !m.loading[w.chatID] {
 		m.note(w, fmt.Sprintf("fetching the last %d messages", recentOnOpen))
 		return m.recentCmd(w.chatID, recentOnOpen)
@@ -627,7 +679,7 @@ func (m *Model) winName(i int) string {
 
 func (m *Model) closeWin(i int) {
 	if i <= 0 || i >= len(m.wins) {
-		m.setErr("cannot close that window")
+		m.setErr("cannot close that window (0 is the server window)")
 		return
 	}
 	name := m.winName(i)
@@ -638,6 +690,25 @@ func (m *Model) closeWin(i int) {
 	m.note(m.wins[0], "window closed: "+name)
 	m.setInfo("closed " + name)
 	m.saveLayout()
+}
+
+// moveWin puts the current window at position n; the server window stays
+// at 0 and the others shift.
+func (m *Model) moveWin(n int) {
+	if m.cur == 0 {
+		m.setErr("the server window stays at 0")
+		return
+	}
+	if n < 1 || n >= len(m.wins) {
+		m.setErr(fmt.Sprintf("window numbers go from 1 to %d", len(m.wins)-1))
+		return
+	}
+	w := m.wins[m.cur]
+	rest := append(append([]*win{}, m.wins[:m.cur]...), m.wins[m.cur+1:]...)
+	m.wins = append(append(append([]*win{}, rest[:n]...), w), rest[n:]...)
+	m.cur = n
+	m.saveLayout()
+	m.setInfo(fmt.Sprintf("%s is now window %d", m.winName(n), n))
 }
 
 func (m *Model) refresh() tea.Cmd {
@@ -668,12 +739,9 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if escPending {
 			m.input = m.escSaved // the Esc was a prefix, not a clear
 		}
-		n := int(k.Runes[0] - '0')
-		if n == 0 {
-			n = 10
-		}
-		if n <= len(m.wins) {
-			return m, m.switchTo(n - 1)
+		n := int(k.Runes[0] - '0') // 0 is the server window
+		if n < len(m.wins) {
+			return m, m.switchTo(n)
 		}
 		m.setErr("no window " + strconv.Itoa(n))
 		return m, nil
@@ -699,6 +767,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if m.mode == modeWin && w.chatID != "" && strings.TrimSpace(string(m.input)) == "" && now.Sub(m.lastCtrlX) < doubleCtrlX {
 			m.lastCtrlX = time.Time{}
 			w.enterSends = !w.enterSends
+			m.saveLayout() // the choice is kept per window
 			if w.enterSends {
 				m.setInfo("Enter now sends text in " + m.winName(m.cur) + " (double Ctrl-X to turn off)")
 			} else {
@@ -858,9 +927,16 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 				m.setErr("/close takes a window number")
 				break
 			}
-			i = n - 1
+			i = n
 		}
 		m.closeWin(i)
+	case command.Move:
+		n, err := strconv.Atoi(c.Arg)
+		if err != nil {
+			m.setErr("/move takes the window number to move this window to")
+			break
+		}
+		m.moveWin(n)
 	case command.Last:
 		if w.chatID == "" {
 			m.setErr("the server window has no chat; use /win first")
@@ -890,6 +966,19 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.whois(c.Arg)
 	case command.Press:
 		return m.press(c.Arg)
+	case command.Theme:
+		if c.Arg == "" {
+			m.note(w, "themes (current: "+currentName+"):")
+			for _, n := range themeNames() {
+				mark := "  "
+				if n == currentName {
+					mark = "* "
+				}
+				m.note(w, "  "+mark+n)
+			}
+			break
+		}
+		m.setTheme(c.Arg)
 	case command.Open:
 		if w.chatID == "" {
 			m.setErr("the server window has no chat; /win to the chat first")
@@ -1057,7 +1146,7 @@ func (m *Model) whois(arg string) {
 	}
 	win := "no window"
 	if i, _ := m.winFor(c.ID); i > 0 {
-		win = fmt.Sprintf("window %d", i+1)
+		win = fmt.Sprintf("window %d", i)
 	}
 	m.note(w, fmt.Sprintf("  %s, %d messages this session, %d cached, %s", win, len(msgs), cached, last))
 }
@@ -1079,11 +1168,11 @@ func (m *Model) winCommand(arg string) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	if n, err := strconv.Atoi(arg); err == nil {
-		if n < 1 || n > len(m.wins) {
+		if n < 0 || n >= len(m.wins) {
 			m.setErr("no window " + arg)
 			return m, nil
 		}
-		return m, m.switchTo(n - 1)
+		return m, m.switchTo(n)
 	}
 	c, err := domain.ResolveChat(m.chats, arg)
 	if err != nil {
@@ -1097,22 +1186,18 @@ func (m *Model) winCommand(arg string) (tea.Model, tea.Cmd) {
 	return m, m.switchTo(i)
 }
 
-// completion is an in-progress Tab completion of the last word.
+// completion remembers that the last Tab could not extend the word, so
+// the next Tab lists the candidates, as bash does.
 type completion struct {
-	start int // rune index where the word begins
-	cands []string
-	idx   int
+	word string
 }
 
-// complete expands the word at the end of the input: a command name when
-// the line starts with one, else a chat name (@user or #channel). Repeated
-// Tab cycles through the candidates.
+// complete expands the word at the end of the input the way bash does: a
+// command name when the line starts with one, a theme after /theme, else a
+// chat name (@user or #channel). One candidate is filled in with a space;
+// several are extended to their longest common prefix, and a second Tab
+// that cannot extend further prints them into the window.
 func (m *Model) complete() {
-	if m.comp != nil {
-		m.comp.idx = (m.comp.idx + 1) % len(m.comp.cands)
-		m.input = append(m.input[:m.comp.start], []rune(m.comp.cands[m.comp.idx])...)
-		return
-	}
 	start := 0
 	for i := len(m.input) - 1; i >= 0; i-- {
 		if m.input[i] == ' ' {
@@ -1122,13 +1207,21 @@ func (m *Model) complete() {
 	}
 	word := strings.ToLower(string(m.input[start:]))
 	var cands []string
-	if start == 0 && strings.HasPrefix(word, "/") {
+	line := strings.ToLower(string(m.input[:start]))
+	switch {
+	case start == 0 && strings.HasPrefix(word, "/"):
 		for _, n := range command.Names() {
 			if strings.HasPrefix(n, word) {
 				cands = append(cands, n)
 			}
 		}
-	} else {
+	case strings.HasPrefix(line, "/theme "):
+		for _, n := range themeNames() {
+			if strings.HasPrefix(n, word) {
+				cands = append(cands, n)
+			}
+		}
+	default:
 		bare := strings.TrimLeft(word, "@#")
 		seen := map[string]bool{}
 		for _, c := range m.chats {
@@ -1148,12 +1241,41 @@ func (m *Model) complete() {
 	if len(cands) == 0 {
 		return
 	}
-	m.input = append(m.input[:start], []rune(cands[0])...)
 	if len(cands) == 1 {
-		m.input = append(m.input, ' ')
+		m.input = append(append(m.input[:start], []rune(cands[0])...), ' ')
+		m.comp = nil
 		return
 	}
-	m.comp = &completion{start: start, cands: cands}
+	prefix := commonPrefix(cands)
+	if len([]rune(prefix)) > len(m.input)-start {
+		m.input = append(m.input[:start], []rune(prefix)...)
+		m.comp = &completion{word: prefix}
+		return
+	}
+	if m.comp != nil && m.comp.word == prefix { // second Tab: list them
+		m.note(m.wins[m.cur], strings.Join(cands, "  "))
+		m.comp = nil
+		return
+	}
+	m.comp = &completion{word: prefix}
+}
+
+// commonPrefix is the longest prefix shared by all strings (case kept from
+// the first).
+func commonPrefix(ss []string) string {
+	if len(ss) == 0 {
+		return ""
+	}
+	p := []rune(ss[0])
+	for _, s := range ss[1:] {
+		r := []rune(s)
+		n := 0
+		for n < len(p) && n < len(r) && strings.EqualFold(string(p[n]), string(r[n])) {
+			n++
+		}
+		p = p[:n]
+	}
+	return string(p)
 }
 
 // listItems is the chat list for /list: deleted accounts hidden unless
@@ -1278,10 +1400,10 @@ func (m *Model) View() string {
 func (m *Model) topic() string {
 	w := m.wins[m.cur]
 	if w.chatID == "" {
-		return fmt.Sprintf("lazygram - window 1: server - all chats - %d messages - %d windows", len(m.msgs), len(m.wins))
+		return fmt.Sprintf("lazygram - window 0: server - all chats - %d messages - %d windows", len(m.msgs), len(m.wins)-1)
 	}
 	n := len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID}))
-	s := fmt.Sprintf("lazygram - window %d: %s", m.cur+1, m.nameOf(w.chatID))
+	s := fmt.Sprintf("lazygram - window %d: %s", m.cur, m.nameOf(w.chatID))
 	if c, ok := m.chat(w.chatID); ok && c.Title != "" && c.Title != c.Alias {
 		s += " - " + sanitize(c.Title, false)
 	}
@@ -1294,7 +1416,7 @@ func (m *Model) listLines(items []domain.Chat) []string {
 	for i, c := range items {
 		mark := "   "
 		if wi, _ := m.winFor(c.ID); wi > 0 {
-			mark = fmt.Sprintf("%2d ", wi+1)
+			mark = fmt.Sprintf("%2d ", wi)
 		}
 		row := fmt.Sprintf("%s %-16s %-30s", mark, c.Name(), sanitize(c.Title, false))
 		if c.Unread > 0 {
@@ -1322,7 +1444,7 @@ func (m *Model) winLines() []string {
 		if c, ok := m.chat(w.chatID); ok {
 			title = sanitize(c.Title, false)
 		}
-		row := fmt.Sprintf(" %2d  %-16s %-30s", i+1, m.winName(i), title)
+		row := fmt.Sprintf(" %2d  %-16s %-30s", i, m.winName(i), title)
 		if w.unread > 0 {
 			row += fmt.Sprintf("  %d unread", w.unread)
 		}
@@ -1342,7 +1464,7 @@ func (m *Model) activity() string {
 	var act []string
 	for i, w := range m.wins {
 		if w.unread > 0 {
-			act = append(act, strconv.Itoa(i+1))
+			act = append(act, strconv.Itoa(i))
 		}
 	}
 	if len(act) == 0 {
@@ -1359,22 +1481,27 @@ func (m *Model) statusLine() string {
 	if m.syncing {
 		sync = "syncing"
 	}
-	left := fmt.Sprintf(" [%s] [%s] [%d:%s] ", time.Now().Format("15:04"), m.opt.Provider.Name(), m.cur+1, m.winName(m.cur))
+	left := fmt.Sprintf(" [%s] [%s] [%d:%s] ", time.Now().Format("15:04"), m.opt.Provider.Name(), m.cur, m.winName(m.cur))
 	text := infoStyle.Render(left) + actStyle.Render(m.activity()) +
 		infoStyle.Render(fmt.Sprintf("[%d msgs] [%s] ", len(m.msgs), sync))
 	if w := m.wins[m.cur]; w.scroll > 0 && m.mode == modeWin {
 		text += infoStyle.Render(fmt.Sprintf("[-%d lines] ", w.scroll))
 	}
 	if m.status != "" {
-		st := lipgloss.NewStyle().Background(lipgloss.Color("236"))
 		if m.isErr {
-			st = st.Foreground(lipgloss.Color("203")).Bold(true)
+			text += errStyle.Render(m.status)
 		} else {
-			st = st.Foreground(lipgloss.Color("252"))
+			text += infoStyle.Render(m.status)
 		}
-		text += st.Render(m.status)
 	}
-	return lipgloss.NewStyle().Background(lipgloss.Color("236")).Render(fitLine(text, m.width))
+	if w := m.wins[m.cur]; w.chatID != "" && m.mode == modeWin {
+		how := " ctrl-x: to send"
+		if w.enterSends {
+			how = " enter: to send"
+		}
+		text += infoStyle.Render(how)
+	}
+	return lipgloss.NewStyle().Background(statusBG()).Render(fitLine(text, m.width))
 }
 
 // windowBar lists every window as [N:name]; the current one is
@@ -1385,7 +1512,7 @@ func (m *Model) windowBar() (string, []span) {
 	var spans []span
 	x := 1
 	for i, w := range m.wins {
-		tag := fmt.Sprintf("[%d:%s]", i+1, m.winName(i))
+		tag := fmt.Sprintf("[%d:%s]", i, m.winName(i))
 		spans = append(spans, span{x, x + lipgloss.Width(tag), spanWin, strconv.Itoa(i)})
 		x += lipgloss.Width(tag) + 1
 		switch {
@@ -1398,7 +1525,7 @@ func (m *Model) windowBar() (string, []span) {
 		}
 		b.WriteString(infoStyle.Render(" "))
 	}
-	return lipgloss.NewStyle().Background(lipgloss.Color("236")).Render(fitLine(" "+b.String(), m.width)), spans
+	return lipgloss.NewStyle().Background(statusBG()).Render(fitLine(" "+b.String(), m.width)), spans
 }
 
 func (m *Model) inputLine(prompt string) string {
@@ -1411,21 +1538,24 @@ func (m *Model) inputLine(prompt string) string {
 }
 
 const keyHelp = `Keys
-  Tab                    complete a command or @user / #chan; again cycles
+  Tab                    complete like bash: a command, a @user / #chan or
+                         a theme; Tab again lists the possibilities
   Ctrl-X                 send the typed text to this chat
   Ctrl-X twice (fast)    toggle "Enter sends" for this window
   Ctrl-N / Ctrl-P        next / previous window (Alt-Right / Alt-Left too)
-  Alt-1..0, Esc 1..0     window 1..10
+  Alt-0..9, Esc 0..9     window 0..9 (0 is the server window)
   PgUp / PgDn            scroll a page; Up / Down a line
   Home / End             oldest / newest
   Ctrl-R                 sync now
   F1                     this help
   Esc                    close the list or pager; clear the input
   Ctrl-C                 quit
-Mouse: click a chat name or nick in window 1 to open its window, a tag in
+Themes: /theme lists the colour schemes, /theme <name> switches (kept).
+Mouse: click a chat name or nick in window 0 to open its window, a tag in
 the window bar to focus it, a row in a list to open it, a link or a
 [photo] / [file] token to open it with the system; the wheel scrolls.
-Window 1 is the server window: every chat interleaved, plus notices.
+Window 0 is the server window: every chat interleaved, plus notices;
+it stays at 0 and cannot be closed. /move N puts this window at N.
 A window opens for a chat when it gets a message or has unread ones;
-[Act: 2,3] in the status line lists windows with unread messages.
+[Act: 1,2] in the status line lists windows with unread messages.
 People are @name, groups and channels are #name.`

@@ -14,24 +14,11 @@ import (
 	"lazygram/internal/domain"
 )
 
-var palette = []lipgloss.Color{"39", "208", "41", "170", "220", "81", "203", "141"}
-
 func colorFor(s string) lipgloss.Color {
 	h := fnv.New32a()
 	h.Write([]byte(s))
 	return palette[int(h.Sum32())%len(palette)]
 }
-
-var (
-	dimStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	dayStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("244")).Italic(true)
-	noteStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("110"))
-	buttonStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("214"))
-	hiStyle     = lipgloss.NewStyle().Reverse(true).Bold(true)
-	barStyle    = lipgloss.NewStyle().Background(lipgloss.Color("24")).Foreground(lipgloss.Color("255")).Bold(true)
-	infoStyle   = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("252"))
-	actStyle    = lipgloss.NewStyle().Background(lipgloss.Color("236")).Foreground(lipgloss.Color("220")).Bold(true)
-)
 
 // note is a client-side line in a window: "-!- connected", /list output, ...
 // A raw note is shown as it is, without time stamp or marker: the banner.
@@ -40,9 +27,6 @@ type note struct {
 	text string
 	raw  bool
 }
-
-// gradient colours banner lines from top to bottom.
-var gradient = []lipgloss.Color{"81", "75", "69", "99", "135", "171", "207"}
 
 // Banner colours figlet lines with the gradient; used for the start banner
 // in the server window and for the exit banner on the terminal.

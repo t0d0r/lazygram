@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"lazygram/internal/config"
 )
@@ -138,5 +139,20 @@ func TestFlagsAfterSubcommand(t *testing.T) {
 	err = run([]string{"-data", t.TempDir(), "demo", "-bogus"})
 	if !errors.As(err, &ec) || ec.code != 2 {
 		t.Fatalf("unknown flag after subcommand: %v", err)
+	}
+}
+
+func TestUpdateHint(t *testing.T) {
+	if updateHint("dev", time.Second) != "" || updateHint("v0.3.0-2-gabc", time.Second) != "" {
+		t.Fatal("builds from source get no hint")
+	}
+	// A release build with no network answers quietly within the timeout.
+	t.Setenv("HTTPS_PROXY", "http://127.0.0.1:9") // nothing listens there
+	start := time.Now()
+	if h := updateHint("v0.1.0", 500*time.Millisecond); h != "" {
+		t.Fatalf("unexpected hint: %q", h)
+	}
+	if time.Since(start) > 3*time.Second {
+		t.Fatal("the check must stay brief")
 	}
 }

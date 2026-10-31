@@ -3,12 +3,12 @@ package logo
 import "testing"
 
 func TestBannersArePlainASCIIAndFit(t *testing.T) {
-	for name, b := range map[string]string{"start": Start, "exit": Exit} {
+	for name, b := range map[string]string{"start": Start, "exit": Exit, "exit-wide": ExitWide} {
 		lines := Lines(b)
 		if len(lines) < 3 {
 			t.Errorf("%s: too few lines", name)
 		}
-		if w := Width(b); w == 0 || w > 60 {
+		if w := Width(b); w == 0 || w > 80 {
 			t.Errorf("%s: width %d", name, w)
 		}
 		for _, l := range lines {

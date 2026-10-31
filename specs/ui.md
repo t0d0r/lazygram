@@ -8,18 +8,23 @@ completion, and an activity indicator.
 
 ## Windows
 
-- Window 1 is the server window: every chat interleaved by time, plus
+- Window 0 is the server window: every chat interleaved by time, plus
   client notices (`-!-`): start-up, chat counts, windows opened or closed,
   sync errors, `/win` output. It opens with a figlet banner (font slant,
   plain ASCII, coloured top to bottom) and a tagline with the version;
-  after the program ends a smaller banner (font smslant) is printed to the
-  terminal, BitchX style. Not in smoke mode.
+  after the program ends a banner is printed to the terminal, BitchX style
+  (font lean on 80 columns or more, smslant below), with the tagline, a
+  session summary (uptime, windows, messages arrived and sent) and, for a
+  release build, a one-line hint when GitHub has a newer release (checked
+  within 3 seconds, silently skipped offline). Not in smoke mode.
 - A window opens for a chat when a message arrives for it and no window
   exists, and at start for every chat the service reports as unread
   (deleted accounts never open windows). `/win @user`, `/win #chan` and
   Enter in `/list` open one on demand.
-- Windows are numbered from 1 in opening order and renumbered on `/close`.
-  Window 1 cannot be closed.
+- The server window is number 0, permanent: it cannot be closed or moved.
+  Chat windows are numbered from 1 in opening order, renumbered on
+  `/close`, and `/move N` puts the current window at position N (1..last),
+  shifting the others; the layout is saved.
 - Switching to a window clears its unread count. The first time a chat
   window is shown, the last 10 messages of the chat are fetched from the
   service (`-!- fetching the last 10 messages`, then
@@ -82,7 +87,8 @@ as notices; there is no separate help view.
 | `/refresh`, `/r`              | sync now                                             |
 | `/list [text]`, `/ls`         | selectable chat list; `--show-deleted` includes deleted accounts |
 | `/win`, `/win list`           | selectable list of the open windows; Enter focuses   |
-| `/win N`                      | switch to window N                                   |
+| `/win N`                      | switch to window N (0 is the server window)          |
+| `/move N`                     | move this window to position N                       |
 | `/win @user`, `/win #chan`    | open or switch to that chat's window                 |
 | `/close [N]`                  | close window N or the current one                    |
 | `/last [N]`                   | fetch the last N messages (default 10, max 100)      |
@@ -92,6 +98,7 @@ as notices; there is no separate help view.
 | `/me <text>`                  | send `* text` to this window's chat (shown as `* you text`) |
 | `/press N`, `/press <msg> N`  | press a bot button (see Buttons)                     |
 | `/open [msg]`                 | fetch an attachment; open it when it is an image     |
+| `/theme [name]`               | list the colour themes or switch (see Themes)        |
 
 Short forms: `/w`, `/j`, `/join`, `/query` for `/win`; `/wc`, `/part` for
 `/close`; `/history` for `/last`; `/find`, `/log` for `/search`; `/wi`,
@@ -113,6 +120,20 @@ answer is a notice (`-!- pressed Deploy: Got it`), and the message is
 fetched again so the bot's edit replaces the old line (in the window, the
 mirror and the cache). Link: the URL is printed as a notice, never opened.
 Reply text: the label is sent like Ctrl-X. Pressing is always explicit.
+
+## Themes
+
+`/theme` prints the colour schemes into the window with the current one
+marked; `/theme <name>` (exact or unique prefix, Tab completes) switches
+at once and the choice is kept in the cache state across restarts.
+Built in: `default`, `solarized`, `gruvbox`, `dracula`, `nord`,
+`monokai`, `tokyonight`, `vim` (classic dark Vim: grey comments, cyan,
+yellow, magenta, reverse status) and `emacs` (its default faces on a dark
+terminal with the grey mode line). A theme sets time stamps, separators,
+notices, buttons, the topic bar, the status line and window bar, the
+activity and error colours, the nick/chat palette and the banner
+gradient; the terminal's own background is never changed. Colours are
+hex values, downsampled by lipgloss on 256-colour terminals.
 
 ## Mouse
 
@@ -147,7 +168,9 @@ By default Enter never sends: on plain text it reminds about Ctrl-X and
 keeps the text. Two Ctrl-X within 600 ms on an empty line toggle "Enter sends" for the
 current window (the prompt becomes `[@name]> `); with text typed the
 second Ctrl-X sends it instead, so nothing is swallowed. Commands still
-run, and Ctrl-X still sends. The toggle is per window and per session. Ctrl-X refuses in the server window, on empty text, and on text that
+run, and Ctrl-X still sends. The toggle is per window and is saved with
+the layout, so it survives restarts; the status line ends with
+`ctrl-x: to send` or `enter: to send` in a chat window. Ctrl-X refuses in the server window, on empty text, and on text that
 starts with `/` (prefix a space to send such text). Send errors go to the
 status line and the window.
 
@@ -155,10 +178,10 @@ status line and the window.
 
 | key                  | action                                            |
 |----------------------|---------------------------------------------------|
-| Tab                  | complete; again cycles the candidates (nothing else, in every view) |
+| Tab                  | complete like bash; a second Tab lists the candidates (nothing else, in every view) |
 | Ctrl-X twice         | toggle "Enter sends" for this window              |
 | Ctrl-N / Ctrl-P      | next / previous window (Alt-Right / Alt-Left too) |
-| Alt-1 .. Alt-0       | window 1 .. 10; Esc followed by the digit does the same (the typed input survives) |
+| Alt-0 .. Alt-9       | window 0 .. 9; Esc followed by the digit does the same (the typed input survives) |
 | PgUp / PgDn          | scroll a page; Up / Down one line                 |
 | Home / End           | oldest / newest                                   |
 | Ctrl-R               | sync now                                          |
@@ -170,13 +193,14 @@ status line and the window.
 
 ## Completion
 
-Tab completes the last word of the input. A line that is one word starting
-with `/` completes command names. Otherwise it completes chat names: the
-candidates are every non-deleted chat whose `@name`/`#name` starts with the
-word, or whose bare alias starts with it when the word has no sigil (then
-the sigil is added). One candidate is inserted with a trailing space; with
-several, the first is inserted and further Tabs cycle. Any other key ends
-the cycle.
+Tab completes the last word of the input like bash. A line that is one
+word starting with `/` completes command names; after `/theme ` theme
+names; otherwise chat names: every non-deleted chat whose `@name`/`#name`
+starts with the word, or whose bare alias starts with it when the word has
+no sigil (then the sigil is added). One candidate is filled in with a
+trailing space; several are extended to their longest common prefix, and
+a second Tab that cannot extend further prints the candidates into the
+window as a notice. There is no cycling.
 
 ## Scrolling
 
@@ -185,7 +209,8 @@ messages. When scrolled back, arriving messages keep the view anchored.
 
 ## Status line
 
-`[time] [provider] [N:name] [Act: ...] [M msgs] [sync state] [-K lines] message`.
+`[time] [provider] [N:name] [Act: ...] [M msgs] [sync state] [-K lines] message ctrl-x: to send`
+(the last item says how text is sent in a chat window: `ctrl-x` or `enter`).
 A background sync runs every 5s (demo) or 10s (telegram) with a 90s
 budget (enough for a FLOOD_WAIT retry); polls skip while a sync runs.
 

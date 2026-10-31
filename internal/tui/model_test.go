@@ -138,7 +138,7 @@ func TestServerWindowInterleavesChats(t *testing.T) {
 	if a < 0 || a >= b || b >= c {
 		t.Fatalf("expected interleaved chronological order:\n%s", v)
 	}
-	for _, want := range []string{"#dev", "@alice", "<ada>", "[fake]", "[1:server]", "4 msgs"} {
+	for _, want := range []string{"#dev", "@alice", "<ada>", "[fake]", "[0:server]", "4 msgs"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("view lacks %q", want)
 		}
@@ -156,7 +156,7 @@ func TestWindowsOpenForNewMessagesAndUnreadChats(t *testing.T) {
 	if m.wins[2].unread != 2 || m.wins[3].unread != 2 {
 		t.Fatalf("activity counts: %+v %+v", m.wins[2], m.wins[3])
 	}
-	if !strings.Contains(m.View(), "[Act: 2,3,4]") {
+	if !strings.Contains(m.View(), "[Act: 1,2,3]") {
 		t.Fatalf("activity missing:\n%s", m.View())
 	}
 	for _, w := range m.wins {
@@ -168,15 +168,15 @@ func TestWindowsOpenForNewMessagesAndUnreadChats(t *testing.T) {
 
 func TestWinByNumberShowsOnlyThatChatAndClearsUnread(t *testing.T) {
 	m := setup(t, newFake())
-	cmd := enter(m, "/win 3")
+	cmd := enter(m, "/win 2")
 	if m.cur != 2 || m.wins[2].unread != 0 || cmd == nil {
 		t.Fatalf("cur=%d unread=%d cmd=%v", m.cur, m.wins[2].unread, cmd)
 	}
 	v := m.View()
-	if strings.Contains(v, "hi there") || !strings.Contains(v, "first dev line") || !strings.Contains(v, "[3:#dev]") {
-		t.Fatalf("window 3 should show only #dev:\n%s", v)
+	if strings.Contains(v, "hi there") || !strings.Contains(v, "first dev line") || !strings.Contains(v, "[2:#dev]") || !strings.Contains(v, "ctrl-x: to send") {
+		t.Fatalf("window 2 should show only #dev:\n%s", v)
 	}
-	if strings.Contains(v, "Act: 2,3") || !strings.Contains(v, "Act: 2,4") {
+	if strings.Contains(v, "Act: 1,2") || !strings.Contains(v, "Act: 1,3") {
 		t.Fatalf("activity after switch:\n%s", v)
 	}
 	enter(m, "/win 9")
@@ -200,7 +200,7 @@ func TestWinByNameFetchesRecentOnce(t *testing.T) {
 	if !strings.Contains(v, "older hello") || !strings.Contains(v, "fetched 1 older") {
 		t.Fatalf("fetched history missing:\n%s", v)
 	}
-	if cmd := enter(m, "/win 1"); cmd != nil {
+	if cmd := enter(m, "/win 0"); cmd != nil {
 		t.Fatal("server window fetches nothing")
 	}
 	if cmd := enter(m, "/win @alice"); cmd != nil {
@@ -224,7 +224,7 @@ func TestLastFetchesN(t *testing.T) {
 	if f.calls[len(f.calls)-1] != "c2:05" {
 		t.Fatalf("calls: %v", f.calls)
 	}
-	enter(m, "/win 1")
+	enter(m, "/win 0")
 	enter(m, "/last")
 	if !m.isErr {
 		t.Fatal("/last in the server window must be an error")
@@ -251,16 +251,36 @@ func TestTabCompletesNamesAndCommands(t *testing.T) {
 		t.Fatalf("command: %q", got)
 	}
 	m.input = nil
-	typ(m, "/win d")
-	press(m, tea.KeyTab)
-	first := string(m.input)
-	press(m, tea.KeyTab)
-	second := string(m.input)
-	if first == second || !strings.HasPrefix(first, "/win #") && !strings.HasPrefix(first, "/win @") {
-		t.Fatalf("cycling: %q then %q", first, second)
+	typ(m, "/w")
+	press(m, tea.KeyTab) // /w, /wc, /whois, /win, /window: common prefix is /w
+	if got := string(m.input); got != "/w" {
+		t.Fatalf("ambiguous: %q", got)
 	}
-	if strings.Contains(first+second, "deleted") {
+	press(m, tea.KeyTab) // second Tab lists them
+	if v := body(m); !strings.Contains(v, "/whois") || !strings.Contains(v, "/window") {
+		t.Fatalf("list of candidates:\n%s", v)
+	}
+	m.input = nil
+	typ(m, "/wh")
+	press(m, tea.KeyTab)
+	if got := string(m.input); got != "/whois " {
+		t.Fatalf("unique: %q", got)
+	}
+	m.input = nil
+	typ(m, "/win #")
+	press(m, tea.KeyTab) // #dev, #news share only "#"
+	if got := string(m.input); got != "/win #" {
+		t.Fatalf("common prefix of names: %q", got)
+	}
+	press(m, tea.KeyTab)
+	if v := body(m); !strings.Contains(v, "#dev  #news") {
+		t.Fatalf("names listed:\n%s", v)
+	}
+	if strings.Contains(body(m), "deleted") {
 		t.Fatal("deleted accounts must not be completed")
+	}
+	if commonPrefix([]string{"/win", "/window", "/wi"}) != "/wi" || commonPrefix(nil) != "" {
+		t.Fatal("commonPrefix")
 	}
 }
 
@@ -301,20 +321,49 @@ func TestListIsSelectableAndHidesDeleted(t *testing.T) {
 
 func TestCloseWindow(t *testing.T) {
 	m := setup(t, newFake())
-	enter(m, "/win 3")
+	enter(m, "/win 2")
 	enter(m, "/close")
 	if len(m.wins) != 3 || m.cur != 1 {
 		t.Fatalf("wins=%d cur=%d", len(m.wins), m.cur)
 	}
-	enter(m, "/close 1")
+	enter(m, "/close 0")
 	if !m.isErr || len(m.wins) != 3 {
 		t.Fatal("server window cannot be closed")
 	}
 }
 
+func TestMoveWindow(t *testing.T) {
+	m := setup(t, newFake()) // 0 server, 1 #news, 2 #dev, 3 @alice
+	enter(m, "/move 2")
+	if !m.isErr {
+		t.Fatal("the server window cannot move")
+	}
+	enter(m, "/win 3") // @alice
+	enter(m, "/move 1")
+	if m.cur != 1 || m.winName(1) != "@alice" || m.winName(2) != "#news" || m.winName(3) != "#dev" {
+		t.Fatalf("after move: %s %s %s cur=%d", m.winName(1), m.winName(2), m.winName(3), m.cur)
+	}
+	enter(m, "/move 3")
+	if m.cur != 3 || m.winName(3) != "@alice" || m.winName(1) != "#news" {
+		t.Fatalf("move down: %s cur=%d", m.winName(3), m.cur)
+	}
+	enter(m, "/move 9")
+	if !m.isErr {
+		t.Fatal("out of range")
+	}
+	enter(m, "/move x")
+	if !m.isErr {
+		t.Fatal("not a number")
+	}
+	var l layout
+	if ok, _ := m.opt.Store.State(layoutKey, &l); !ok || l.Windows[2] != "c2" || l.Current != 3 {
+		t.Fatalf("layout must follow: %+v", l)
+	}
+}
+
 func TestSearchPagerOverCurrentChat(t *testing.T) {
 	m := setup(t, newFake())
-	enter(m, "/win 3")
+	enter(m, "/win 2")
 	enter(m, "/search second")
 	v := m.View()
 	if m.mode != modePager || !strings.Contains(v, "1 of 2 messages") || strings.Contains(v, "first dev") {
@@ -333,13 +382,16 @@ func TestCtrlNAndAltDigitSwitch(t *testing.T) {
 		t.Fatalf("ctrl-n: %d", m.cur)
 	}
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}, Alt: true})
-	if m.cur != 2 {
+	if m.cur != 3 {
 		t.Fatalf("alt-3: %d", m.cur)
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'0'}, Alt: true})
 	if m.cur != 0 {
-		t.Fatalf("ctrl-p twice: %d", m.cur)
+		t.Fatalf("alt-0 is the server window: %d", m.cur)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlP})
+	if m.cur != 3 {
+		t.Fatalf("ctrl-p wraps: %d", m.cur)
 	}
 }
 
@@ -359,13 +411,13 @@ func TestQuitAndHelp(t *testing.T) {
 	m := setup(t, newFake())
 	press(m, tea.KeyF1)
 	v := m.View()
-	if m.mode != modeWin || !strings.Contains(v, "Ctrl-X") || !strings.Contains(v, "People are @name") {
+	if m.mode != modeWin || !strings.Contains(v, "People are @name") || !strings.Contains(strings.Join(m.lines(), "\n"), "Ctrl-X") {
 		t.Fatalf("help should print into the window:\n%s", v)
 	}
 	if !strings.Contains(strings.Join(m.lines(), "\n"), "/win N                 switch") {
 		t.Fatal("help columns must keep their alignment")
 	}
-	enter(m, "/win 2")
+	enter(m, "/win 1")
 	enter(m, "/help")
 	if !strings.Contains(m.View(), "People are @name") {
 		t.Fatal("/help should print into the current window")
@@ -491,7 +543,7 @@ func TestWinListIsSelectable(t *testing.T) {
 	m := setup(t, newFake())
 	enter(m, "/win")
 	v := m.View()
-	if m.mode != modeList || m.listSrc != listWindows || !strings.Contains(v, "1  server") || !strings.Contains(v, "#news") || !strings.Contains(v, "(current)") {
+	if m.mode != modeList || m.listSrc != listWindows || !strings.Contains(v, "0  server") || !strings.Contains(v, "#news") || !strings.Contains(v, "(current)") {
 		t.Fatalf("\n%s", v)
 	}
 	press(m, tea.KeyDown)
@@ -568,13 +620,13 @@ func TestListEnterPicksTheFilteredSelection(t *testing.T) {
 func TestWindowBarListsEveryWindow(t *testing.T) {
 	m := setup(t, newFake())
 	v := m.View()
-	for _, want := range []string{"[1:server]", "[2:#news]", "[3:#dev]", "[4:@alice]"} {
+	for _, want := range []string{"[0:server]", "[1:#news]", "[2:#dev]", "[3:@alice]"} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("window bar lacks %q:\n%s", want, v)
 		}
 	}
 	lines := strings.Split(v, "\n")
-	if len(lines) != 20 || !strings.Contains(lines[18], "[1:server]") {
+	if len(lines) != 20 || !strings.Contains(lines[18], "[0:server]") {
 		t.Fatalf("bar must be the line above the input: %d lines", len(lines))
 	}
 }
@@ -583,7 +635,7 @@ func TestEscThenDigitSwitchesWindows(t *testing.T) {
 	m := setup(t, newFake())
 	typ(m, "half typed")
 	press(m, tea.KeyEsc)
-	typ(m, "3")
+	typ(m, "2")
 	if m.cur != 2 || string(m.input) != "half typed" {
 		t.Fatalf("cur=%d input=%q", m.cur, string(m.input))
 	}
@@ -594,7 +646,7 @@ func TestEscThenDigitSwitchesWindows(t *testing.T) {
 	}
 	enter(m, "/list")
 	press(m, tea.KeyEsc)
-	typ(m, "1")
+	typ(m, "0")
 	if m.mode != modeWin || m.cur != 0 {
 		t.Fatalf("Esc closes the list and the digit switches: mode=%v cur=%d", m.mode, m.cur)
 	}
@@ -616,15 +668,24 @@ func TestWindowLayoutSurvivesRestart(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
 	m.Update(m.chatsCmd()())
 	m.Update(m.syncCmd()()) // opens #news, #dev, @alice
-	enter(m, "/close 3")    // #dev
+	enter(m, "/close 2")    // #dev
 	enter(m, "/win @alice")
-	if len(m.wins) != 3 || m.cur != 2 {
+	press(m, tea.KeyCtrlX)
+	press(m, tea.KeyCtrlX) // Enter sends in @alice, remembered
+	if len(m.wins) != 3 || m.cur != 2 || !m.wins[2].enterSends {
 		t.Fatalf("wins=%d cur=%d", len(m.wins), m.cur)
 	}
 
 	again := New(Options{Store: st, Provider: f})
 	if len(again.wins) != 3 || again.wins[1].chatID != "c3" || again.wins[2].chatID != "c2" || again.cur != 2 {
 		t.Fatalf("restored wins=%d cur=%d", len(again.wins), again.cur)
+	}
+	if !again.wins[2].enterSends || again.wins[1].enterSends {
+		t.Fatal("Enter-sends state must be restored per window")
+	}
+	again.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	if !strings.Contains(again.View(), "enter: to send") {
+		t.Fatal("status line must say how to send")
 	}
 	if n := again.wins[0].notes; len(n) == 0 || !strings.Contains(n[len(n)-1].text, "2 windows reopened") {
 		t.Fatal("restore notice in the server window")
@@ -668,8 +729,14 @@ func TestStartBannerAndTagline(t *testing.T) {
 	if a, b := strings.Index(v, "/_/\\__,_/"), strings.Index(v, "first dev line"); a < 0 || b < 0 || a > b {
 		t.Fatal("banner must precede the messages")
 	}
-	if out := ExitBanner("v9.9.9"); !strings.Contains(out, "lazygram v9.9.9") || !strings.Contains(out, "bye") || strings.Count(out, "\n") < 4 {
+	if out := ExitBanner("v9.9.9", 100, "up 1s"); !strings.Contains(out, "lazygram v9.9.9") || !strings.Contains(out, "thanks") || !strings.Contains(out, "up 1s") || strings.Count(out, "\n") < 6 {
 		t.Fatalf("exit banner:\n%s", out)
+	}
+	if wide, narrow := ExitBanner("v1", 120, ""), ExitBanner("v1", 60, ""); wide == narrow {
+		t.Fatal("a narrow terminal gets the small banner")
+	}
+	if s := m.Summary(); !strings.Contains(s, "windows") || !strings.Contains(s, "arrived") {
+		t.Fatal(s)
 	}
 	if Tagline("") != Tagline("dev") {
 		t.Fatal("empty version reads dev")
@@ -790,8 +857,8 @@ func TestTabInListOnlyCompletes(t *testing.T) {
 	m := setup(t, newFake())
 	enter(m, "/list")
 	press(m, tea.KeyDown)
-	press(m, tea.KeyTab) // empty input: completes to the first name, never moves the cursor
-	if m.listCur != 1 || string(m.input) != "#dev" {
+	press(m, tea.KeyTab) // empty input: nothing in common, never moves the cursor
+	if m.listCur != 1 || string(m.input) != "" {
 		t.Fatalf("cur=%d input=%q", m.listCur, string(m.input))
 	}
 	m.input, m.comp = nil, nil
@@ -856,7 +923,7 @@ func TestMouseClicksOpenWindowsAndLinks(t *testing.T) {
 		t.Fatalf("nick click: %s", m.winName(m.cur))
 	}
 	// a nick without a chat is an error, not a crash
-	enter(m, "/win 1")
+	enter(m, "/win 0")
 	m.View()
 	x, y = find(m, spanNick, "ada")
 	click(m, x, y)

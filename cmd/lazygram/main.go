@@ -27,6 +27,7 @@ import (
 	"lazygram/internal/provider/telegram"
 	"lazygram/internal/store"
 	"lazygram/internal/tui"
+	"lazygram/internal/update"
 )
 
 // version is set at build time with -ldflags "-X main.version=..." (git
@@ -220,6 +221,23 @@ func runTelegram(o options) error {
 	return runTUI(o, prov, st, 10*time.Second)
 }
 
+// updateHint checks GitHub for a newer release, briefly and quietly: a
+// release build gets a one-line hint when a newer version exists, a build
+// from source or an unreachable network gets nothing.
+func updateHint(version string, timeout time.Duration) string {
+	current, release := update.Parse(version)
+	if !release {
+		return ""
+	}
+	c := update.New()
+	c.HTTP.Timeout = timeout
+	latest, err := c.Latest()
+	if err != nil || current.Compare(latest) >= 0 {
+		return ""
+	}
+	return fmt.Sprintf("a newer release is available: %s -> %s (run: lazygram update)", current, latest)
+}
+
 // sessionHint adds the way out of a session file that cannot be used.
 func sessionHint(cfg config.Telegram, err error) error {
 	return fmt.Errorf("%w\n  if this persists, remove %s and run lazygram login again",
@@ -268,11 +286,19 @@ func runTUI(o options, prov provider.Provider, st *store.Store, poll time.Durati
 		fmt.Println()
 		return nil
 	}
-	_, err := tea.NewProgram(tui.New(opt), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
-	if err == nil {
-		fmt.Print(tui.ExitBanner(version))
+	final, err := tea.NewProgram(tui.New(opt), tea.WithAltScreen(), tea.WithMouseCellMotion()).Run()
+	if err != nil {
+		return err
 	}
-	return err
+	width, summary := 80, ""
+	if m, ok := final.(*tui.Model); ok {
+		width, summary = m.Width(), m.Summary()
+	}
+	fmt.Print(tui.ExitBanner(version, width, summary))
+	if hint := updateHint(version, 3*time.Second); hint != "" {
+		fmt.Println(hint)
+	}
+	return nil
 }
 
 func isTerminal(f *os.File) bool { return term.IsTerminal(int(f.Fd())) }

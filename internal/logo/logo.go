@@ -1,7 +1,7 @@
 // Package logo holds the figlet banners shown when lazygram starts and
-// exits, BitchX style. Generated with figlet (fonts slant and smslant);
-// plain ASCII only. The lines are double-quoted because the slant font
-// contains backticks.
+// exits, BitchX style. Generated with figlet (fonts slant, lean and
+// smslant); plain ASCII only. The lines are double-quoted because the
+// fonts contain backticks.
 package logo
 
 import "strings"
@@ -15,6 +15,16 @@ var startLines = []string{
 	"              /____//____/",
 }
 
+var exitWideLines = []string{
+	"    _/",
+	"   _/    _/_/_/  _/_/_/_/  _/    _/    _/_/_/  _/  _/_/    _/_/_/  _/_/_/  _/_/",
+	"  _/  _/    _/      _/    _/    _/  _/    _/  _/_/      _/    _/  _/    _/    _/",
+	" _/  _/    _/    _/      _/    _/  _/    _/  _/        _/    _/  _/    _/    _/",
+	"_/    _/_/_/  _/_/_/_/    _/_/_/    _/_/_/  _/          _/_/_/  _/    _/    _/",
+	"                             _/        _/",
+	"                        _/_/      _/_/",
+}
+
 var exitLines = []string{
 	"   __",
 	"  / /__ ____ __ _____ ________ ___ _",
@@ -26,7 +36,11 @@ var exitLines = []string{
 // Start is the banner for the server window at start-up.
 var Start = strings.Join(startLines, "\n")
 
-// Exit is the banner printed to the terminal after the program ends.
+// ExitWide is the banner printed to a terminal of 80 columns or more
+// after the program ends.
+var ExitWide = strings.Join(exitWideLines, "\n")
+
+// Exit is the narrower exit banner.
 var Exit = strings.Join(exitLines, "\n")
 
 // Lines splits a banner into its lines without a trailing empty one.

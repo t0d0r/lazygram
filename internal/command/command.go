@@ -25,6 +25,8 @@ const (
 	Me           // send an action line ("* text") to the current window's chat
 	Press        // press a bot button: Arg is "N" or "<message id> N"
 	Open         // fetch and open the attachment of the latest message with one, or of message Arg
+	Theme        // list the colour themes, or switch to Arg
+	Move         // move the current window to position Arg
 )
 
 // Command is a parsed slash command.
@@ -47,6 +49,8 @@ var table = map[string]Kind{
 	"me": Me, "action": Me,
 	"press": Press, "button": Press, "btn": Press,
 	"open": Open, "fetch": Open, "download": Open,
+	"theme": Theme, "colors": Theme, "colours": Theme,
+	"move": Move, "mv": Move,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -85,9 +89,10 @@ const HelpText = `Commands
   /refresh, /r           sync now
   /list [text]           chat list: @people and #channels
   /win, /win list        list of the open windows
-  /win N                 switch to window N (1 is the server window)
+  /win N                 switch to window N (0 is the server window)
   /win @user | #chan     open or switch to that chat's window
   /close [N]             close a window
+  /move N                move this window to position N
   /last [N]              fetch the last N messages here (default 10)
   /search [text]         page through this chat's local history
   /whois [name]          what is known about a chat
@@ -95,4 +100,5 @@ const HelpText = `Commands
   /me <text>             send an action line
   /press N | <msg> N     press a bot button (numbers shown under it)
   /open [msg]            fetch a photo or file and open it (images) or
-                         show where it was saved`
+                         show where it was saved
+  /theme [name]          list the colour themes, or switch to one`

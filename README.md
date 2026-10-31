@@ -77,10 +77,12 @@ one; delete `<state>/telegram/app.json` to switch. Never commit these values:
 ## Using it
 
 It works like BitchX/irssi, down to the figlet banner at start and exit.
-Window 1 is the server window: every chat
+Window 0 is the server window: every chat
 interleaved by time as `HH:MM #chat <sender> text`, plus `-!-` notices. A
-window bar above the input lists every window as `[N:name]`. Open windows
-and the current one are remembered across restarts.
+window bar above the input lists every window as `[N:name]`. Open windows,
+the current one and each window's Enter-sends setting are remembered
+across restarts. On exit lazygram prints a session summary and, for a
+release build, a hint when a newer release exists.
 When a chat gets a message (or has unread messages at start) a window opens
 for it; the status line shows `[Act: 2,3]` for windows with unread. People
 are `@name`, groups and channels are `#name`. lazygram shows what arrives
@@ -90,7 +92,8 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | command                    | action                                        |
 |----------------------------|-----------------------------------------------|
 | `/list [text]`             | selectable chat list; Enter opens the window; `--show-deleted` includes deleted accounts |
-| `/win N`                   | switch to window N (1 is the server window)   |
+| `/win N`                   | switch to window N (0 is the server window)   |
+| `/move N`                  | move this window to position N                |
 | `/win @user`, `/win #chan` | open or switch to that chat's window          |
 | `/win`, `/win list`        | selectable list of the open windows           |
 | `/close [N]`               | close a window                                |
@@ -101,11 +104,13 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/me <text>`               | send an action line (`* you waves`)           |
 | `/press N`                 | press button N under the latest bot message; `/press <msg> N` for an older one |
 | `/open [msg]`              | fetch a `[photo]`/`[file]`; images open in the system viewer |
+| `/theme [name]`            | colour themes: default, solarized, gruvbox, dracula, nord, monokai, tokyonight, vim, emacs |
 | `/refresh`, `/help`, `/quit` | sync now; print the help into the window; leave |
 
 In a chat window, type text and press **Ctrl-X** to send it to that chat;
 Enter is for commands (press Ctrl-X twice quickly to make Enter send in
-that window, and again to switch back). The sent line shows up as `<me>` once the service
+that window, and again to switch back; the status line ends with
+`ctrl-x: to send` or `enter: to send`). The sent line shows up as `<me>` once the service
 has it. Bot messages with buttons show them underneath as
 `[1] Yes  [2] Docs (link)  (msg 1234)`; `/press 1` answers the bot and the
 edited message replaces the old line, link buttons only print their URL,
@@ -113,9 +118,9 @@ reply-keyboard buttons send their label.
 
 | key                 | action                                             |
 |---------------------|----------------------------------------------------|
-| Tab                 | complete a command or a `@`/`#` name; again cycles |
+| Tab                 | complete a command, `@`/`#` name or theme like bash; Tab again lists |
 | Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
-| Alt-1 .. Alt-0      | window 1 .. 10 (Esc then the digit works too)      |
+| Alt-0 .. Alt-9      | window 0 .. 9 (Esc then the digit works too)       |
 | PgUp / PgDn         | scroll a page; Up / Down a line; Home / End ends   |
 | Ctrl-R              | sync now                                           |
 | F1                  | print the help into the window                     |

@@ -141,3 +141,14 @@ at the hidden password prompt takes effect only after Enter.
   for a fresh file reference, into `<state>/telegram/media/`; `/open` and
   the `[photo]` token click; only images are opened, files are saved. Demo
   draws a PNG. Untested against the real service (fakes only).
+- `/theme`: `internal/tui/theme.go` holds nine schemes (official palette
+  values) as colour roles; `applyTheme` repaints the package styles; the
+  name is kept in the cache state (`theme`) and restored at start; Tab
+  completes theme names after `/theme `.
+- Server window is number 0 (permanent); chat windows from 1; Alt-0 /
+  Esc-0 reach it. `/move N` reorders. The Enter-sends toggle is saved in
+  the layout per window and the status line ends with "ctrl-x: to send" or
+  "enter: to send". Exit banner uses figlet lean on wide terminals with a
+  session summary; a release build checks GitHub (3s) for a newer version.
+- Tab completion is bash-like: unique match filled in, else the longest
+  common prefix; a second Tab that cannot extend prints the candidates.
