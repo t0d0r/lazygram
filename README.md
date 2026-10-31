@@ -5,6 +5,16 @@ from all your chats as one chronological scrollback, like a single IRC
 channel (BitchX / irssi style), and lets you open the full history of any chat
 in a searchable pager. Feature goals are inspired by nchat.
 
+## Screenshots
+
+The demo (`lazygram demo`, invented data), `nord` theme: the server window
+with every chat interleaved, bot buttons and a `[photo]` token, and the
+photo painted inside a chat window from memory.
+
+![lazygram demo: server window](docs/screenshot.svg)
+
+![lazygram demo: a photo rendered in the terminal](docs/screenshot-photo.svg)
+
 ## Install
 
 ```sh

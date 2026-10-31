@@ -241,3 +241,6 @@ at the hidden password prompt takes effect only after Enter.
 - Pictures render inside the window (`internal/tui/image.go`: half-block
   cells, box filter, 24 rows max; jpeg/png/gif/webp via x/image) from
   memory; `/open out` keeps the system-viewer path with the temp copy.
+- README screenshots: `docs/screenshot.svg` and `docs/screenshot-photo.svg`,
+  made from tmux captures of the demo (ANSI to SVG converter kept in the
+  session scratchpad, not in the repo).

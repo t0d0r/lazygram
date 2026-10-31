@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="830" height="564" viewBox="0 0 830 564" font-family="SFMono-Regular, Menlo, Consolas, monospace" font-size="14">
+<rect width="830" height="564" rx="8" fill="#2e3440"/>
+<text y="26" xml:space="preserve"><tspan x="12.0" fill="#4c5669">12:50</tspan><tspan x="54.0" fill="#d8dee9"> </tspan><tspan x="62.4" fill="#d08770" font-weight="bold">#ops</tspan><tspan x="96.0" fill="#d8dee9">     </tspan><tspan x="138.0" fill="#d08770">&lt;ken&gt;</tspan><tspan x="180.0" fill="#d8dee9"> looking into the queue depth alert</tspan></text>
+<text y="44" xml:space="preserve"><tspan x="12.0" fill="#4c5669">12:54</tspan><tspan x="54.0" fill="#d8dee9"> </tspan><tspan x="62.4" fill="#d08770" font-weight="bold">#ops</tspan><tspan x="96.0" fill="#d8dee9">     </tspan><tspan x="138.0" fill="#d08770">&lt;ken&gt;</tspan><tspan x="180.0" fill="#d8dee9"> false alarm, a batch job finished late</tspan></text>
+<text y="62" xml:space="preserve"><tspan x="12.0" fill="#4c5669">12:59</tspan><tspan x="54.0" fill="#d8dee9"> </tspan><tspan x="62.4" fill="#bf6169" font-weight="bold">@linus</tspan><tspan x="112.8" fill="#d8dee9">   </tspan><tspan x="138.0" fill="#81a1c1">&lt;me&gt;</tspan><tspan x="171.6" fill="#d8dee9"> no problem, ordering for you</tspan></text>
+<text y="80" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:00</tspan><tspan x="54.0" fill="#d8dee9"> </tspan><tspan x="62.4" fill="#bf6169" font-weight="bold">@linus</tspan><tspan x="112.8" fill="#d8dee9">   </tspan><tspan x="138.0" fill="#ebcb8b">&lt;linus&gt;</tspan><tspan x="196.8" fill="#d8dee9"> </tspan><tspan x="205.2" fill="#88c0d0" font-weight="bold" text-decoration="underline">[photo]</tspan><tspan x="264.0" fill="#d8dee9"> the place looks like this today</tspan></text>
+<text y="98" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:04</tspan><tspan x="54.0" fill="#d8dee9"> </tspan><tspan x="62.4" fill="#88c0d0" font-weight="bold">#dev</tspan><tspan x="96.0" fill="#d8dee9">     </tspan><tspan x="138.0" fill="#b38ead">&lt;ada&gt;</tspan><tspan x="180.0" fill="#d8dee9"> who owns the history pager spec?</tspan></text>
+<text y="116" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:05</tspan><tspan x="54.0" fill="#d8dee9"> </tspan><tspan x="62.4" fill="#88c0d0" font-weight="bold">#dev</tspan><tspan x="96.0" fill="#d8dee9">     </tspan><tspan x="138.0" fill="#81a1c1">&lt;alan&gt;</tspan><tspan x="188.4" fill="#d8dee9"> I do, draft is in specs/</tspan></text>
+<text y="134" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:12</tspan><tspan x="54.0" fill="#d8dee9"> </tspan><tspan x="62.4" fill="#81a1c1" font-weight="bold">#news</tspan><tspan x="104.4" fill="#d8dee9">    </tspan><tspan x="138.0" fill="#88c0d0">&lt;wire&gt;</tspan><tspan x="188.4" fill="#d8dee9"> Demo headline: terminal UIs gain search-first pagers</tspan></text>
+<text y="152" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:16</tspan><tspan x="54.0" fill="#d8dee9"> </tspan><tspan x="62.4" fill="#bf6169" font-weight="bold">@linus</tspan><tspan x="112.8" fill="#d8dee9">   </tspan><tspan x="138.0" fill="#ebcb8b">&lt;linus&gt;</tspan><tspan x="196.8" fill="#d8dee9"> back from lunch, what did I miss</tspan></text>
+<text y="170" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:19</tspan><tspan x="54.0" fill="#d8dee9"> </tspan><tspan x="62.4" fill="#88c0d0" font-weight="bold">#dev</tspan><tspan x="96.0" fill="#d8dee9">     </tspan><tspan x="138.0" fill="#b38ead">&lt;grace&gt;</tspan><tspan x="196.8" fill="#d8dee9"> release candidate tagged</tspan></text>
+<text y="188" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:22</tspan><tspan x="54.0" fill="#d8dee9"> </tspan><tspan x="62.4" fill="#d08770" font-weight="bold">#ops</tspan><tspan x="96.0" fill="#d8dee9">     </tspan><tspan x="138.0" fill="#a3be8c">&lt;dennis&gt;</tspan><tspan x="205.2" fill="#d8dee9"> deploy window opens in 30 minutes</tspan></text>
+<text y="206" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:22</tspan><tspan x="54.0" fill="#d8dee9"> </tspan><tspan x="62.4" fill="#ebcb8b" font-weight="bold">@demobot</tspan><tspan x="129.6" fill="#d8dee9"> </tspan><tspan x="138.0" fill="#81a1c1">&lt;demobot&gt;</tspan><tspan x="213.6" fill="#d8dee9"> Release candidate is green. Deploy it now? Use /press 1 or /press 2.</tspan></text>
+<text y="224" xml:space="preserve"><tspan x="12.0" fill="#d8dee9">      </tspan><tspan x="62.4" fill="#d08770">[1] Deploy  [2] Hold  [3] Runbook (link)  (msg 25)</tspan></text>
+<text y="242" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:23</tspan><tspan x="54.0" fill="#d8dee9"> </tspan><tspan x="62.4" fill="#81a1c1" font-weight="bold">#news</tspan><tspan x="104.4" fill="#d8dee9">    </tspan><tspan x="138.0" fill="#88c0d0">&lt;wire&gt;</tspan><tspan x="188.4" fill="#d8dee9"> Demo digest: three stories today.</tspan></text>
+<text y="260" xml:space="preserve"><tspan x="12.0" fill="#d8dee9">      1. Terminal clients keep their users.</tspan></text>
+<text y="278" xml:space="preserve"><tspan x="12.0" fill="#d8dee9">      2. Encrypted local caches become the norm.</tspan></text>
+<text y="296" xml:space="preserve"><tspan x="12.0" fill="#d8dee9">      3. Nobody misses the gap under the nick.</tspan></text>
+<text y="314" xml:space="preserve"><tspan x="12.0" fill="#d8dee9">      That is all for this hour, back at the top of the next one with more invented news for the</tspan></text>
+<text y="332" xml:space="preserve"><tspan x="12.0" fill="#d8dee9">      demo feed.</tspan></text>
+<text y="350" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:24 </tspan><tspan x="62.4" fill="#88c0d0">-!- lazygram v0.4.6-4-gfb68cf5 - IRC-style Telegram client</tspan></text>
+<text y="368" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:24 </tspan><tspan x="62.4" fill="#88c0d0">-!- /help lists commands, /list the chats</tspan></text>
+<text y="386" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:24 </tspan><tspan x="62.4" fill="#88c0d0">-!- window 1 opened for #news</tspan></text>
+<text y="404" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:24 </tspan><tspan x="62.4" fill="#88c0d0">-!- 5 chats, 1 with unread messages</tspan></text>
+<text y="422" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:24 </tspan><tspan x="62.4" fill="#88c0d0">-!- window 2 opened for #dev</tspan></text>
+<text y="440" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:24 </tspan><tspan x="62.4" fill="#88c0d0">-!- window 3 opened for #ops</tspan></text>
+<text y="458" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:24 </tspan><tspan x="62.4" fill="#88c0d0">-!- window 4 opened for @linus</tspan></text>
+<text y="476" xml:space="preserve"><tspan x="12.0" fill="#4c5669">13:24 </tspan><tspan x="62.4" fill="#88c0d0">-!- window 5 opened for @demobot</tspan></text>
+<text y="494" xml:space="preserve"><tspan x="12.0" fill="#4c5669">──</tspan><tspan x="28.8" fill="#d8dee9"> </tspan><tspan x="37.2" fill="#d8dee9">theme: nord</tspan><tspan x="129.6" fill="#d8dee9"> </tspan><tspan x="138.0" fill="#4c5669">─────────────────────────────────────────────────────────────────────────────────</tspan></text>
+<rect x="12.0" y="498" width="8.4" height="18" fill="#3b4151"/>
+<rect x="20.4" y="498" width="42.0" height="18" fill="#3b4151"/>
+<rect x="62.4" y="498" width="16.8" height="18" fill="#3b4151"/>
+<rect x="79.2" y="498" width="33.6" height="18" fill="#3b4151"/>
+<rect x="112.8" y="498" width="16.8" height="18" fill="#3b4151"/>
+<rect x="129.6" y="498" width="84.0" height="18" fill="#3b4151"/>
+<rect x="213.6" y="498" width="16.8" height="18" fill="#3b4151"/>
+<rect x="230.4" y="498" width="100.8" height="18" fill="#3b4151"/>
+<rect x="331.2" y="498" width="16.8" height="18" fill="#3b4151"/>
+<rect x="348.0" y="498" width="58.8" height="18" fill="#3b4151"/>
+<rect x="406.8" y="498" width="16.8" height="18" fill="#3b4151"/>
+<rect x="423.6" y="498" width="134.4" height="18" fill="#3b4151"/>
+<rect x="558.0" y="498" width="16.8" height="18" fill="#3b4151"/>
+<text y="512" xml:space="preserve"><tspan x="12.0" fill="#d8dee9"> </tspan><tspan x="20.4" fill="#8fbcbb">13:24</tspan><tspan x="62.4" fill="#d8dee9">  </tspan><tspan x="79.2" fill="#88c0d0">demo</tspan><tspan x="112.8" fill="#d8dee9">  </tspan><tspan x="129.6" fill="#b38ead" font-weight="bold">[0:server]</tspan><tspan x="213.6" fill="#d8dee9">  </tspan><tspan x="230.4" fill="#ebcb8b" font-weight="bold">Act: 1,2,3,5</tspan><tspan x="331.2" fill="#d8dee9">  </tspan><tspan x="348.0" fill="#d08770">26 msgs</tspan><tspan x="406.8" fill="#d8dee9">  </tspan><tspan x="423.6" fill="#a3be8c">synced: 13:24:01</tspan><tspan x="558.0" fill="#d8dee9">  </tspan></text>
+<rect x="12.0" y="516" width="8.4" height="18" fill="#3b4151"/>
+<rect x="20.4" y="516" width="84.0" height="18" fill="#d8dee9"/>
+<rect x="104.4" y="516" width="8.4" height="18" fill="#3b4151"/>
+<rect x="112.8" y="516" width="75.6" height="18" fill="#3b4151"/>
+<rect x="188.4" y="516" width="8.4" height="18" fill="#3b4151"/>
+<rect x="196.8" y="516" width="67.2" height="18" fill="#3b4151"/>
+<rect x="264.0" y="516" width="8.4" height="18" fill="#3b4151"/>
+<rect x="272.4" y="516" width="67.2" height="18" fill="#3b4151"/>
+<rect x="339.6" y="516" width="100.8" height="18" fill="#3b4151"/>
+<rect x="440.4" y="516" width="100.8" height="18" fill="#3b4151"/>
+<rect x="541.2" y="516" width="8.4" height="18" fill="#3b4151"/>
+<text y="530" xml:space="preserve"><tspan x="12.0" fill="#d8dee9"> </tspan><tspan x="20.4" fill="#3b4151" font-weight="bold">[0:server]</tspan><tspan x="104.4" fill="#d8dee9"> </tspan><tspan x="112.8" fill="#ebcb8b" font-weight="bold">[1:#news]</tspan><tspan x="188.4" fill="#d8dee9"> </tspan><tspan x="196.8" fill="#ebcb8b" font-weight="bold">[2:#dev]</tspan><tspan x="264.0" fill="#d8dee9"> </tspan><tspan x="272.4" fill="#ebcb8b" font-weight="bold">[3:#ops]</tspan><tspan x="339.6" fill="#d8dee9"> [4:@linus] </tspan><tspan x="440.4" fill="#ebcb8b" font-weight="bold">[5:@demobot]</tspan><tspan x="541.2" fill="#d8dee9"> </tspan></text>
+<rect x="264.0" y="534" width="8.4" height="18" fill="#d8dee9"/>
+<text y="548" xml:space="preserve"><tspan x="12.0" fill="#4c5669">[server] </tspan><tspan x="87.6" fill="#d8dee9">hello from the readme</tspan><tspan x="264.0" fill="#2e3440"> </tspan></text>
+</svg>
