@@ -170,7 +170,7 @@ func (c *MTProto) Fetch(ctx context.Context, chatID, msgID string) ([]byte, stri
 		return nil, "", err
 	}
 	c.mu.Lock()
-	ent, id, err := c.svc.locate(chatID, msgID)
+	ent, id, err := c.svc.locate(ctx, chatID, msgID)
 	c.mu.Unlock()
 	if err != nil {
 		return nil, "", err

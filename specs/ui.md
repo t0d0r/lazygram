@@ -1,9 +1,8 @@
 # UI
 
-Layout, top to bottom: content, a thin rule, the input line, a thin rule,
-the status line, the window bar. The prompt sits between the two rules;
-the upper rule carries the send hint (`ctrl-x: to send` or `enter: to
-send`) at its right end. There is no header: the status line carries the
+Layout, top to bottom: content, a thin rule carrying the send hint
+(`ctrl-x: to send` or `enter: to send`) at its right end, the status
+line, the window bar, the input line. There is no header: the status line carries the
 window tag, and in the list and pager views it shows what the view holds
 in place of the status message. The window bar lists every window as
 `[N:name]`; the current window is highlighted and windows with unread
@@ -15,7 +14,8 @@ completion, and an activity indicator.
 
 - Window 0 is the server window: every chat interleaved by time, plus
   client notices (`-!-`): start-up, chat counts, windows opened or closed,
-  sync errors, `/win` output. It opens with a figlet banner (font slant,
+  and every error (sync, history, send, press, fetch, open), whatever
+  window was current; errors also show in the status line. It opens with a figlet banner (font slant,
   plain ASCII, coloured top to bottom) and a tagline with the version;
   after the program ends a banner is printed to the terminal, BitchX style
   (font lean on 80 columns or more, smslant below), with the tagline (`by t0d0r`), the
@@ -199,8 +199,11 @@ after the double Ctrl-X window (600 ms), so that a second Ctrl-X within
 that window cancels the send, puts the text back into the input and only
 toggles "Enter sends". The status says "sending", and a sync is triggered
 so the line appears as `<me>` as soon as the service has it. By default
-Enter never sends: on plain text it reminds about Ctrl-X and keeps the
-text. Two Ctrl-X within 600 ms toggle "Enter sends" for the current
+Enter never sends: on plain text in a chat window it adds a line break to
+the message (shown as a return mark in the input line), so messages can
+have several lines; the whole text goes out with Ctrl-X. With "Enter
+sends" on, the roles swap: Enter sends and a single Ctrl-X adds a line
+break (a fast second Ctrl-X still toggles and removes that break). Two Ctrl-X within 600 ms toggle "Enter sends" for the current
 window (the prompt becomes `[@name]> `); with Enter sends on, Enter sends
 at once. Commands still run, and Ctrl-X still sends. The toggle is per
 window and is saved with the layout, so it survives restarts; the status
@@ -260,7 +263,7 @@ and the status line shows `[scrolled up N lines]` in the same colour.
 
 `time  provider  [N:name]  Act: ...  M msgs  sync state  scrolled up K lines  message`
 (brackets only around the window tag; two spaces between segments; the
-send hint lives on the rule above the prompt). The
+send hint lives on the rule above the status line). The
 sync segment keeps a fixed width and colour (`synced: HH:MM:SS` or
 `syncing HH:MM:SS` with the last completion time) and a poll that brings
 nothing changes no status text, so the line does not flicker every ten
@@ -286,5 +289,5 @@ the hint to remove it and log in again.
 ## Non-interactive mode
 
 When stdin or stdout is not a terminal, or with -smoke, lazygram loads
-chats, syncs once, prints one 100x24 screen of the server window (19
-content rows, rule, input, rule, status, window bar) and exits 0. `login` refuses without a terminal.
+chats, syncs once, prints one 100x24 screen of the server window (20
+content rows, rule, status, window bar, input) and exits 0. `login` refuses without a terminal.

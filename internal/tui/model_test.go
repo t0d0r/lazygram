@@ -290,7 +290,7 @@ func TestTabCompletesNamesAndCommands(t *testing.T) {
 // bar or input line.
 func body(m *Model) string {
 	lines := strings.Split(m.View(), "\n")
-	return strings.Join(lines[:len(lines)-5], "\n")
+	return strings.Join(lines[:len(lines)-4], "\n")
 }
 
 func TestListIsSelectableAndHidesDeleted(t *testing.T) {
@@ -433,7 +433,7 @@ func TestQuitAndHelp(t *testing.T) {
 
 func TestProviderErrorsLandInServerWindow(t *testing.T) {
 	m := setup(t, &fake{err: provider.ErrNotImplemented})
-	if !m.isErr || !strings.Contains(m.View(), "-!- sync: live connector not available") {
+	if !m.isErr || !strings.Contains(m.View(), "-!- error: sync: live connector not available") {
 		t.Fatalf("status=%q\n%s", m.status, m.View())
 	}
 }
@@ -541,8 +541,17 @@ func TestCtrlXSendsInChatWindowOnly(t *testing.T) {
 	m.input = nil
 	typ(m, "plain text")
 	press(m, tea.KeyEnter)
-	if !strings.Contains(m.status, "Ctrl-X") || len(m.input) == 0 {
-		t.Fatalf("Enter on text in a chat window should hint at Ctrl-X and keep the text: %q", m.status)
+	if string(m.input) != "plain text\n" {
+		t.Fatalf("Enter adds a line while Ctrl-X sends: %q", string(m.input))
+	}
+	typ(m, "second line")
+	if !strings.Contains(m.View(), "plain text\u21b5second line") {
+		t.Fatal("the input shows the line break")
+	}
+	m.lastCtrlX = time.Time{}
+	_, tick = m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if tick == nil || m.pending == nil || m.pending.text != "plain text\nsecond line" {
+		t.Fatalf("multi-line text is sent as one message: %v", m.pending)
 	}
 }
 
@@ -633,11 +642,11 @@ func TestWindowBarListsEveryWindow(t *testing.T) {
 		}
 	}
 	lines := strings.Split(v, "\n")
-	if len(lines) != 20 || !strings.Contains(lines[19], "[0:server]") {
-		t.Fatalf("bar must be the last line: %d lines", len(lines))
+	if len(lines) != 20 || !strings.Contains(lines[18], "[0:server]") || !strings.HasPrefix(lines[19], "[") {
+		t.Fatalf("rule, status, bar, input: %d lines", len(lines))
 	}
-	if !strings.Contains(lines[15], "\u2500") || !strings.Contains(lines[17], "\u2500") || !strings.HasPrefix(lines[16], "[") {
-		t.Fatalf("the prompt sits between two rules:\n%s", strings.Join(lines[15:18], "\n"))
+	if !strings.Contains(lines[16], "\u2500") || !strings.Contains(lines[17], "fake") {
+		t.Fatalf("the rule precedes the status line:\n%s", strings.Join(lines[16:20], "\n"))
 	}
 }
 
@@ -833,7 +842,8 @@ func TestPressErrorLandsInWindow(t *testing.T) {
 	f.err = errors.New("BOT_RESPONSE_TIMEOUT")
 	cmd := enter(m, "/press 1")
 	m.Update(cmd())
-	if !m.isErr || !strings.Contains(body(m), "-!- press Yes: BOT_RESPONSE_TIMEOUT") {
+	n := m.wins[0].notes
+	if !m.isErr || !strings.Contains(n[len(n)-1].text, "press Yes: BOT_RESPONSE_TIMEOUT") {
 		t.Fatalf("%q\n%s", m.status, body(m))
 	}
 }
@@ -1287,8 +1297,9 @@ func TestFetchErrorLandsInWindow(t *testing.T) {
 	enter(m, "/win #dev")
 	f.err = errors.New("FILE_REFERENCE_EXPIRED")
 	_, next := m.Update(enter(m, "/open 20")())
-	if !m.isErr || !strings.Contains(body(m), "-!- fetch: FILE_REFERENCE_EXPIRED") || next != nil {
-		t.Fatal("fetch errors land in the window")
+	n := m.wins[0].notes
+	if !m.isErr || !strings.Contains(n[len(n)-1].text, "fetch: FILE_REFERENCE_EXPIRED") || next != nil {
+		t.Fatal("fetch errors land in the server window")
 	}
 }
 
@@ -1409,5 +1420,23 @@ func TestMouseToggleIsKeptAndAppliedAtStart(t *testing.T) {
 	}
 	if cmd := enter(m, "/mouse"); !m.mouseOn || cmd == nil {
 		t.Fatal("on again")
+	}
+}
+
+func TestCtrlXAddsALineWhenEnterSends(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	enter(m, "/win @alice")
+	press(m, tea.KeyCtrlX)
+	press(m, tea.KeyCtrlX) // Enter sends now
+	typ(m, "first")
+	m.lastCtrlX = time.Time{}
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if string(m.input) != "first\n" || m.pending != nil {
+		t.Fatalf("Ctrl-X adds a line: %q", string(m.input))
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX}) // fast second press: toggle back, line removed
+	if m.wins[m.cur].enterSends || string(m.input) != "first" {
+		t.Fatalf("toggle: enterSends=%v input=%q", m.wins[m.cur].enterSends, string(m.input))
 	}
 }

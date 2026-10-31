@@ -258,11 +258,12 @@ func TestRecentConvertsAndSkipsServiceMessages(t *testing.T) {
 	}
 	f.top[7] = 4
 	s := newService(f)
-	if _, err := s.Recent(context.Background(), "telegram:7", 10); err == nil {
-		t.Fatal("Recent before Dialogs must fail")
+	// Recent before Dialogs loads the dialogs itself.
+	if _, err := s.Recent(context.Background(), "telegram:7", 10); err != nil || f.dialogs != 1 {
+		t.Fatalf("auto-load: %v dialogs=%d", err, f.dialogs)
 	}
-	if _, err := s.Dialogs(context.Background()); err != nil {
-		t.Fatal(err)
+	if _, err := s.Recent(context.Background(), "telegram:404", 10); err == nil || !strings.Contains(err.Error(), "unknown chat") {
+		t.Fatalf("still unknown after a refresh: %v", err)
 	}
 	got, err := s.Recent(context.Background(), "telegram:7", 10)
 	if err != nil || len(got) != 3 || !got[0].Time.Before(got[2].Time) {
@@ -399,11 +400,8 @@ func TestHistoryReturnsPartialResultAndKeepsUnfetchedChatsPending(t *testing.T) 
 func TestSendRequiresKnownChatAndText(t *testing.T) {
 	f := newFakeAPI()
 	s := newService(f)
-	if err := s.Send(context.Background(), "telegram:7", "hi"); err == nil {
-		t.Fatal("unknown chat before Dialogs")
-	}
-	if _, err := s.Dialogs(context.Background()); err != nil {
-		t.Fatal(err)
+	if err := s.Send(context.Background(), "telegram:999", "hi"); err == nil {
+		t.Fatal("unknown chat")
 	}
 	if err := s.Send(context.Background(), "telegram:7", "  "); err == nil {
 		t.Fatal("empty text")
@@ -488,11 +486,8 @@ func TestPressAnswersAndRefetches(t *testing.T) {
 	s := newService(f)
 	waited := 0
 	s.wait = func(context.Context, time.Duration) error { waited++; return nil }
-	if _, err := s.Press(context.Background(), "telegram:7", "5", domain.Button{Kind: domain.ButtonCallback, Data: []byte("ok")}); err == nil {
-		t.Fatal("press before Dialogs must fail")
-	}
-	if _, err := s.Dialogs(context.Background()); err != nil {
-		t.Fatal(err)
+	if _, err := s.Press(context.Background(), "telegram:999", "5", domain.Button{Kind: domain.ButtonCallback, Data: []byte("ok")}); err == nil {
+		t.Fatal("unknown chat")
 	}
 	a, err := s.Press(context.Background(), "telegram:7", "5", domain.Button{Kind: domain.ButtonCallback, Data: []byte("ok")})
 	if err != nil || a.Text != "thanks for ok" || a.Updated == nil || a.Updated.Text != "you pressed ok" || len(a.Updated.Buttons) != 0 {
@@ -579,9 +574,6 @@ func TestFetchStreamsIntoMemory(t *testing.T) {
 	f.file = []byte("JPEGDATA-JPEGDATA")
 	f.msgs[7] = []tg.MessageClass{withPhoto(tmsg(5, 5, ""))}
 	s := newService(f)
-	if _, err := s.Dialogs(context.Background()); err != nil {
-		t.Fatal(err)
-	}
 	if _, _, err := s.Fetch(context.Background(), "telegram:7", "5"); err == nil {
 		t.Fatal("no downloader configured")
 	}

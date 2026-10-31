@@ -156,11 +156,27 @@ func (s *service) History(ctx context.Context, _ time.Time) ([]domain.Message, e
 	return out, nil
 }
 
+// entity finds a chat's entity, loading the dialogs first when the chat
+// is not known yet (a window restored at start-up asks before the first
+// dialog list arrived).
+func (s *service) entity(ctx context.Context, chatID string) (entity, error) {
+	if ent, ok := s.known[chatID]; ok {
+		return ent, nil
+	}
+	if _, err := s.Dialogs(ctx); err != nil {
+		return entity{}, err
+	}
+	if ent, ok := s.known[chatID]; ok {
+		return ent, nil
+	}
+	return entity{}, fmt.Errorf("telegram: unknown chat %s (not among the recent dialogs)", chatID)
+}
+
 // Recent returns the last limit messages of a chat, oldest first.
 func (s *service) Recent(ctx context.Context, chatID string, limit int) ([]domain.Message, error) {
-	ent, ok := s.known[chatID]
-	if !ok {
-		return nil, fmt.Errorf("telegram: unknown chat %s", chatID)
+	ent, err := s.entity(ctx, chatID)
+	if err != nil {
+		return nil, err
 	}
 	limit = min(max(limit, 1), maxRecent)
 	msgs, err := s.chatHistory(ctx, chatID, ent, 0, limit)
@@ -173,9 +189,9 @@ func (s *service) Recent(ctx context.Context, chatID string, limit int) ([]domai
 // Send posts a text message. The sent message is picked up by the next
 // History call because the chat's top message moves.
 func (s *service) Send(ctx context.Context, chatID, text string) error {
-	ent, ok := s.known[chatID]
-	if !ok {
-		return fmt.Errorf("telegram: unknown chat %s", chatID)
+	ent, err := s.entity(ctx, chatID)
+	if err != nil {
+		return err
 	}
 	if strings.TrimSpace(text) == "" {
 		return errors.New("telegram: empty message")
@@ -184,7 +200,7 @@ func (s *service) Send(ctx context.Context, chatID, text string) error {
 	if _, err := rand.Read(b[:]); err != nil {
 		return err
 	}
-	_, err := s.api.MessagesSendMessage(ctx, &tg.MessagesSendMessageRequest{
+	_, err = s.api.MessagesSendMessage(ctx, &tg.MessagesSendMessageRequest{
 		Peer: ent.peer, Message: text, RandomID: int64(binary.LittleEndian.Uint64(b[:])),
 	})
 	if err != nil {
@@ -196,9 +212,9 @@ func (s *service) Send(ctx context.Context, chatID, text string) error {
 // Press presses a callback button: messages.getBotCallbackAnswer, then the
 // message is fetched again because bots usually edit it in response.
 func (s *service) Press(ctx context.Context, chatID, msgID string, b domain.Button) (domain.PressAnswer, error) {
-	ent, ok := s.known[chatID]
-	if !ok {
-		return domain.PressAnswer{}, fmt.Errorf("telegram: unknown chat %s", chatID)
+	ent, err := s.entity(ctx, chatID)
+	if err != nil {
+		return domain.PressAnswer{}, err
 	}
 	id, err := strconv.Atoi(msgID)
 	if err != nil {

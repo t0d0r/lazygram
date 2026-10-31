@@ -71,7 +71,7 @@ func fileName(doc *tg.Document) string {
 // bytes with a file name. The message is fetched again first because file
 // references expire. Nothing is written to disk here.
 func (s *service) Fetch(ctx context.Context, chatID, msgID string) ([]byte, string, error) {
-	ent, id, err := s.locate(chatID, msgID)
+	ent, id, err := s.locate(ctx, chatID, msgID)
 	if err != nil {
 		return nil, "", err
 	}
@@ -80,10 +80,10 @@ func (s *service) Fetch(ctx context.Context, chatID, msgID string) ([]byte, stri
 
 // locate resolves a chat and message id for a download; it is the only
 // part of a fetch that touches the service's shared state.
-func (s *service) locate(chatID, msgID string) (entity, int, error) {
-	ent, ok := s.known[chatID]
-	if !ok {
-		return entity{}, 0, fmt.Errorf("telegram: unknown chat %s", chatID)
+func (s *service) locate(ctx context.Context, chatID, msgID string) (entity, int, error) {
+	ent, err := s.entity(ctx, chatID)
+	if err != nil {
+		return entity{}, 0, err
 	}
 	id, err := strconv.Atoi(msgID)
 	if err != nil {

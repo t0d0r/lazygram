@@ -226,3 +226,5 @@ at the hidden password prompt takes effect only after Enter.
   input); list and pager info moved into the status line.
 - Prompt framed by two thin rules (the upper one carries the send hint);
   status line and window bar below it.
+- Layout: content, rule with the send hint, status line, window bar,
+  input (one rule only).

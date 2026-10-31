@@ -554,8 +554,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 	case chatsMsg:
 		if msg.err != nil {
-			m.setErr("chats: " + errText(msg.err))
-			m.note(m.wins[0], "chats: "+errText(msg.err))
+			m.fail("chats: " + errText(msg.err))
 			break
 		}
 		first := len(m.chats) == 0
@@ -571,8 +570,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		switch {
 		case msg.err != nil:
-			m.setErr("sync: " + errText(msg.err))
-			m.note(m.wins[0], "sync: "+errText(msg.err))
+			m.fail("sync: " + errText(msg.err))
 		case len(msg.fresh) == 0:
 			// Nothing to say: a status that pops up every poll only flickers.
 		}
@@ -583,8 +581,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			w = m.wins[0]
 		}
 		if msg.err != nil {
-			m.setErr("history: " + errText(msg.err))
-			m.note(w, "history: "+errText(msg.err))
+			m.fail("history for " + m.nameOf(msg.chatID) + ": " + errText(msg.err))
 			break
 		}
 		w.loaded = true
@@ -596,8 +593,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			w = m.wins[0]
 		}
 		if msg.err != nil {
-			m.setErr("press: " + errText(msg.err))
-			m.note(w, "press "+msg.label+": "+errText(msg.err))
+			m.fail("press " + msg.label + ": " + errText(msg.err))
 			break
 		}
 		if msg.answer.Updated != nil {
@@ -614,13 +610,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.pressedN++
 		m.setInfo("pressed " + msg.label)
 	case sentMsg:
-		_, w := m.winFor(msg.chatID)
-		if w == nil {
-			w = m.wins[0]
-		}
 		if msg.err != nil {
-			m.setErr("send: " + errText(msg.err))
-			m.note(w, "send failed: "+errText(msg.err))
+			m.fail("send to " + m.nameOf(msg.chatID) + ": " + errText(msg.err))
 			break
 		}
 		m.sentN++
@@ -643,16 +634,14 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			w = m.wins[0]
 		}
 		if msg.err != nil {
-			m.setErr("fetch: " + errText(msg.err))
-			m.note(w, "fetch: "+errText(msg.err))
+			m.fail("fetch: " + errText(msg.err))
 			break
 		}
 		md := m.media(msg.chatID, msg.msgID)
 		m.fetchedN++
 		path, err := m.viewCopy(msg.name, msg.data)
 		if err != nil {
-			m.setErr("view: " + err.Error())
-			m.note(w, "view: "+err.Error())
+			m.fail("view: " + err.Error())
 			break
 		}
 		if md.Image() && imageFile(path) {
@@ -670,8 +659,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case openedMsg:
 		if msg.err != nil {
-			m.setErr("open: " + msg.err.Error())
-			m.note(m.wins[m.cur], "open "+msg.target+": "+msg.err.Error())
+			m.fail("open " + msg.target + ": " + msg.err.Error())
 		} else {
 			m.setInfo("opened " + msg.target)
 		}
@@ -787,6 +775,13 @@ func errText(err error) string {
 		return "live connector not available; run lazygram demo"
 	}
 	return err.Error()
+}
+
+// fail reports a failure in the status line and in the server window,
+// where every error is collected whatever window is current.
+func (m *Model) fail(text string) {
+	m.setErr(text)
+	m.note(m.wins[0], "error: "+text)
 }
 
 // setInfo and setErr show a status; remote text in it is stripped of
@@ -1011,6 +1006,9 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.input = []rune(m.pending.text)
 				m.pending = nil
 			}
+			if n := len(m.input); n > 0 && m.input[n-1] == '\n' { // the first press added a line
+				m.input = m.input[:n-1]
+			}
 			w.enterSends = !w.enterSends
 			m.saveLayout() // the choice is kept per window
 			if w.enterSends {
@@ -1021,6 +1019,11 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.lastCtrlX = now
+		if w.enterSends && w.chatID != "" && m.mode == modeWin && strings.TrimSpace(string(m.input)) != "" {
+			m.input = append(m.input, '\n') // Enter sends: Ctrl-X adds a line instead
+			m.setInfo("line added; Enter sends the message")
+			return m, nil
+		}
 		return m.holdSend()
 	case tea.KeyTab:
 		if m.mode == modeWin && len(m.input) == 0 { // an empty prompt: Tab walks the windows
@@ -1209,9 +1212,12 @@ func (m *Model) enter() (tea.Model, tea.Cmd) {
 			if w.enterSends && w.chatID != "" && m.mode == modeWin {
 				return m.send()
 			}
-			if w.chatID != "" && m.mode == modeWin {
-				m.setErr("Ctrl-X sends the text to " + m.winName(m.cur) + "; Enter runs /commands (double Ctrl-X to swap)")
-			} else {
+			if w.chatID != "" && m.mode == modeWin { // Ctrl-X sends: Enter adds a line to the message
+				m.input = append(m.input, '\n')
+				m.setInfo("line added; Ctrl-X sends the message")
+				return m, nil
+			}
+			{
 				m.input = nil
 				m.setErr("not a command (start with /); Ctrl-X sends text in a chat window")
 			}
@@ -1677,9 +1683,9 @@ func (m *Model) listItems() []domain.Chat {
 	return out
 }
 
-// contentHeight leaves room for the rule, input, rule, status and window
-// bar rows.
-func (m *Model) contentHeight() int { return max(m.height-5, 1) }
+// contentHeight leaves room for the rule, status, window bar and input
+// rows.
+func (m *Model) contentHeight() int { return max(m.height-4, 1) }
 
 func (m *Model) nameWidth() int {
 	w := 4
@@ -1785,8 +1791,8 @@ func (m *Model) View() string {
 		b.WriteByte('\n')
 	}
 	bar, barSpans := m.windowBar()
-	// The prompt sits between two rules; the top one carries the send hint
-	// at its right end, like a label.
+	// A rule separates the content from the status rows; it carries the
+	// send hint at its right end, like a label.
 	hint := ""
 	if w.chatID != "" && m.mode == modeWin {
 		hint = "ctrl-x: to send"
@@ -1796,15 +1802,13 @@ func (m *Model) View() string {
 	}
 	b.WriteString(m.rule(hint))
 	b.WriteByte('\n')
-	b.WriteString(m.inputLine(prompt))
-	b.WriteByte('\n')
-	b.WriteString(m.rule(""))
-	b.WriteByte('\n')
 	b.WriteString(m.statusLine())
 	b.WriteByte('\n')
 	b.WriteString(bar)
-	// Screen rows: h content rows, rule, input, rule, status, window bar.
-	m.clicks = append(append([][]span{}, bodySpans...), nil, nil, nil, nil, barSpans)
+	b.WriteByte('\n')
+	b.WriteString(m.inputLine(prompt))
+	// Screen rows: h content rows, rule, status, window bar, input.
+	m.clicks = append(append([][]span{}, bodySpans...), nil, nil, barSpans, nil)
 	m.animOn = m.hover != "" // the light runs only under the pointer
 	return b.String()
 }
@@ -1955,9 +1959,11 @@ func (m *Model) rule(label string) string {
 	return dimStyle.Render(line)
 }
 
+// inputLine shows the input with line breaks as a return mark, the tail
+// when it is longer than the row.
 func (m *Model) inputLine(prompt string) string {
 	room := max(m.width-lipgloss.Width(prompt)-1, 1)
-	in := m.input
+	in := []rune(strings.ReplaceAll(string(m.input), "\n", "\u21b5"))
 	if len(in) > room {
 		in = in[len(in)-room:]
 	}
@@ -1968,8 +1974,10 @@ const keyHelp = `Keys
   Tab                    on an empty prompt: next window (Shift-Tab previous);
                          otherwise complete like bash: a command, a @user /
                          #chan or a theme; Tab again lists the possibilities
-  Ctrl-X                 send the typed text to this chat (after a short pause)
-  Ctrl-X twice (fast)    toggle "Enter sends" for this window; nothing is sent
+  Ctrl-X                 send the typed text to this chat (after a short pause);
+                         Enter then adds a line to the message
+  Ctrl-X twice (fast)    toggle "Enter sends" for this window; nothing is sent;
+                         Ctrl-X then adds a line instead
   Ctrl-N / Ctrl-P        next / previous window (Alt-Right / Alt-Left too)
   Alt-0..9, Esc 0..9     window 0..9 (0 is the server window)
   Up / Down              walk the input history (commands and sent lines)
