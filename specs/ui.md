@@ -186,7 +186,8 @@ status line and the window.
 | Ctrl-X twice         | toggle "Enter sends" for this window              |
 | Ctrl-N / Ctrl-P      | next / previous window (Alt-Right / Alt-Left too) |
 | Alt-0 .. Alt-9       | window 0 .. 9; Esc followed by the digit does the same (the typed input survives) |
-| PgUp / PgDn          | scroll a page; Up / Down one line                 |
+| Up / Down            | walk the input history (commands and sent lines; in the pager they scroll) |
+| PgUp / PgDn          | scroll a page (the wheel scrolls three lines)     |
 | Home / End           | oldest / newest                                   |
 | Ctrl-R               | sync now                                          |
 | F1                   | print the help into the window                    |
@@ -194,6 +195,14 @@ status line and the window.
 | Ctrl-X               | send the typed text to this window's chat         |
 | Ctrl-U / Ctrl-W      | clear the input / delete the last word            |
 | Ctrl-C               | quit                                              |
+
+## Input history
+
+Every entered line (a command, or text sent with Ctrl-X or Enter) goes
+into a per-session history of up to 200 lines, immediate duplicates
+collapsed. In a window, Up walks back through it and Down forward; past
+the newest entry the line that was being typed comes back. Typing leaves
+the walk. In a list Up/Down move the cursor, in the pager they scroll.
 
 ## Completion
 

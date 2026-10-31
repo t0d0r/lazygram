@@ -160,3 +160,8 @@ at the hidden password prompt takes effect only after Enter.
   files fetched, cache size, windows open/opened, chats visited, commands.
   `/about` prints version, author, repository, license, Go/OS/arch,
   libraries, provider, theme and uptime.
+- Up/Down walk a per-session input history (commands and sent lines, 200
+  max, duplicates collapsed); line scrolling stays on PgUp/PgDn and the
+  wheel; the pager keeps Up/Down for scrolling.
+- v0.4.0 released; v0.4.1 (with /msg, /about, statistics, history) to
+  follow the same steps.

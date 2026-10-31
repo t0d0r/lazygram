@@ -81,8 +81,9 @@ Window 0 is the server window: every chat
 interleaved by time as `HH:MM #chat <sender> text`, plus `-!-` notices. A
 window bar above the input lists every window as `[N:name]`. Open windows,
 the current one and each window's Enter-sends setting are remembered
-across restarts. On exit lazygram prints a session summary and, for a
-release build, a hint when a newer release exists.
+across restarts. On exit lazygram prints the session statistics (time
+wasted, messages, windows, commands) and, for a release build, a hint when
+a newer release exists; `/about` shows version, author and build.
 When a chat gets a message (or has unread messages at start) a window opens
 for it; the status line shows `[Act: 2,3]` for windows with unread. People
 are `@name`, groups and channels are `#name`. lazygram shows what arrives
@@ -123,7 +124,8 @@ reply-keyboard buttons send their label.
 | Tab                 | complete a command, `@`/`#` name or theme like bash; Tab again lists |
 | Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
 | Alt-0 .. Alt-9      | window 0 .. 9 (Esc then the digit works too)       |
-| PgUp / PgDn         | scroll a page; Up / Down a line; Home / End ends   |
+| Up / Down           | input history (commands and sent lines)            |
+| PgUp / PgDn         | scroll a page; Home / End oldest / newest          |
 | Ctrl-R              | sync now                                           |
 | F1                  | print the help into the window                     |
 | Esc                 | close the list or pager, else clear the input      |

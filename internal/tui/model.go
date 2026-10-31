@@ -41,6 +41,7 @@ const (
 )
 
 const (
+	maxHistory     = 200
 	doubleCtrlX    = 600 * time.Millisecond
 	layoutKey      = "windows" // store state key for the window layout
 	themeKey       = "theme"   // store state key for the colour theme
@@ -83,6 +84,10 @@ type Model struct {
 
 	input []rune
 	comp  *completion
+
+	history  []string // lines entered: commands and sent text, oldest first
+	histIdx  int      // position while walking the history; len(history) is the new line
+	histSave []rune   // the line being typed when the walk began
 
 	clicks [][]span // what a click on each screen row does, as of the last View
 
@@ -841,16 +846,22 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnd:
 		w.scroll = 0
 	case tea.KeyUp:
-		if m.mode == modeList {
+		switch m.mode {
+		case modeList:
 			m.listCur = max(m.listCur-1, 0)
-		} else {
+		case modePager:
 			w.scroll++
+		default:
+			m.historyStep(-1)
 		}
 	case tea.KeyDown:
-		if m.mode == modeList {
+		switch m.mode {
+		case modeList:
 			m.listCur++
-		} else {
+		case modePager:
 			w.scroll = max(w.scroll-1, 0)
+		default:
+			m.historyStep(1)
 		}
 	case tea.KeyCtrlR:
 		return m, m.refresh()
@@ -864,6 +875,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 				m.input = append(m.input, r)
 			}
 		}
+		m.histIdx = len(m.history) // typing leaves the history walk
 		if m.mode == modeList {
 			m.listCur = 0
 		}
@@ -888,8 +900,49 @@ func (m *Model) send() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.input = nil
+	m.remember(text)
 	m.setInfo("sending to " + m.nameOf(w.chatID) + "...")
 	return m, m.sendCmd(w.chatID, text)
+}
+
+// remember appends an entered line to the input history (no immediate
+// duplicates) and leaves the walk at the new line.
+func (m *Model) remember(line string) {
+	if line == "" {
+		return
+	}
+	if n := len(m.history); n == 0 || m.history[n-1] != line {
+		m.history = append(m.history, line)
+		if len(m.history) > maxHistory {
+			m.history = m.history[len(m.history)-maxHistory:]
+		}
+	}
+	m.histIdx, m.histSave = len(m.history), nil
+}
+
+// historyStep walks the input history: Up goes back, Down forward, and
+// past the newest entry the line that was being typed comes back.
+func (m *Model) historyStep(d int) {
+	if len(m.history) == 0 {
+		return
+	}
+	if m.histIdx >= len(m.history) {
+		m.histIdx = len(m.history)
+		if d < 0 {
+			m.histSave = append([]rune(nil), m.input...)
+		}
+	}
+	i := m.histIdx + d
+	switch {
+	case i < 0:
+		return
+	case i >= len(m.history):
+		m.histIdx = len(m.history)
+		m.input = append([]rune(nil), m.histSave...)
+		return
+	}
+	m.histIdx = i
+	m.input = []rune(m.history[i])
 }
 
 func (m *Model) enter() (tea.Model, tea.Cmd) {
@@ -928,6 +981,7 @@ func (m *Model) enter() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.input = nil
+	m.remember(line)
 	cmd, err := command.Parse(line)
 	if err != nil {
 		m.setErr(err.Error())
@@ -1616,7 +1670,8 @@ const keyHelp = `Keys
   Ctrl-X twice (fast)    toggle "Enter sends" for this window
   Ctrl-N / Ctrl-P        next / previous window (Alt-Right / Alt-Left too)
   Alt-0..9, Esc 0..9     window 0..9 (0 is the server window)
-  PgUp / PgDn            scroll a page; Up / Down a line
+  Up / Down              walk the input history (commands and sent lines)
+  PgUp / PgDn            scroll a page (the wheel scrolls too)
   Home / End             oldest / newest
   Ctrl-R                 sync now
   F1                     this help

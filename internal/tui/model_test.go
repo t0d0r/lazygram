@@ -1080,3 +1080,52 @@ func TestMsgSendsAndOpensTheWindow(t *testing.T) {
 		t.Fatalf("sent=%v win=%s", f.sent, m.winName(m.cur))
 	}
 }
+
+func TestUpDownWalkTheInputHistory(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	press(m, tea.KeyUp) // nothing yet: no crash, no change
+	enter(m, "/win @alice")
+	typ(m, "hello")
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	enter(m, "/stats")
+	enter(m, "/stats") // duplicates collapse
+	typ(m, "draft")
+	press(m, tea.KeyUp)
+	if got := string(m.input); got != "/stats" {
+		t.Fatalf("up: %q", got)
+	}
+	press(m, tea.KeyUp)
+	if got := string(m.input); got != "hello" {
+		t.Fatalf("up up: %q", got)
+	}
+	press(m, tea.KeyUp)
+	if got := string(m.input); got != "/win @alice" {
+		t.Fatalf("oldest: %q", got)
+	}
+	press(m, tea.KeyUp) // stays at the oldest
+	if got := string(m.input); got != "/win @alice" {
+		t.Fatalf("past oldest: %q", got)
+	}
+	press(m, tea.KeyDown)
+	press(m, tea.KeyDown)
+	press(m, tea.KeyDown)
+	if got := string(m.input); got != "draft" {
+		t.Fatalf("down restores the draft: %q", got)
+	}
+	press(m, tea.KeyUp)
+	typ(m, "!") // editing a recalled line leaves the walk
+	press(m, tea.KeyUp)
+	if got := string(m.input); got != "/stats" {
+		t.Fatalf("after edit: %q", got)
+	}
+	if m.wins[m.cur].scroll != 0 {
+		t.Fatal("Up must not scroll the window")
+	}
+	m.input = nil
+	enter(m, "/search x")
+	press(m, tea.KeyUp)
+	if m.wins[m.cur].scroll != 1 {
+		t.Fatal("in the pager Up scrolls")
+	}
+}
