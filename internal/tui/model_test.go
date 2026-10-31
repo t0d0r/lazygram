@@ -512,3 +512,18 @@ func TestStatsWhoisMe(t *testing.T) {
 		t.Fatal("/me needs text")
 	}
 }
+
+func TestListEnterPicksTheFilteredSelection(t *testing.T) {
+	m := setup(t, newFake())
+	enter(m, "/list ali") // only @alice matches; she is not first in the full list
+	cmd := press(m, tea.KeyEnter)
+	if m.winName(m.cur) != "@alice" || cmd == nil {
+		t.Fatalf("picked %s", m.winName(m.cur))
+	}
+	enter(m, "/list")
+	typ(m, "ne") // #news
+	press(m, tea.KeyEnter)
+	if m.winName(m.cur) != "#news" {
+		t.Fatalf("picked %s", m.winName(m.cur))
+	}
+}

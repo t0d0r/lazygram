@@ -532,11 +532,12 @@ func (m *Model) send() (tea.Model, tea.Cmd) {
 func (m *Model) enter() (tea.Model, tea.Cmd) {
 	line := strings.TrimSpace(string(m.input))
 	if m.mode == modeList && !strings.HasPrefix(line, "/") {
-		m.input = nil
 		if m.listSrc == listWindows {
+			m.input = nil
 			return m, m.switchTo(m.listCur)
 		}
-		items := m.listItems()
+		items := m.listItems() // while the typed filter still applies
+		m.input = nil
 		if len(items) == 0 {
 			m.mode = modeWin
 			return m, nil
