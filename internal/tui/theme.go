@@ -89,6 +89,28 @@ var themes = map[string]theme{
 		Palette:  []string{"#00ffff", "#ffa07a", "#98fb98", "#7fffd4", "#eedd82", "#87cefa", "#ff7f50", "#b0c4de"},
 		Gradient: []string{"#87cefa", "#00ffff", "#7fffd4", "#98fb98", "#eedd82", "#ffa07a", "#ff7f50"},
 	},
+	// Light themes, for terminals with a light background: every colour
+	// is dark enough to read on white, the bars are light grey.
+	"light": {
+		Name: "light", Dim: "#6c6c6c", Day: "#5f5f87", Note: "#005f87", Button: "#af5f00",
+		BarBG: "#d0d0d0", BarFG: "#000000", StatusBG: "#e4e4e4", StatusFG: "#303030", Act: "#af5f00", Error: "#d70000", Link: "#0057af", Spark: "#000000",
+		Palette:  []string{"#005faf", "#d75f00", "#008700", "#af00af", "#875f00", "#008787", "#d70000", "#5f5faf"},
+		Gradient: []string{"#005faf", "#0057af", "#5f5faf", "#af00af", "#d70000", "#d75f00", "#875f00"},
+	},
+	"solarized-light": {
+		// Solarized light: base3 paper, base00 text, base1 comments.
+		Name: "solarized-light", Dim: "#93a1a1", Day: "#93a1a1", Note: "#2aa198", Button: "#b58900",
+		BarBG: "#eee8d5", BarFG: "#586e75", StatusBG: "#eee8d5", StatusFG: "#657b83", Act: "#b58900", Error: "#dc322f", Link: "#268bd2", Spark: "#002b36",
+		Palette:  []string{"#268bd2", "#cb4b16", "#859900", "#d33682", "#b58900", "#2aa198", "#dc322f", "#6c71c4"},
+		Gradient: []string{"#2aa198", "#268bd2", "#6c71c4", "#d33682", "#cb4b16", "#b58900", "#859900"},
+	},
+	"gruvbox-light": {
+		// Gruvbox light: the dark accent set on the cream background.
+		Name: "gruvbox-light", Dim: "#928374", Day: "#928374", Note: "#427b58", Button: "#af3a03",
+		BarBG: "#ebdbb2", BarFG: "#3c3836", StatusBG: "#ebdbb2", StatusFG: "#504945", Act: "#b57614", Error: "#9d0006", Link: "#076678", Spark: "#282828",
+		Palette:  []string{"#076678", "#af3a03", "#79740e", "#8f3f71", "#b57614", "#427b58", "#9d0006", "#d65d0e"},
+		Gradient: []string{"#427b58", "#076678", "#8f3f71", "#9d0006", "#af3a03", "#b57614", "#79740e"},
+	},
 }
 
 // themeNames lists the built-in themes, sorted.

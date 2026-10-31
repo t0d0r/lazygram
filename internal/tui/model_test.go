@@ -1672,7 +1672,7 @@ func TestCompleteArgumentsAndPaths(t *testing.T) {
 	m := setup(t, newFake())
 	for typed, want := range map[string]string{
 		"/open o": "/open out ", "/win l": "/win list ", "/list -": "/list --show-deleted ",
-		"/open out @al": "/open out @alice ", "/win @al": "/win @alice ",
+		"/win @al": "/win @alice ",
 	} {
 		m.input = []rune(typed)
 		m.complete()
@@ -1827,5 +1827,88 @@ func TestFirstHistoryOfAWindowRollsIn(t *testing.T) {
 	m.Update(recentMsg{chatID: "c1", fresh: []domain.Message{{ID: "h2", ChatID: "c1", Sender: "ada", Text: "older", Time: now.Add(-2 * time.Hour)}}})
 	if w2.revealing {
 		t.Fatal("a window with content does not roll in again")
+	}
+}
+
+func TestCompleteOpenMessageIDs(t *testing.T) {
+	m := setup(t, newFake())
+	now := time.Now()
+	m.Update(syncedMsg{at: now, fresh: []domain.Message{
+		{ID: "143541", ChatID: "c2", Sender: "alice", Text: "pic", Time: now, Media: &domain.Media{Kind: "photo"}},
+		{ID: "143999", ChatID: "c2", Sender: "alice", Text: "doc", Time: now, Media: &domain.Media{Kind: "file", Name: "a.pdf"}},
+		{ID: "150000", ChatID: "c2", Sender: "alice", Text: "no attachment", Time: now},
+		{ID: "143000", ChatID: "c1", Sender: "ada", Text: "other chat", Time: now, Media: &domain.Media{Kind: "photo"}},
+	}})
+	enter(m, "/win @alice")
+	for typed, want := range map[string]string{
+		"/open 1435":      "/open 143541 ",
+		"/open out 1439":  "/open out 143999 ",
+		"/fetch 1435":     "/fetch 143541 ",
+		"/open o":         "/open out ",
+		"/open 15":        "/open 15",        // no attachment
+		"/open 1430":      "/open 1430",      // another chat
+		"/open out 1 x":   "/open out 1 x",   // only the first id
+		"/open out out 1": "/open out out 1", // "out" once
+	} {
+		m.input = []rune(typed)
+		m.comp = nil
+		m.complete()
+		if got := string(m.input); got != want {
+			t.Errorf("%q: got %q, want %q", typed, got, want)
+		}
+	}
+	m.input = []rune("/open 14")
+	m.comp = nil
+	m.complete()
+	if got := string(m.input); got != "/open 143" {
+		t.Fatalf("common prefix: %q", got)
+	}
+	m.complete()
+	if !strings.Contains(body(m), "143541  143999") {
+		t.Fatalf("second Tab lists the ids:\n%s", body(m))
+	}
+	m.input = nil
+	enter(m, "/win 0")
+	m.input = []rune("/open 14")
+	m.comp = nil
+	m.complete()
+	if got := string(m.input); got != "/open 14" {
+		t.Fatalf("server window has no attachments to complete: %q", got)
+	}
+}
+
+func TestRedrawDropsNotesKeepsMessages(t *testing.T) {
+	m := setup(t, newFake())
+	enter(m, "/win @alice")
+	w := m.wins[m.cur]
+	m.note(w, "a notice")
+	w.notes = append(w.notes, note{at: time.Now(), text: "a picture", pre: true})
+	enter(m, "/help") // queued slow print into window 0
+	m.input = nil
+	enter(m, "/win @alice")
+	v := strings.Join(m.lines(), "\n")
+	if !strings.Contains(v, "a notice") || !strings.Contains(v, "a picture") || !strings.Contains(v, "hi there") {
+		t.Fatalf("before:\n%s", v)
+	}
+	enter(m, "/redraw")
+	v = strings.Join(m.lines(), "\n")
+	if strings.Contains(v, "a notice") || strings.Contains(v, "a picture") || !strings.Contains(v, "hi there") || len(w.notes) != 0 {
+		t.Fatalf("after:\n%s", v)
+	}
+	if m.isErr {
+		t.Fatalf("status %q", m.status)
+	}
+	// Window 0 was mid help print: /clear there drops the queue too.
+	m.input = nil
+	enter(m, "/win 0")
+	if len(m.slow) == 0 {
+		t.Fatal("help still printing into window 0")
+	}
+	enter(m, "/clear")
+	if len(m.slow) != 0 || m.slowWin != nil || len(m.wins[0].notes) != 0 {
+		t.Fatal("clear drops the notes and the queued lines")
+	}
+	if !strings.Contains(strings.Join(m.lines(), "\n"), "first dev line") {
+		t.Fatal("messages stay in the server window")
 	}
 }

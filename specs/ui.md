@@ -125,6 +125,7 @@ there is no separate help view.
 | command                       | action                                               |
 |-------------------------------|------------------------------------------------------|
 | `/help`, `/?`                 | focus the server window and print the help there     |
+| `/redraw`, `/clear`           | drop the window's notices, help text, pictures and banner; the messages stay; a slow print still queued for it is dropped |
 | `/quit`, `/q`                 | leave                                                |
 | `/refresh`, `/r`              | sync now                                             |
 | `/list [text]`, `/ls`         | selectable chat list; `--show-deleted` includes deleted accounts |
@@ -205,7 +206,10 @@ at once and the choice is kept in the cache state across restarts.
 Built in: `default`, `solarized`, `gruvbox`, `dracula`, `nord`,
 `monokai`, `tokyonight`, `vim` (classic dark Vim: grey comments, cyan,
 yellow, magenta, reverse status) and `emacs` (its default faces on a dark
-terminal with the grey mode line). A theme sets time stamps, separators,
+terminal with the grey mode line); for terminals with a light background
+`light` (dark saturated colours, light grey bars), `solarized-light` and
+`gruvbox-light` (each scheme's light variant with its official values).
+A theme sets time stamps, separators,
 notices, buttons, the topic bar, the status line and window bar, the
 activity and error colours, the nick/chat palette and the banner
 gradient; the terminal's own background is never changed. Colours are
@@ -316,8 +320,11 @@ names; after `/send ` (and its aliases) local paths: entries of the typed
 directory that start with the typed base name, `~` expanded, hidden files
 only when a dot is typed, directories filled in with a trailing `/` and no
 space so the next Tab descends; the caption after the path is free text
-and never completed. Otherwise a command's fixed first words (`/open out`,
-`/win list`, `/list --show-deleted`) and chat names: every non-deleted
+and never completed. After `/open` (and `/fetch`, `/download`): `out` as
+the first word and the ids of the current window's messages that have an
+attachment, also after `/open out`; nothing in the server window.
+Otherwise a command's fixed first words (`/win list`,
+`/list --show-deleted`) and chat names: every non-deleted
 chat whose `@name`/`#name` starts with the word, or whose bare alias
 starts with it when the word has no sigil (then the sigil is added). One
 candidate is filled in with a trailing space; several are extended to

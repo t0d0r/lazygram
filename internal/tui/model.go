@@ -1416,6 +1416,8 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 	switch c.Kind {
 	case command.Help:
 		return m, m.help()
+	case command.Redraw:
+		m.redraw(w)
 	case command.Quit:
 		m.quitting = true
 		return m, tea.Quit
@@ -1808,6 +1810,19 @@ func (m *Model) whois(arg string) {
 	m.note(w, fmt.Sprintf("  %s, %d messages this session, %d cached, %s", win, len(msgs), cached, last))
 }
 
+// redraw implements /redraw: the window keeps its messages and loses
+// everything else, notices, help text, pictures, the banner, and anything
+// still queued for it, as a clean screen in an old terminal would.
+func (m *Model) redraw(w *win) {
+	w.notes = nil
+	w.scroll = 0
+	w.revealing = false
+	if m.slowWin == w {
+		m.slow, m.slowWin = nil, nil
+	}
+	m.setInfo("")
+}
+
 // help prints the command and key reference into the server window, line
 // by line with a small delay, like a terminal on a slow line, and focuses
 // that window so the text is in view wherever /help was typed.
@@ -1887,15 +1902,18 @@ type completion struct {
 // argWords are the fixed words a command takes as its first argument; the
 // chat names still complete after them (/win list, /open out 1234).
 var argWords = map[string][]string{
-	"/open": {"out"}, "/o": {"out"},
 	"/win": {"list"}, "/w": {"list"}, "/window": {"list"},
 	"/list": {"--show-deleted"}, "/l": {"--show-deleted"},
 }
 
+// openCmds are the spellings of /open; after them Tab completes "out" and
+// the ids of this window's messages with attachments.
+var openCmds = map[string]bool{"/open": true, "/fetch": true, "/download": true}
+
 // complete expands the word at the end of the input the way bash does: a
-// command name when the line starts with one, a theme after /theme, a
-// command's fixed words (/open out, /win list), a local path after /send,
-// else a chat name (@user or #channel). One candidate is filled in with a
+// command name when the line starts with one, a theme after /theme, "out"
+// and attachment message ids after /open, a command's fixed words (/win
+// list), a local path after /send, else a chat name (@user or #channel). One candidate is filled in with a
 // space; several are extended to their longest common prefix, and a second
 // Tab that cannot extend further prints them into the window.
 func (m *Model) complete() {
@@ -1921,6 +1939,20 @@ func (m *Model) complete() {
 		for _, n := range themeNames() {
 			if strings.HasPrefix(n, word) {
 				cands = append(cands, n)
+			}
+		}
+	case start > 0 && openCmds[strings.Fields(line)[0]]:
+		// /open [out] <msg>: "out" as the first word, then the ids of the
+		// messages with attachments in this window's chat.
+		prior := strings.Fields(line)[1:]
+		if len(prior) == 0 && strings.HasPrefix("out", word) {
+			cands = append(cands, "out")
+		}
+		if w := m.wins[m.cur]; w.chatID != "" && (len(prior) == 0 || len(prior) == 1 && (prior[0] == "out" || prior[0] == "ext" || prior[0] == "viewer")) {
+			for _, x := range m.msgs {
+				if x.ChatID == w.chatID && x.Media != nil && strings.HasPrefix(x.ID, word) {
+					cands = append(cands, x.ID)
+				}
 			}
 		}
 	case strings.HasPrefix(line, "/send ") || strings.HasPrefix(line, "/file ") || strings.HasPrefix(line, "/upload "):

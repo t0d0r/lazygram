@@ -35,6 +35,7 @@ const (
 	Delete        // delete the last own message in this window
 	Nicks         // toggle showing chats by nick (@alias) or by name (@title)
 	SendFile      // send a local file: Arg is "<path> [caption]"
+	Redraw        // drop the notices and pictures from the window, keep the messages
 )
 
 // Command is a parsed slash command.
@@ -67,6 +68,7 @@ var table = map[string]Kind{
 	"delete": Delete, "del": Delete, "rm": Delete,
 	"names": Nicks, "nicks": Nicks,
 	"send": SendFile, "file": SendFile, "upload": SendFile,
+	"redraw": Redraw, "clear": Redraw,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -116,6 +118,7 @@ const HelpText = `Commands
   /me <text>             send an action line
   /msg <@user|#chan> <text>  send to that chat, opening its window
   /send <path> [caption] send a local file; pictures go as photos (Tab completes the path)
+  /redraw, /clear        drop the notices and pictures from this window; the messages stay
   /edit [text]           edit your last message here (no text: put it in the prompt)
   /delete                delete your last message here, for everyone
   /press N | <msg> N     press a bot button (numbers shown under it)

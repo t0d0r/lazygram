@@ -283,3 +283,12 @@ at the hidden password prompt takes effect only after Enter.
 - README: one screenshot, a compact Features list; the Architecture,
   Telegram connector and Security constraints sections are gone (specs/
   overview.md, providers.md and security.md hold that material).
+- Tab after `/open` / `/open out` completes the ids of the current
+  window's messages with attachments (and `out` as the first word);
+  `/open` left the fixed-word table for its own completion case.
+- Themes for light terminals: `light`, `solarized-light`, `gruvbox-light`
+  (12 themes now; `gru` is no longer a unique prefix, `gruvbox` still
+  matches exactly).
+- `/redraw` (`/clear`): the window keeps its messages and loses its
+  notes (notices, help, pictures, banner) and any slow print queued for
+  it; scroll back to the bottom.

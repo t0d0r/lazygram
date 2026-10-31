@@ -148,10 +148,11 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/names`                   | show chats by nick (`@alias`) or by name (`@Title`) |
 | `/press N`                 | press button N under the latest bot message; `/press <msg> N` for an older one |
 | `/open [msg]`              | fetch a `[photo]`/`[file]` into the encrypted vault; pictures are shown in the window (`/open out` for the system viewer) |
-| `/theme [name]`            | colour themes: default, solarized, gruvbox, dracula, nord, monokai, tokyonight, vim, emacs |
+| `/theme [name]`            | colour themes: default, solarized, gruvbox, dracula, nord, monokai, tokyonight, vim, emacs; for light terminals: light, solarized-light, gruvbox-light |
 | `/about`                   | version, author, build and libraries          |
 | `/fx`                      | running lights over links and buttons on/off  |
 | `/mouse`                   | mouse reporting on/off (off: drag selects text; or hold Shift/Option while dragging) |
+| `/redraw`, `/clear`        | drop notices, help text and pictures from this window; messages stay |
 | `/refresh`, `/help`, `/quit` | sync now; print the help into the server window; leave |
 
 In a chat window, type text and press **Ctrl-X** to send it to that chat;
@@ -169,7 +170,7 @@ viewer instead.
 
 | key                 | action                                             |
 |---------------------|----------------------------------------------------|
-| Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash: commands, chats, themes, `/open out`, `/win list`, paths after `/send` |
+| Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash: commands, chats, themes, `/open out` and attachment message ids, `/win list`, paths after `/send` |
 | Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
 | Alt-0 .. Alt-9      | window 0 .. 9 (Esc then the digit works too)       |
 | Up / Down           | input history (commands and sent lines)            |

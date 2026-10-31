@@ -43,6 +43,8 @@ func TestParse(t *testing.T) {
 		{"/rm", Command{Delete, ""}, false},
 		{"/names", Command{Nicks, ""}, false},
 		{"/send ~/pic.png a caption", Command{SendFile, "~/pic.png a caption"}, false},
+		{"/redraw", Command{Redraw, ""}, false},
+		{"/clear", Command{Redraw, ""}, false},
 		{"/bogus", Command{}, true},
 		{"/", Command{}, true},
 		{"hello", Command{}, true},

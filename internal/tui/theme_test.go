@@ -29,7 +29,7 @@ func TestThemesAreComplete(t *testing.T) {
 			t.Errorf("%s: palette %d gradient %d", name, len(th.Palette), len(th.Gradient))
 		}
 	}
-	for _, want := range []string{"default", "solarized", "gruvbox", "dracula", "nord", "monokai", "tokyonight", "vim", "emacs"} {
+	for _, want := range []string{"default", "solarized", "gruvbox", "dracula", "nord", "monokai", "tokyonight", "vim", "emacs", "light", "solarized-light", "gruvbox-light"} {
 		if _, ok := themes[want]; !ok {
 			t.Errorf("missing theme %s", want)
 		}
@@ -37,8 +37,14 @@ func TestThemesAreComplete(t *testing.T) {
 	if _, ok := lookupTheme("NORD"); !ok {
 		t.Error("case-insensitive lookup")
 	}
-	if _, ok := lookupTheme("gru"); !ok {
+	if _, ok := lookupTheme("drac"); !ok {
 		t.Error("unique prefix")
+	}
+	if _, ok := lookupTheme("gru"); ok {
+		t.Error("gru is ambiguous between gruvbox and gruvbox-light")
+	}
+	if t2, ok := lookupTheme("gruvbox"); !ok || t2.Name != "gruvbox" {
+		t.Error("an exact name wins over a longer one")
 	}
 	if _, ok := lookupTheme("x"); ok {
 		t.Error("unknown theme")
