@@ -10,3 +10,4 @@ session.json
 *.log
 .DS_Store
 .envrc
+*_local.go

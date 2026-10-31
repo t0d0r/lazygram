@@ -37,8 +37,11 @@ No environment variables. Everything is under `<data>/telegram/`:
   own because a shared registration gets rate-limited or banned.
   Resolution order at every start: `app.json`, then the environment
   (`TG_API_ID`/`TG_API_HASH`, or nchat's `TG_APIID`/`TG_APIHASH`), then the
-  value embedded at build time (`-ldflags -X main.buildAppID=...
-  -X main.buildAppHash=...`, `make build TG_API_ID=... TG_API_HASH=...`).
+  value carried by the binary: the git-ignored `cmd/lazygram/app_local.go`
+  that `make embed` generates from `TG_API_ID`/`TG_API_HASH` (nchat keeps
+  its registration in source the same way, but committed; lazygram's file
+  is ignored because the registration is personal), or `-ldflags -X
+  main.buildAppID=... -X main.buildAppHash=...` for one build.
   `lazygram login` stores whatever it resolved from the environment, or asks
   (hash hidden) when nothing is found, so later starts need no environment.
   A variable set without its partner, or with a bad value, is an error that

@@ -38,11 +38,14 @@ forks not to reuse theirs). Get yours once from https://my.telegram.org under
   takes them from there, stores them in the state directory and never asks.
   nchat's names `TG_APIID` / `TG_APIHASH` are accepted too.
 - Type them at the first `lazygram login`; they are stored the same way.
-- Embed them in a personal build: `make build TG_API_ID=... TG_API_HASH=...`
-  (with direnv active, `make build` picks them up by itself).
+- Bake them into the binary like nchat: `make embed` writes the git-ignored
+  `cmd/lazygram/app_local.go` from `TG_API_ID`/`TG_API_HASH` (direnv), and
+  every `make build` after that carries them. No environment, no prompt.
+  (`make build TG_API_ID=... TG_API_HASH=...` embeds for one build only.)
 
-A stored registration wins over the environment; delete
-`<state>/telegram/app.json` to switch. Never commit these values.
+A stored registration wins over the environment, which wins over the baked-in
+one; delete `<state>/telegram/app.json` to switch. Never commit these values:
+`.envrc`, `*_local.go` and `.state/` are git-ignored for that reason.
 
 ## Using it
 

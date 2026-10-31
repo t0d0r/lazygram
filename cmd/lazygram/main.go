@@ -29,9 +29,10 @@ import (
 
 var version = "0.2.0"
 
-// buildAppID and buildAppHash embed a Telegram application registration at
-// build time (make build TG_API_ID=... TG_API_HASH=...), so a personal build
-// never asks for one. They are empty in a plain build.
+// buildAppID and buildAppHash carry a Telegram application registration in
+// the binary, like nchat's built-in one, so a personal build never asks for
+// it. They are set by the git-ignored app_local.go that "make embed" writes,
+// or by -ldflags -X. They are empty in a plain build.
 var buildAppID, buildAppHash string
 
 const notLinked = `lazygram is not linked to a Telegram account yet.
