@@ -42,7 +42,14 @@ Ctrl-L chats, Ctrl-R sync, F1 help, Esc close, Ctrl-C quit.
 `[time] [provider] [N msgs] [N chats] [sync state] [-N lines] message`.
 A background sync runs every 5 seconds (Poll option).
 
+## Subcommands and flags
+
+`lazygram` (linked Telegram account), `lazygram demo`, `lazygram login`.
+Flags: `-data DIR` (state directory, default `~/.local/state/lazygram`),
+`-smoke`, `-ascii` (login QR code with `#`), `-version`. Poll interval: demo
+5s, telegram 10s.
+
 ## Non-interactive mode
 
 When stdin or stdout is not a terminal, or with -smoke, lazygram syncs once,
-prints one 100x24 screen and exits 0.
+prints one 100x24 screen and exits 0. `login` refuses without a terminal.

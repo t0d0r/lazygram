@@ -1,70 +1,89 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func env(m map[string]string) Getenv { return func(k string) string { return m[k] } }
+// goodHash is a well-formed placeholder, built so no literal looks like a secret.
+var goodHash = strings.Repeat("ab", 16)
 
-func TestDefaultsToDemo(t *testing.T) {
-	c, err := Load(env(map[string]string{EnvDataDir: "/x"}))
-	if err != nil || c.Provider != ProviderDemo || c.DataDir != "/x" {
-		t.Fatalf("%+v %v", c, err)
-	}
-}
-
-func TestUnknownProvider(t *testing.T) {
-	_, err := Load(env(map[string]string{EnvProvider: "irc", EnvDataDir: "/x"}))
-	if err == nil || !strings.Contains(err.Error(), "unknown provider") {
-		t.Fatalf("got %v", err)
-	}
-}
-
-func TestTelegramMissingEverything(t *testing.T) {
-	_, err := Load(env(map[string]string{EnvProvider: "telegram", EnvDataDir: "/x"}))
-	if err == nil {
-		t.Fatal("want error")
-	}
-	for _, name := range []string{EnvTGAPIID, EnvTGAPIHash, EnvTGSession} {
-		if !strings.Contains(err.Error(), name) {
-			t.Errorf("error should name %s: %v", name, err)
-		}
-	}
-}
-
-func TestTelegramErrorsNeverEchoSecrets(t *testing.T) {
-	_, err := Load(env(map[string]string{
-		EnvProvider: "telegram", EnvDataDir: "/x",
-		EnvTGAPIID: "abc", EnvTGAPIHash: "s3cret-hash", EnvTGSession: "/s",
-	}))
-	if err == nil || strings.Contains(err.Error(), "s3cret-hash") || strings.Contains(err.Error(), "abc") {
-		t.Fatalf("got %v", err)
-	}
-}
-
-func TestTelegramValid(t *testing.T) {
-	c, err := Load(env(map[string]string{
-		EnvProvider: "Telegram", EnvDataDir: "/x",
-		EnvTGAPIID: "12345", EnvTGAPIHash: "h", EnvTGSession: "/s",
-		EnvTGChats: "dev=@somegroup, ops=-100200",
-	}))
-	if err != nil {
+func TestAppValidate(t *testing.T) {
+	if err := (App{APIID: 12345, APIHash: goodHash}).Validate(); err != nil {
 		t.Fatal(err)
 	}
-	if c.Telegram.APIID != 12345 || len(c.Telegram.Chats) != 2 || c.Telegram.Chats[1].Alias != "ops" {
-		t.Fatalf("%+v", c.Telegram)
+	bad := []App{{}, {APIID: 0, APIHash: goodHash}, {APIID: 1, APIHash: ""}, {APIID: 1, APIHash: "short"}, {APIID: 1, APIHash: "has space " + goodHash}}
+	for _, a := range bad {
+		if a.Validate() == nil {
+			t.Errorf("%+v should fail", a)
+		}
 	}
 }
 
-func TestParseChats(t *testing.T) {
-	bad := []string{"novalue", "a=", "=b", "a b=c", "#a=c", "a=1,A=2"}
-	for _, s := range bad {
-		if _, err := ParseChats(s); err == nil {
-			t.Errorf("%q should fail", s)
-		}
+func TestParseApp(t *testing.T) {
+	a, err := ParseApp(" 42 ", " "+goodHash+"\n")
+	if err != nil || a.APIID != 42 || a.APIHash != goodHash {
+		t.Fatalf("%+v %v", a, err)
 	}
-	if c, err := ParseChats(" , "); err != nil || len(c) != 0 {
-		t.Errorf("blank entries: %v %v", c, err)
+	if _, err := ParseApp("x", goodHash); err == nil {
+		t.Fatal("non-numeric id")
+	}
+}
+
+func TestSaveLoadApp(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "tg")
+	if _, found, err := LoadApp(dir); found || err != nil {
+		t.Fatalf("missing: %v %v", found, err)
+	}
+	want := App{APIID: 7, APIHash: goodHash}
+	if err := SaveApp(dir, want); err != nil {
+		t.Fatal(err)
+	}
+	got, found, err := LoadApp(dir)
+	if err != nil || !found || got != want {
+		t.Fatalf("%+v %v %v", got, found, err)
+	}
+	st, _ := os.Stat(filepath.Join(dir, appFile))
+	if st.Mode().Perm()&0o077 != 0 {
+		t.Fatalf("app file must be owner-only, got %v", st.Mode())
+	}
+	if SaveApp(dir, App{}) == nil {
+		t.Fatal("invalid app must not be saved")
+	}
+}
+
+func TestLoadAppRejectsCorrupt(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, appFile), []byte("{nope"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, err := LoadApp(dir); !found || err == nil {
+		t.Fatalf("%v %v", found, err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, appFile), []byte(`{"api_id":0,"api_hash":""}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := LoadApp(dir); err == nil || !strings.Contains(err.Error(), appFile) {
+		t.Fatalf("invalid content: %v", err)
+	}
+}
+
+func TestTelegramValidate(t *testing.T) {
+	if err := (Telegram{App: App{APIID: 1, APIHash: goodHash}, SessionDir: "/s"}).Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if (Telegram{App: App{APIID: 1, APIHash: goodHash}}).Validate() == nil {
+		t.Fatal("session dir required")
+	}
+	if (Telegram{SessionDir: "/s"}).Validate() == nil {
+		t.Fatal("app required")
+	}
+}
+
+func TestTelegramDirUnderData(t *testing.T) {
+	if TelegramDir("/d") != filepath.Join("/d", "telegram") {
+		t.Fatal(TelegramDir("/d"))
 	}
 }

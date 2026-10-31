@@ -3,14 +3,20 @@ PREFIX  ?= $(HOME)/.local
 STATE   ?= $(CURDIR)/.state
 GOFILES  = $(shell find . -name '*.go' -not -path './.state/*')
 
-.PHONY: help build test lint check run smoke fmt install uninstall clean
+# Optional: embed your own Telegram application registration so a personal
+# build never asks for it. Never commit these values.
+TG_API_ID   ?=
+TG_API_HASH ?=
+LDFLAGS      = -X main.buildAppID=$(TG_API_ID) -X main.buildAppHash=$(TG_API_HASH)
+
+.PHONY: help build test lint check run demo login smoke fmt install uninstall clean
 .DEFAULT_GOAL := help
 
 help: ## list the targets
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | sed -E 's/^([a-z-]+):.*## (.*)/  \1\t\2/'
 
 build: ## build ./lazygram
-	go build -o $(BIN) ./cmd/lazygram
+	go build -ldflags '$(LDFLAGS)' -o $(BIN) ./cmd/lazygram
 
 test: ## run all tests
 	go test ./...
@@ -22,11 +28,17 @@ lint: ## gofmt check, go vet, golangci-lint (staticcheck, errcheck, unused)
 
 check: lint test ## lint and test; must pass before a commit
 
-run: build ## build and start the TUI (demo provider unless configured)
-	LAZYGRAM_DATA_DIR=$(STATE) ./$(BIN)
+run: build ## build and start with the linked Telegram account (state in .state/)
+	./$(BIN) -data $(STATE)
+
+demo: build ## build and start with invented offline data
+	./$(BIN) -data $(STATE) demo
+
+login: build ## link a Telegram account by QR code (state in .state/)
+	./$(BIN) -data $(STATE) login
 
 smoke: build ## non-interactive: sync the demo once, print one screen
-	LAZYGRAM_DATA_DIR=$(STATE) ./$(BIN) -smoke
+	./$(BIN) -data $(STATE) -smoke demo
 
 fmt: ## format in place
 	gofmt -w $(GOFILES)

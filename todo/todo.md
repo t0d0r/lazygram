@@ -18,14 +18,19 @@
 
 - [x] choose library: gotd/td (specs/providers.md)
 - [x] implement telegram.Client: dialogs, history, conversion, tested with fakes
-- [x] user-run `lazygram login` storing session under LAZYGRAM_TG_SESSION (specs/providers.md)
+- [x] user-run `lazygram login` by QR code, nchat style (specs/providers.md)
+- [x] no environment variables: state dir flag, app registration stored locally
+- [x] exit with a hint when not linked; `lazygram demo` subcommand
+- [x] all dialogs with generated aliases; change-driven sync; flood-wait retry
 - [ ] first real-service login and smoke test by the operator
-- [ ] flood-wait handling and error backoff
-- [ ] resolve chat refs beyond the 100 most recent dialogs
+- [ ] reconnect after a dropped connection
+- [ ] dialogs beyond the 100 most recent; per-chat include/exclude list
+- [ ] persist the per-chat cursor so a restart costs no history requests
+- [ ] `lazygram logout` (delete session file)
 
 ## Next
 
-- [ ] load history on demand from the service when the cache lacks it
+- [ ] load older history on demand from the service when the cache lacks it
 - [ ] sending messages (post-v0.1)
 - [ ] unread markers and mention highlight
 - [ ] store size cap or compaction (specs/storage.md)

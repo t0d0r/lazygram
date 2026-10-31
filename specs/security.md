@@ -1,7 +1,9 @@
 # Security
 
-- Credentials come from environment variables only; never from flags or
-  tracked files. Validation errors name variables, never values (tested).
+- No environment variables and no flags carry credentials. The Telegram
+  application registration is typed once at `lazygram login` (hash hidden)
+  and stored 0600 in the state directory; errors never print its value.
+  lazygram ships no registration and does not reuse nchat's.
 - The tree must contain no secrets, session files, phone numbers, user ids,
   real chat titles or messages. Demo data is invented. `.gitignore` covers
   `.env*`, `*.pem`, `*.key`, session files and `.state/`.
@@ -9,12 +11,14 @@
 - lazygram does not log message content.
 - No interactive Telegram login is performed by the project's tooling; the
   connector fails closed when no authorized session exists.
-- `lazygram login` reads phone, code and password only from the interactive
-  terminal (password without echo) and never prints or stores them; the only
-  artifact is the session file.
-- The session file grants account access: keep `LAZYGRAM_TG_SESSION` outside
-  the repository (or in a git-ignored path) and treat it like a password.
-- Only explicitly configured chats are fetched.
+- `lazygram login` links by QR code, so no phone number or SMS code passes
+  through lazygram; a two-step password is read without echo and never
+  stored. The only login artifact is the session file.
+- The session file grants account access: the state directory (default
+  `~/.local/state/lazygram`, or `.state/` for make targets, git-ignored) is
+  0700 and must be treated like a password store.
+- Unlinking is done from the phone (Settings -> Devices -> terminate); the
+  next start then exits with the "not linked" hint.
 - Third-party dependency: github.com/gotd/td; review upgrades before bumping.
 - Run gitleaks before the first push and review `git log -p`.
 

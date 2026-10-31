@@ -8,8 +8,8 @@ type Provider interface {
 }
 ```
 
-`Sync` returns messages strictly newer than `since` (zero means backlog). The
-store de-duplicates by (chat id, message id), so providers may overlap.
+`Sync` returns messages newer than `since` (zero means the cache is empty).
+The store de-duplicates by (chat id, message id), so providers may overlap.
 Message times are absolute; the UI converts to local time.
 
 ## demo
@@ -17,52 +17,89 @@ Message times are absolute; the UI converts to local time.
 Offline, synthetic, no network. Anchored to start time: older lines are
 already in the past, later lines "arrive" over about 4 minutes. Message ids
 are fixed, so a cached run keeps its first-run timestamps (known quirk).
+Started with `lazygram demo`; state under `<data>/demo/`.
 
 ## telegram
 
-Config via environment (see README). `telegram.New` validates configuration.
-`telegram.Client` (Dialogs, History) is the seam; with a nil client every call
-returns ErrNotImplemented.
-
 Library decision: github.com/gotd/td (pure Go MTProto, no cgo, actively
-maintained). Used through `telegram.MTProto`, built on `tg.Client` via a small
-`api` interface so the logic is tested with fakes and no network.
+maintained). `telegram.Client` (Dialogs, History) is the seam; `MTProto` is
+the gotd implementation, built on `tg.Client` through a small `api` interface
+so the logic is tested with fakes and no network. With a nil client the
+provider returns ErrNotImplemented.
 
-Behavior of `MTProto`:
-- Lazy: no connection until the first Dialogs/History call, and only when
-  LAZYGRAM_PROVIDER=telegram. Session state: `$LAZYGRAM_TG_SESSION/session.json`
-  (dir 0700, file 0600, never committed).
-- The running TUI never logs in. If the session holds no authorized account
-  every call fails with ErrNotLoggedIn. Sign-in is the separate, user-run
-  `lazygram login` subcommand (below).
-- Read-only. Only messages.getDialogs and messages.getHistory are called.
-- Only chats listed in LAZYGRAM_TG_CHATS are read. Refs: `@username` or the
-  Bot-API style numeric id (user `42`, group `-5`, channel `-100<id>`), found
-  among the 100 most recent dialogs. Unknown aliases are reported by name.
-- Chat ids are `telegram:<bot-api id>`; message ids are Telegram message ids.
-- Sync pages backwards per chat until messages not newer than `since`, capped
-  at 300 messages per chat per call. Service messages are skipped; media-only
-  messages show as `[media]`.
-- Limits: no flood-wait handling beyond the library defaults, no update
-  stream (polling every 5s), no topics/forums, no edit/delete tracking.
+### Configuration
+
+No environment variables. Everything is under `<data>/telegram/`:
+
+- `app.json`: the Telegram application registration (api id and hash from
+  https://my.telegram.org). Decision: lazygram ships no registration of its
+  own and does not reuse nchat's; nchat's SCOPE.md asks forks to obtain their
+  own because a shared registration gets rate-limited or banned. The first
+  `lazygram login` asks for it once (hash hidden) and stores it 0600. A
+  personal build may embed one with `-ldflags -X main.buildAppID=...
+  -X main.buildAppHash=...` (`make build TG_API_ID=... TG_API_HASH=...`); a
+  stored file wins over the embedded value.
+- `session.json`: the gotd session (auth key and account authorization),
+  written 0600.
+- the history cache (specs/storage.md).
+
+### Start-up contract
+
+`lazygram` with no subcommand:
+1. No registration or no session file: exit 2 with a message naming
+   `lazygram login` and `lazygram demo`. No network.
+2. Session present: connect (45s limit) and check authorization. Not
+   authorized (for example terminated from the phone): exit 2 with the same
+   hint. Unreachable: exit 1 with a network message.
+3. Authorized: start the TUI. The connector is sticky: a failure during the
+   run surfaces in the status line and needs a restart.
 
 ### `lazygram login`
 
-One-time, interactive, user-run. Requires LAZYGRAM_TG_API_ID, _API_HASH and
-_SESSION (provider need not be set); refuses without a terminal on stdin.
-Prompts on the terminal for phone (international format, normalized by
-`NormalizePhone`), the login code, and, if the account has two-step
-verification, the password (read without echo). Answers are never read from
-flags, environment or files, never echoed, never logged. If an authorized
-session already exists it prints "already logged in" and changes nothing.
-Accounts are never created (sign-up and terms-of-service acceptance are
-refused). On success it prints only the session directory and enforces mode
-0600 on `session.json`. Ctrl-C cancels. The flow is covered by tests for the
-prompter, phone normalization and the authenticator adapter; the exchange with
-Telegram itself is untested.
+QR login, the way nchat and the official desktop apps link a device
+(`auth.exportLoginToken`): the terminal shows a QR code encoding the
+`tg://login?token=...` URL; the phone scans it under Settings -> Devices ->
+Link Desktop Device. No phone number, SMS code or sign-up. When the token
+expires before it is scanned a fresh code is shown. If the account has
+two-step verification the password is asked once, hidden. An already
+authorized session prints "already linked" and changes nothing. Needs a
+terminal on stdin; Ctrl-C cancels. Only the session file is written.
+
+The QR code is drawn as nchat draws it: two modules per character row with
+half-block characters, light modules as foreground, so it reads on a dark
+terminal background (41 columns for a login token). `-ascii` draws two `#`
+per module instead (82 columns).
+
+The exchange with Telegram is untested against the real service; the
+callbacks, config gating and QR rendering are covered by tests.
+
+### Chats
+
+All dialogs are shown, up to the 100 most recent (no per-chat selection yet).
+Chat id: `telegram:<Bot-API style id>` (users positive, groups `-id`,
+channels `-100<id>`). Alias: the username, else a slug of the title (lower
+case, letters and digits, dashes, at most 14 characters); clashes get `-2`,
+`-3`, ... in dialog order. The own "Saved Messages" chat is `saved`.
+Forbidden peers and folders are skipped.
+
+### Sync
+
+Each poll (10s) costs one `messages.getDialogs`. History is fetched only for
+chats whose top message id changed since the last poll, paging backwards
+(100 per page) until the previously seen id, at most 300 messages per chat
+per poll. After a restart nothing is tracked yet, so each chat with messages
+costs one page bounded by `since`; with an empty cache a backlog of 50 per
+chat is taken. Service messages are skipped; media-only messages show as
+`[media]`. Sender: user name, else post author, else `me` for own messages,
+else the peer's name in private chats, else `channel`. A FLOOD_WAIT of up to
+60s is slept once and the request retried; longer waits surface as errors.
+
+Limits: no update stream (polling only), no topics/forums, no edit/delete
+tracking, no reconnect, chats beyond the 100 most recent are not shown, the
+per-chat cursor is in memory only.
 
 ## Adding a service
 
-Implement Provider in internal/provider/<name>, add its name and config in
-internal/config, and add one case in cmd/lazygram. Chat IDs must be unique
-across services (prefix with the service name).
+Implement Provider in internal/provider/<name>, add a subcommand in
+cmd/lazygram. Chat IDs must be unique across services (prefix with the
+service name).

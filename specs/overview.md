@@ -18,19 +18,22 @@ Bubbletea TUI, slash commands, key bindings, chat list, history pager with
 search, JSONL cache, demo provider, config validation, inert Telegram stub.
 Read-only: sending messages is out of scope.
 
-## Live Telegram limitations (v0.1)
+## Live Telegram limitations
 
 The live provider uses gotd/td (specs/providers.md) and is read-only. It
-needs operator-supplied API credentials and an already authorized session in
-LAZYGRAM_TG_SESSION, created by the user-run `lazygram login`; without one it
-fails with a clear error. The live path has only been tested against fakes, never
-against the real service. Polling, not push updates.
+needs a one-time QR login (`lazygram login`) and the user's own Telegram
+application registration, asked once and stored locally; without them
+lazygram exits and says how to link an account or start the demo. No
+environment variables. The live path has only been tested against fakes,
+never against the real service. Polling, not push updates; 100 most recent
+dialogs; no per-chat selection yet.
 
 ## Acceptance criteria
 
 1. `make check` passes (gofmt, vet, golangci-lint, tests).
-2. `make run` starts with no account using the demo provider; `make smoke`
-   prints one screen non-interactively.
+2. `lazygram demo` starts with no account; `lazygram` without a linked
+   account exits with status 2 and names `lazygram login` and
+   `lazygram demo`; `make smoke` prints one screen non-interactively.
 3. Feed lines from different chats interleave in time order and show time,
    alias, sender and text.
 4. Commands help, quit, refresh, chats, select, filter, history, search work;

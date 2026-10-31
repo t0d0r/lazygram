@@ -1,8 +1,11 @@
-// Package config reads and validates settings from environment variables.
-// Nothing here is read from, or written to, tracked files.
+// Package config holds runtime settings. Nothing is read from environment
+// variables: the data directory comes from a flag (default under the home
+// directory) and the Telegram application registration is stored once in
+// local, git-ignored state.
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -11,123 +14,112 @@ import (
 	"strings"
 )
 
-// Environment variable names.
 const (
-	EnvProvider  = "LAZYGRAM_PROVIDER"    // "demo" (default) or "telegram"
-	EnvDataDir   = "LAZYGRAM_DATA_DIR"    // local runtime state directory
-	EnvTGAPIID   = "LAZYGRAM_TG_API_ID"   // Telegram application id (integer)
-	EnvTGAPIHash = "LAZYGRAM_TG_API_HASH" // Telegram application hash
-	EnvTGSession = "LAZYGRAM_TG_SESSION"  // directory for the local session state
-	EnvTGChats   = "LAZYGRAM_TG_CHATS"    // comma list of alias=chat-ref entries
-)
-
-// Provider names.
-const (
-	ProviderDemo     = "demo"
-	ProviderTelegram = "telegram"
+	stateDirName = "lazygram"
+	appFile      = "app.json"
 )
 
 // Config is the validated runtime configuration.
 type Config struct {
-	Provider string
-	DataDir  string // root for per-provider history caches
-	Telegram Telegram
+	DataDir string // root for per-provider state and history caches
 }
 
-// Telegram holds the live connector settings. Zero unless provider=telegram.
-type Telegram struct {
-	APIID      int
-	APIHash    string
-	SessionDir string
-	Chats      []ChatRef
-}
-
-// ChatRef maps a display alias to a Telegram chat reference.
-type ChatRef struct {
-	Alias string
-	Ref   string
-}
-
-// Getenv abstracts os.Getenv for tests.
-type Getenv func(string) string
-
-// Load builds a Config from the environment, applying defaults and validating.
-func Load(getenv Getenv) (Config, error) {
-	c := Config{Provider: strings.ToLower(strings.TrimSpace(getenv(EnvProvider)))}
-	if c.Provider == "" {
-		c.Provider = ProviderDemo
-	}
-	c.DataDir = strings.TrimSpace(getenv(EnvDataDir))
-	if c.DataDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return c, fmt.Errorf("%s not set and home directory unknown: %w", EnvDataDir, err)
-		}
-		c.DataDir = filepath.Join(home, ".local", "state", "lazygram")
-	}
-	switch c.Provider {
-	case ProviderDemo:
-		return c, nil
-	case ProviderTelegram:
-		tg, err := loadTelegram(getenv)
-		c.Telegram = tg
-		return c, err
-	default:
-		return c, fmt.Errorf("%s: unknown provider %q (want %s or %s)", EnvProvider, c.Provider, ProviderDemo, ProviderTelegram)
-	}
-}
-
-func loadTelegram(getenv Getenv) (Telegram, error) {
-	var tg Telegram
-	var errs []error
-	if raw := strings.TrimSpace(getenv(EnvTGAPIID)); raw == "" {
-		errs = append(errs, fmt.Errorf("%s is required", EnvTGAPIID))
-	} else if id, err := strconv.Atoi(raw); err != nil || id <= 0 {
-		errs = append(errs, fmt.Errorf("%s must be a positive integer", EnvTGAPIID))
-	} else {
-		tg.APIID = id
-	}
-	tg.APIHash = strings.TrimSpace(getenv(EnvTGAPIHash))
-	if tg.APIHash == "" {
-		errs = append(errs, fmt.Errorf("%s is required", EnvTGAPIHash))
-	}
-	tg.SessionDir = strings.TrimSpace(getenv(EnvTGSession))
-	if tg.SessionDir == "" {
-		errs = append(errs, fmt.Errorf("%s is required (a local, git-ignored directory)", EnvTGSession))
-	}
-	chats, err := ParseChats(getenv(EnvTGChats))
+// DefaultDataDir is ~/.local/state/lazygram.
+func DefaultDataDir() (string, error) {
+	home, err := os.UserHomeDir()
 	if err != nil {
-		errs = append(errs, err)
+		return "", fmt.Errorf("home directory unknown, pass -data: %w", err)
 	}
-	tg.Chats = chats
-	return tg, errors.Join(errs...)
+	return filepath.Join(home, ".local", "state", stateDirName), nil
 }
 
-// ParseChats parses "alias=ref,alias2=ref2". Aliases must be unique, non-empty
-// and free of spaces. An empty string means no chats were configured.
-func ParseChats(s string) ([]ChatRef, error) {
-	if strings.TrimSpace(s) == "" {
-		return nil, nil
+// TelegramDir is where the Telegram connector keeps its session, application
+// registration and history cache.
+func TelegramDir(dataDir string) string { return filepath.Join(dataDir, "telegram") }
+
+// App is a Telegram application registration (id and hash issued by
+// https://my.telegram.org). MTProto cannot connect without one. It is
+// private to the person who registered it and is never committed.
+type App struct {
+	APIID   int    `json:"api_id"`
+	APIHash string `json:"api_hash"`
+}
+
+// Validate checks that both parts are present and plausible.
+func (a App) Validate() error {
+	var errs []error
+	if a.APIID <= 0 {
+		errs = append(errs, errors.New("application id must be a positive integer"))
 	}
-	var out []ChatRef
-	seen := map[string]bool{}
-	for _, part := range strings.Split(s, ",") {
-		part = strings.TrimSpace(part)
-		if part == "" {
-			continue
-		}
-		alias, ref, ok := strings.Cut(part, "=")
-		alias, ref = strings.TrimSpace(alias), strings.TrimSpace(ref)
-		switch {
-		case !ok || alias == "" || ref == "":
-			return nil, fmt.Errorf("%s: entry %q is not alias=ref", EnvTGChats, part)
-		case strings.ContainsAny(alias, " \t#/"):
-			return nil, fmt.Errorf("%s: alias %q must not contain spaces, # or /", EnvTGChats, alias)
-		case seen[strings.ToLower(alias)]:
-			return nil, fmt.Errorf("%s: duplicate alias %q", EnvTGChats, alias)
-		}
-		seen[strings.ToLower(alias)] = true
-		out = append(out, ChatRef{Alias: alias, Ref: ref})
+	if h := strings.TrimSpace(a.APIHash); h == "" {
+		errs = append(errs, errors.New("application hash is required"))
+	} else if len(h) < 16 || strings.ContainsAny(h, " \t\n") {
+		errs = append(errs, errors.New("application hash looks wrong (expected a long hex string)"))
 	}
-	return out, nil
+	return errors.Join(errs...)
+}
+
+// ParseApp builds an App from typed input.
+func ParseApp(id, hash string) (App, error) {
+	n, err := strconv.Atoi(strings.TrimSpace(id))
+	if err != nil {
+		return App{}, errors.New("application id must be a positive integer")
+	}
+	a := App{APIID: n, APIHash: strings.TrimSpace(hash)}
+	return a, a.Validate()
+}
+
+// LoadApp reads the stored registration from dir. found is false when none
+// has been stored yet; a stored but invalid file is an error.
+func LoadApp(dir string) (app App, found bool, err error) {
+	b, err := os.ReadFile(filepath.Join(dir, appFile))
+	if os.IsNotExist(err) {
+		return App{}, false, nil
+	}
+	if err != nil {
+		return App{}, false, err
+	}
+	if err := json.Unmarshal(b, &app); err != nil {
+		return App{}, true, fmt.Errorf("%s is not valid JSON: %w", appFile, err)
+	}
+	if err := app.Validate(); err != nil {
+		return App{}, true, fmt.Errorf("%s: %w", appFile, err)
+	}
+	return app, true, nil
+}
+
+// SaveApp stores the registration in dir (0700) as an owner-only file.
+func SaveApp(dir string, a App) error {
+	if err := a.Validate(); err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	b, err := json.MarshalIndent(a, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp := filepath.Join(dir, appFile+".tmp")
+	if err := os.WriteFile(tmp, b, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, filepath.Join(dir, appFile))
+}
+
+// Telegram is what the connector needs.
+type Telegram struct {
+	App        App
+	SessionDir string // holds session.json; must be a private, git-ignored directory
+}
+
+// Validate checks the connector configuration.
+func (t Telegram) Validate() error {
+	if t.SessionDir == "" {
+		return errors.New("telegram: session directory is required")
+	}
+	if err := t.App.Validate(); err != nil {
+		return fmt.Errorf("telegram: %w", err)
+	}
+	return nil
 }

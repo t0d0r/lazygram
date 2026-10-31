@@ -3,12 +3,15 @@ package telegram
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"lazygram/internal/config"
 	"lazygram/internal/provider"
 )
+
+var testCfg = config.Telegram{App: config.App{APIID: 1, APIHash: strings.Repeat("ab", 16)}, SessionDir: "/s"}
 
 func TestNewValidates(t *testing.T) {
 	if _, err := New(config.Telegram{}, nil); err == nil {
@@ -17,7 +20,7 @@ func TestNewValidates(t *testing.T) {
 }
 
 func TestInertWithoutClient(t *testing.T) {
-	p, err := New(config.Telegram{APIID: 1, APIHash: "h", SessionDir: "/s"}, nil)
+	p, err := New(testCfg, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -31,12 +34,24 @@ func TestInertWithoutClient(t *testing.T) {
 }
 
 func TestMTProtoMakesNoConnectionOnConstruction(t *testing.T) {
-	c := NewClient(config.Telegram{APIID: 1, APIHash: "h", SessionDir: t.TempDir()})
+	cfg := testCfg
+	cfg.SessionDir = t.TempDir()
+	c := NewClient(cfg)
 	if c.cancel != nil {
 		t.Fatal("client must connect lazily")
 	}
-	p, err := New(config.Telegram{APIID: 1, APIHash: "h", SessionDir: "/s"}, c)
+	if HasSession(cfg) {
+		t.Fatal("no session file was written")
+	}
+	p, err := New(cfg, c)
 	if err != nil || p.Close() != nil {
 		t.Fatalf("%v", err)
+	}
+}
+
+func TestLoginRejectsIncompleteConfig(t *testing.T) {
+	_, err := Login(context.Background(), config.Telegram{}, nil, nil)
+	if err == nil {
+		t.Fatal("want error")
 	}
 }

@@ -1,8 +1,9 @@
 # Storage
 
-Directory: `$LAZYGRAM_DATA_DIR/<provider>/` (default
-`~/.local/state/lazygram/<provider>/`), mode 0700, files 0600. `make run`
-uses `.state/` in the project (git-ignored).
+Directory: `<data>/<provider>/` (default `~/.local/state/lazygram`, or
+`-data DIR`), mode 0700, files 0600. Make targets use `.state/` in the
+project (git-ignored). The telegram directory also holds `session.json` and
+`app.json` (specs/providers.md).
 
 - `messages.jsonl`: one Message per line, append-only. Corrupt lines are
   skipped on load. Loaded messages are merged (sorted, de-duplicated).

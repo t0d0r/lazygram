@@ -1,10 +1,10 @@
-// Package telegram is the live Telegram connector boundary.
+// Package telegram is the Telegram connector.
 //
 // The provider talks to Telegram through the Client interface. MTProto
 // (gotd/td) is the real implementation; with a nil client the provider is
-// inert. It only reads, never logs in, and connects only when selected by
-// environment configuration. Credentials come from the environment only; see
-// package config.
+// inert. The running client only reads. Linking an account is the separate,
+// user-run QR login (see Login). Application credentials and the session
+// live in local state only; see package config.
 package telegram
 
 import (
@@ -18,25 +18,24 @@ import (
 	"lazygram/internal/provider"
 )
 
-// Client is what a real Telegram library adapter must implement.
+// Client is what a Telegram transport must implement.
 type Client interface {
-	Dialogs(ctx context.Context, refs []config.ChatRef) ([]domain.Chat, error)
+	Dialogs(ctx context.Context) ([]domain.Chat, error)
 	History(ctx context.Context, since time.Time) ([]domain.Message, error)
 }
 
 // Provider adapts a Client to provider.Provider.
 type Provider struct {
-	cfg    config.Telegram
 	client Client
 }
 
 // New validates cfg and returns the provider. With a nil client the provider
 // is inert and every call returns provider.ErrNotImplemented.
 func New(cfg config.Telegram, client Client) (*Provider, error) {
-	if cfg.APIID <= 0 || cfg.APIHash == "" || cfg.SessionDir == "" {
-		return nil, fmt.Errorf("telegram: incomplete configuration")
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
-	return &Provider{cfg: cfg, client: client}, nil
+	return &Provider{client: client}, nil
 }
 
 // Close releases the underlying client when it has one.
@@ -48,14 +47,14 @@ func (p *Provider) Close() error {
 }
 
 // Name implements provider.Provider.
-func (p *Provider) Name() string { return config.ProviderTelegram }
+func (p *Provider) Name() string { return "telegram" }
 
 // Chats implements provider.Provider.
 func (p *Provider) Chats(ctx context.Context) ([]domain.Chat, error) {
 	if p.client == nil {
-		return nil, fmt.Errorf("telegram: %w (no client configured; use the demo provider)", provider.ErrNotImplemented)
+		return nil, fmt.Errorf("telegram: %w (no client configured)", provider.ErrNotImplemented)
 	}
-	return p.client.Dialogs(ctx, p.cfg.Chats)
+	return p.client.Dialogs(ctx)
 }
 
 // Sync implements provider.Provider.
