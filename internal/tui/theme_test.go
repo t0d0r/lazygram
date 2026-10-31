@@ -84,3 +84,19 @@ func TestThemeCommandSwitchesListsAndPersists(t *testing.T) {
 		t.Fatalf("completion: %q", got)
 	}
 }
+
+func TestAmbiguousThemePrefixIsExplained(t *testing.T) {
+	m := setup(t, newFake())
+	enter(m, "/theme sol")
+	if !m.isErr || m.status != "ambiguous: solarized, solarized-light" {
+		t.Fatalf("status %q", m.status)
+	}
+	enter(m, "/theme solarized")
+	if m.isErr || currentName != "solarized" {
+		t.Fatalf("exact name: %q %q", m.status, currentName)
+	}
+	enter(m, "/theme nothing")
+	if !m.isErr || !strings.Contains(m.status, "no theme") {
+		t.Fatalf("status %q", m.status)
+	}
+}

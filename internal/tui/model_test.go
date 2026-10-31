@@ -1671,8 +1671,9 @@ func TestSendFile(t *testing.T) {
 func TestCompleteArgumentsAndPaths(t *testing.T) {
 	m := setup(t, newFake())
 	for typed, want := range map[string]string{
-		"/open o": "/open out ", "/win l": "/win list ", "/list -": "/list --show-deleted ",
-		"/win @al": "/win @alice ",
+		"/win l": "/win list ", "/list -": "/list --show-deleted ",
+		"/win @al": "/win @alice ", "/open o": "/open o", // nothing after /open in the server window
+		" ": " ", "  ": "  ", " @al": " @alice ", "   x": "   x", // blank prefixes never crash
 	} {
 		m.input = []rune(typed)
 		m.complete()
@@ -1845,6 +1846,7 @@ func TestCompleteOpenMessageIDs(t *testing.T) {
 		"/open out 1439":  "/open out 143999 ",
 		"/fetch 1435":     "/fetch 143541 ",
 		"/open o":         "/open out ",
+		" /open o":        " /open out ",
 		"/open 15":        "/open 15",        // no attachment
 		"/open 1430":      "/open 1430",      // another chat
 		"/open out 1 x":   "/open out 1 x",   // only the first id
@@ -1869,11 +1871,13 @@ func TestCompleteOpenMessageIDs(t *testing.T) {
 	}
 	m.input = nil
 	enter(m, "/win 0")
-	m.input = []rune("/open 14")
-	m.comp = nil
-	m.complete()
-	if got := string(m.input); got != "/open 14" {
-		t.Fatalf("server window has no attachments to complete: %q", got)
+	for _, typed := range []string{"/open 14", "/open o", "/open out 14"} {
+		m.input = []rune(typed)
+		m.comp = nil
+		m.complete()
+		if got := string(m.input); got != typed {
+			t.Fatalf("server window completes nothing after /open: %q -> %q", typed, got)
+		}
 	}
 }
 

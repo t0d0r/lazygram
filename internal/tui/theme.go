@@ -176,12 +176,20 @@ func lookupTheme(name string) (theme, bool) {
 	if t, ok := themes[name]; ok {
 		return t, true
 	}
-	var hit theme
-	n := 0
+	if hits := themeMatches(name); len(hits) == 1 {
+		return themes[hits[0]], true
+	}
+	return theme{}, false
+}
+
+// themeMatches lists the theme names that start with name, sorted.
+func themeMatches(name string) []string {
+	name = strings.ToLower(strings.TrimSpace(name))
+	var out []string
 	for _, k := range themeNames() {
 		if strings.HasPrefix(k, name) {
-			hit, n = themes[k], n+1
+			out = append(out, k)
 		}
 	}
-	return hit, n == 1
+	return out
 }

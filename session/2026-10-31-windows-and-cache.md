@@ -292,3 +292,7 @@ at the hidden password prompt takes effect only after Enter.
 - `/redraw` (`/clear`): the window keeps its messages and loses its
   notes (notices, help, pictures, banner) and any slow print queued for
   it; scroll back to the bottom.
+- Review fixes: Tab on a whitespace-only prefix panicked in complete()
+  (`strings.Fields(line)[0]` on an empty slice; now guarded), nothing
+  completes after /open in the server window (spec), and an ambiguous
+  theme prefix names its matches instead of "no theme".

@@ -251,6 +251,10 @@ func (m *Model) restoreTheme() {
 func (m *Model) setTheme(name string) {
 	t, ok := lookupTheme(name)
 	if !ok {
+		if hits := themeMatches(name); len(hits) > 1 {
+			m.setErr("ambiguous: " + strings.Join(hits, ", "))
+			return
+		}
 		m.setErr("no theme " + name + "; /theme lists them")
 		return
 	}
@@ -1928,6 +1932,7 @@ func (m *Model) complete() {
 	var cands []string
 	shown := func(s string) string { return s } // how a listed candidate prints
 	line := strings.ToLower(string(m.input[:start]))
+	fields := strings.Fields(line) // the words before the current one; may be empty
 	switch {
 	case start == 0 && strings.HasPrefix(word, "/"):
 		for _, n := range command.Names() {
@@ -1941,14 +1946,19 @@ func (m *Model) complete() {
 				cands = append(cands, n)
 			}
 		}
-	case start > 0 && openCmds[strings.Fields(line)[0]]:
+	case len(fields) > 0 && openCmds[fields[0]]:
 		// /open [out] <msg>: "out" as the first word, then the ids of the
-		// messages with attachments in this window's chat.
-		prior := strings.Fields(line)[1:]
+		// messages with attachments in this window's chat; nothing in the
+		// server window, where /open is refused anyway.
+		w := m.wins[m.cur]
+		if w.chatID == "" {
+			return
+		}
+		prior := fields[1:]
 		if len(prior) == 0 && strings.HasPrefix("out", word) {
 			cands = append(cands, "out")
 		}
-		if w := m.wins[m.cur]; w.chatID != "" && (len(prior) == 0 || len(prior) == 1 && (prior[0] == "out" || prior[0] == "ext" || prior[0] == "viewer")) {
+		if len(prior) == 0 || len(prior) == 1 && (prior[0] == "out" || prior[0] == "ext" || prior[0] == "viewer") {
 			for _, x := range m.msgs {
 				if x.ChatID == w.chatID && x.Media != nil && strings.HasPrefix(x.ID, word) {
 					cands = append(cands, x.ID)

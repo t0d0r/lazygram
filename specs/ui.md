@@ -202,7 +202,9 @@ Reply text: the label is sent like Ctrl-X. Pressing is always explicit.
 
 `/theme` prints the colour schemes into the window with the current one
 marked; `/theme <name>` (exact or unique prefix, Tab completes) switches
-at once and the choice is kept in the cache state across restarts.
+at once and the choice is kept in the cache state across restarts. A
+prefix that matches several themes is refused with their names
+(`ambiguous: solarized, solarized-light`).
 Built in: `default`, `solarized`, `gruvbox`, `dracula`, `nord`,
 `monokai`, `tokyonight`, `vim` (classic dark Vim: grey comments, cyan,
 yellow, magenta, reverse status) and `emacs` (its default faces on a dark
