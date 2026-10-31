@@ -227,9 +227,9 @@ messages. When scrolled back, arriving messages keep the view anchored.
 `[time] [provider] [N:name] [Act: ...] [M msgs] [sync state] [-K lines] message ctrl-x: to send`
 (the last item says how text is sent in a chat window: `ctrl-x` or `enter`).
 Each segment has its own palette colour from the theme (the sync state
-changes colour: syncing, synced, never); the window bar paints every
-chat's tag in that chat's colour, the current one reversed, those with
-unread messages in the activity colour.
+changes colour: syncing, synced, never); the window bar stays in one
+colour: only the active window is highlighted (reversed) and windows with
+new messages show in the activity colour as the indicator.
 A background sync runs every 5s (demo) or 10s (telegram) with a 90s
 budget (enough for a FLOOD_WAIT retry); polls skip while a sync runs.
 

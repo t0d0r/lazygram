@@ -173,3 +173,5 @@ at the hidden password prompt takes effect only after Enter.
   cancels the send, restores the text and only toggles "Enter sends".
 - Status bar segments in distinct palette colours; window bar tags in each
   chat's colour.
+- Window bar back to one colour: active window reversed, unread in the
+  activity colour, nothing else coloured.

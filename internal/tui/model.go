@@ -1698,14 +1698,12 @@ func (m *Model) windowBar() (string, []span) {
 		spans = append(spans, span{x, x + lipgloss.Width(tag), spanWin, strconv.Itoa(i)})
 		x += lipgloss.Width(tag) + 1
 		switch {
-		case i == m.cur:
+		case i == m.cur: // only the active window stands out
 			b.WriteString(hiStyle.Render(tag))
-		case w.unread > 0:
+		case w.unread > 0: // the indicator for new messages
 			b.WriteString(actStyle.Render(tag))
-		case i == 0:
+		default:
 			b.WriteString(infoStyle.Render(tag))
-		default: // each chat in its own colour, the one its lines use
-			b.WriteString(lipgloss.NewStyle().Background(statusBG()).Foreground(colorFor(w.chatID)).Render(tag))
 		}
 		b.WriteString(infoStyle.Render(" "))
 	}
