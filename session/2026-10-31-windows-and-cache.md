@@ -165,3 +165,5 @@ at the hidden password prompt takes effect only after Enter.
   wheel; the pager keeps Up/Down for scrolling.
 - v0.4.0 released; v0.4.1 (with /msg, /about, statistics, history) to
   follow the same steps.
+- Ctrl-X holds the text for 600 ms before sending so a fast second Ctrl-X
+  cancels the send, restores the text and only toggles "Enter sends".

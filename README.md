@@ -112,8 +112,9 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 
 In a chat window, type text and press **Ctrl-X** to send it to that chat;
 Enter is for commands (press Ctrl-X twice quickly to make Enter send in
-that window, and again to switch back; the status line ends with
-`ctrl-x: to send` or `enter: to send`). The sent line shows up as `<me>` once the service
+that window, and again to switch back; a fast double Ctrl-X never sends,
+it only switches; the status line ends with `ctrl-x: to send` or
+`enter: to send`). The sent line shows up as `<me>` once the service
 has it. Bot messages with buttons show them underneath as
 `[1] Yes  [2] Docs (link)  (msg 1234)`; `/press 1` answers the bot and the
 edited message replaces the old line, link buttons only print their URL,

@@ -518,17 +518,22 @@ func TestCtrlXSendsInChatWindowOnly(t *testing.T) {
 	m.input = nil
 	enter(m, "/win @alice")
 	typ(m, "hello there")
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
-	if cmd == nil || len(m.input) != 0 {
-		t.Fatal("expected a send command and a cleared input")
+	_, tick := m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if tick == nil || len(m.input) != 0 || m.pending == nil {
+		t.Fatal("expected the text held back and a timer")
+	}
+	_, cmd := m.Update(tick()) // the pause passed: now it is sent
+	if cmd == nil {
+		t.Fatal("expected a send command after the pause")
 	}
 	_, next := m.Update(cmd())
 	if len(f.sent) != 1 || f.sent[0] != "c2:hello there" || m.isErr || next == nil {
 		t.Fatalf("sent=%v status=%q", f.sent, m.status)
 	}
+	m.lastCtrlX = time.Time{}
 	typ(m, "/quit")
 	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
-	if !m.isErr || len(f.sent) != 1 {
+	if !m.isErr || len(f.sent) != 1 || m.pending != nil {
 		t.Fatal("command-like text must not be sent by Ctrl-X")
 	}
 	m.input = nil
@@ -1087,7 +1092,9 @@ func TestUpDownWalkTheInputHistory(t *testing.T) {
 	press(m, tea.KeyUp) // nothing yet: no crash, no change
 	enter(m, "/win @alice")
 	typ(m, "hello")
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	_, tick := m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	m.Update(tick()) // the pause passed: sent and remembered
+	m.lastCtrlX = time.Time{}
 	enter(m, "/stats")
 	enter(m, "/stats") // duplicates collapse
 	typ(m, "draft")
@@ -1127,5 +1134,28 @@ func TestUpDownWalkTheInputHistory(t *testing.T) {
 	press(m, tea.KeyUp)
 	if m.wins[m.cur].scroll != 1 {
 		t.Fatal("in the pager Up scrolls")
+	}
+}
+
+func TestFastDoubleCtrlXKeepsTheTextAndOnlyToggles(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	enter(m, "/win @alice")
+	typ(m, "not yet")
+	_, tick := m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX}) // fast: cancel the send, toggle
+	if !m.wins[m.cur].enterSends || string(m.input) != "not yet" || m.pending != nil {
+		t.Fatalf("enterSends=%v input=%q pending=%v", m.wins[m.cur].enterSends, string(m.input), m.pending)
+	}
+	if _, cmd := m.Update(tick()); cmd != nil || len(f.sent) != 0 {
+		t.Fatal("the stale timer must not send")
+	}
+	cmd := press(m, tea.KeyEnter) // Enter sends now, at once
+	if cmd == nil {
+		t.Fatal("Enter should send")
+	}
+	cmd()
+	if len(f.sent) != 1 || f.sent[0] != "c2:not yet" {
+		t.Fatalf("sent=%v", f.sent)
 	}
 }

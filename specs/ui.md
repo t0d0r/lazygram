@@ -166,15 +166,17 @@ locations, ...) shows as `[media]`. Fetch errors land in the window.
 ## Sending
 
 In a chat window, typed text plus Ctrl-X sends it to that chat through
-`Provider.Send`; the input clears, the status says "sending", and a sync
-is triggered so the line appears as `<me>` as soon as the service has it.
-By default Enter never sends: on plain text it reminds about Ctrl-X and
-keeps the text. Two Ctrl-X within 600 ms on an empty line toggle "Enter sends" for the
-current window (the prompt becomes `[@name]> `); with text typed the
-second Ctrl-X sends it instead, so nothing is swallowed. Commands still
-run, and Ctrl-X still sends. The toggle is per window and is saved with
-the layout, so it survives restarts; the status line ends with
-`ctrl-x: to send` or `enter: to send` in a chat window. Ctrl-X refuses in the server window, on empty text, and on text that
+`Provider.Send`: the text leaves the input at once but goes out only
+after the double Ctrl-X window (600 ms), so that a second Ctrl-X within
+that window cancels the send, puts the text back into the input and only
+toggles "Enter sends". The status says "sending", and a sync is triggered
+so the line appears as `<me>` as soon as the service has it. By default
+Enter never sends: on plain text it reminds about Ctrl-X and keeps the
+text. Two Ctrl-X within 600 ms toggle "Enter sends" for the current
+window (the prompt becomes `[@name]> `); with Enter sends on, Enter sends
+at once. Commands still run, and Ctrl-X still sends. The toggle is per
+window and is saved with the layout, so it survives restarts; the status
+line ends with `ctrl-x: to send` or `enter: to send` in a chat window. Ctrl-X refuses in the server window, on empty text, and on text that
 starts with `/` (prefix a space to send such text). Send errors go to the
 status line and the window.
 

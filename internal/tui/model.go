@@ -91,9 +91,11 @@ type Model struct {
 
 	clicks [][]span // what a click on each screen row does, as of the last View
 
-	escPending bool      // an Esc was just pressed: a digit now switches windows
-	escSaved   []rune    // the input as it was before that Esc cleared it
-	lastCtrlX  time.Time // for the double Ctrl-X toggle
+	escPending bool         // an Esc was just pressed: a digit now switches windows
+	escSaved   []rune       // the input as it was before that Esc cleared it
+	lastCtrlX  time.Time    // for the double Ctrl-X toggle
+	pending    *pendingSend // text waiting out the double Ctrl-X window before it is sent
+	pendingSeq int
 
 	listCur     int     // selected row in the list view
 	listSrc     listSrc // what the list view shows
@@ -147,7 +149,8 @@ type (
 		target string
 		err    error
 	}
-	fetchedMsg struct {
+	sendLaterMsg struct{ seq int } // the double Ctrl-X window has passed
+	fetchedMsg   struct {
 		chatID, msgID string
 		path          string
 		err           error
@@ -511,6 +514,13 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.note(w, "saved "+msg.path)
 		m.setInfo("saved " + msg.path)
+	case sendLaterMsg:
+		if p := m.pending; p != nil && p.seq == msg.seq {
+			m.pending = nil
+			m.remember(p.text)
+			m.setInfo("sending to " + m.nameOf(p.chatID) + "...")
+			return m, m.sendCmd(p.chatID, p.text)
+		}
 	case openedMsg:
 		if msg.err != nil {
 			m.setErr("open: " + msg.err.Error())
@@ -807,10 +817,14 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.enter()
 	case tea.KeyCtrlX:
 		now := time.Now()
-		// A second Ctrl-X on an empty line within the window toggles; with
-		// text typed it sends, so a message is never swallowed.
-		if m.mode == modeWin && w.chatID != "" && strings.TrimSpace(string(m.input)) == "" && now.Sub(m.lastCtrlX) < doubleCtrlX {
+		// A second Ctrl-X within the window toggles "Enter sends"; text held
+		// back by the first one is not sent but put back in the input.
+		if m.mode == modeWin && w.chatID != "" && now.Sub(m.lastCtrlX) < doubleCtrlX {
 			m.lastCtrlX = time.Time{}
+			if m.pending != nil {
+				m.input = []rune(m.pending.text)
+				m.pending = nil
+			}
 			w.enterSends = !w.enterSends
 			m.saveLayout() // the choice is kept per window
 			if w.enterSends {
@@ -821,7 +835,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.lastCtrlX = now
-		return m.send()
+		return m.holdSend()
 	case tea.KeyTab:
 		m.complete() // Tab only ever completes
 	case tea.KeyBackspace, tea.KeyCtrlH, tea.KeyDelete:
@@ -883,26 +897,56 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-// send posts the typed text to the current window's chat (Ctrl-X).
-func (m *Model) send() (tea.Model, tea.Cmd) {
-	text := strings.TrimSpace(string(m.input))
+// pendingSend is typed text held back for the double Ctrl-X window.
+type pendingSend struct {
+	chatID, text string
+	seq          int
+}
+
+// sendable checks that the typed text can go to the current window's chat
+// and returns it; it reports errors in the status line.
+func (m *Model) sendable() (chatID, text string, ok bool) {
+	text = strings.TrimSpace(string(m.input))
 	w := m.wins[m.cur]
 	switch {
-	case m.mode != modeWin:
-		return m, nil
-	case text == "":
-		return m, nil
+	case m.mode != modeWin, text == "":
+		return "", "", false
 	case w.chatID == "":
 		m.setErr("the server window has no chat; /win to a chat first")
-		return m, nil
+		return "", "", false
 	case strings.HasPrefix(text, "/"):
 		m.setErr("that looks like a command: Enter runs it; prefix a space to send it as text")
+		return "", "", false
+	}
+	return w.chatID, text, true
+}
+
+// send posts the typed text to the current window's chat at once (Enter
+// when Enter sends).
+func (m *Model) send() (tea.Model, tea.Cmd) {
+	chatID, text, ok := m.sendable()
+	if !ok {
 		return m, nil
 	}
 	m.input = nil
 	m.remember(text)
-	m.setInfo("sending to " + m.nameOf(w.chatID) + "...")
-	return m, m.sendCmd(w.chatID, text)
+	m.setInfo("sending to " + m.nameOf(chatID) + "...")
+	return m, m.sendCmd(chatID, text)
+}
+
+// holdSend takes the typed text out of the input and sends it after the
+// double Ctrl-X window, unless a second Ctrl-X cancels it meanwhile.
+func (m *Model) holdSend() (tea.Model, tea.Cmd) {
+	chatID, text, ok := m.sendable()
+	if !ok {
+		return m, nil
+	}
+	m.input = nil
+	m.pendingSeq++
+	m.pending = &pendingSend{chatID: chatID, text: text, seq: m.pendingSeq}
+	m.setInfo("sending to " + m.nameOf(chatID) + "... (Ctrl-X again to keep the text and toggle)")
+	seq := m.pendingSeq
+	return m, tea.Tick(doubleCtrlX, func(time.Time) tea.Msg { return sendLaterMsg{seq: seq} })
 }
 
 // remember appends an entered line to the input history (no immediate
@@ -1666,8 +1710,8 @@ func (m *Model) inputLine(prompt string) string {
 const keyHelp = `Keys
   Tab                    complete like bash: a command, a @user / #chan or
                          a theme; Tab again lists the possibilities
-  Ctrl-X                 send the typed text to this chat
-  Ctrl-X twice (fast)    toggle "Enter sends" for this window
+  Ctrl-X                 send the typed text to this chat (after a short pause)
+  Ctrl-X twice (fast)    toggle "Enter sends" for this window; nothing is sent
   Ctrl-N / Ctrl-P        next / previous window (Alt-Right / Alt-Left too)
   Alt-0..9, Esc 0..9     window 0..9 (0 is the server window)
   Up / Down              walk the input history (commands and sent lines)
