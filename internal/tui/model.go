@@ -74,6 +74,9 @@ type Model struct {
 	input []rune
 	comp  *completion
 
+	escPending bool   // an Esc was just pressed: a digit now switches windows
+	escSaved   []rune // the input as it was before that Esc cleared it
+
 	listCur     int     // selected row in the list view
 	listSrc     listSrc // what the list view shows
 	showDeleted bool    // /list --show-deleted
@@ -416,11 +419,18 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	page := max(m.contentHeight()-1, 1)
 	w := m.wins[m.cur]
+	// Esc then a digit works like Alt-digit, for terminals without Meta.
+	escPending := m.escPending
+	m.escPending = false
+	digit := k.Type == tea.KeyRunes && len(k.Runes) == 1 && k.Runes[0] >= '0' && k.Runes[0] <= '9'
 	switch {
 	case k.Type == tea.KeyCtrlC:
 		m.quitting = true
 		return m, tea.Quit
-	case k.Alt && k.Type == tea.KeyRunes && len(k.Runes) == 1 && k.Runes[0] >= '0' && k.Runes[0] <= '9':
+	case digit && (k.Alt || escPending):
+		if escPending {
+			m.input = m.escSaved // the Esc was a prefix, not a clear
+		}
 		n := int(k.Runes[0] - '0')
 		if n == 0 {
 			n = 10
@@ -437,6 +447,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch k.Type {
 	case tea.KeyEsc:
+		m.escPending, m.escSaved = true, append([]rune(nil), m.input...)
 		if m.mode != modeWin {
 			m.mode, m.input = modeWin, nil
 		} else {
@@ -1049,7 +1060,7 @@ func (m *Model) inputLine(prompt string) string {
 const keyHelp = `Keys
   Tab               complete a command or a @user / #channel name; again cycles
   Ctrl-N / Ctrl-P   next / previous window (also Alt-Right / Alt-Left)
-  Alt-1 .. Alt-0    window 1 .. 10
+  Alt-1 .. Alt-0    window 1 .. 10 (Esc then the digit works too)
   PgUp / PgDn       scroll a page; Up / Down a line; Home / End oldest / newest
   Ctrl-R            sync now
   F1                print this help

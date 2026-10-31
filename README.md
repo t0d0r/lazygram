@@ -80,7 +80,7 @@ has it.
 |---------------------|----------------------------------------------------|
 | Tab                 | complete a command or a `@`/`#` name; again cycles |
 | Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
-| Alt-1 .. Alt-0      | window 1 .. 10                                     |
+| Alt-1 .. Alt-0      | window 1 .. 10 (Esc then the digit works too)      |
 | PgUp / PgDn         | scroll a page; Up / Down a line; Home / End ends   |
 | Ctrl-R              | sync now                                           |
 | F1                  | print the help into the window                     |

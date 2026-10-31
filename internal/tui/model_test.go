@@ -548,3 +548,29 @@ func TestWindowBarListsEveryWindow(t *testing.T) {
 		t.Fatalf("bar must be the line above the input: %d lines", len(lines))
 	}
 }
+
+func TestEscThenDigitSwitchesWindows(t *testing.T) {
+	m := setup(t, newFake())
+	typ(m, "half typed")
+	press(m, tea.KeyEsc)
+	typ(m, "3")
+	if m.cur != 2 || string(m.input) != "half typed" {
+		t.Fatalf("cur=%d input=%q", m.cur, string(m.input))
+	}
+	press(m, tea.KeyEsc) // a lone Esc still clears
+	typ(m, "x")
+	if m.cur != 2 || string(m.input) != "x" {
+		t.Fatalf("cur=%d input=%q", m.cur, string(m.input))
+	}
+	enter(m, "/list")
+	press(m, tea.KeyEsc)
+	typ(m, "1")
+	if m.mode != modeWin || m.cur != 0 {
+		t.Fatalf("Esc closes the list and the digit switches: mode=%v cur=%d", m.mode, m.cur)
+	}
+	press(m, tea.KeyEsc)
+	typ(m, "9")
+	if !m.isErr || m.cur != 0 {
+		t.Fatal("no window 9")
+	}
+}

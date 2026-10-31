@@ -103,7 +103,7 @@ status line and the window.
 |----------------------|---------------------------------------------------|
 | Tab                  | complete; again cycles the candidates             |
 | Ctrl-N / Ctrl-P      | next / previous window (Alt-Right / Alt-Left too) |
-| Alt-1 .. Alt-0       | window 1 .. 10                                    |
+| Alt-1 .. Alt-0       | window 1 .. 10; Esc followed by the digit does the same (the typed input survives) |
 | PgUp / PgDn          | scroll a page; Up / Down one line                 |
 | Home / End           | oldest / newest                                   |
 | Ctrl-R               | sync now                                          |
