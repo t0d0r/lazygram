@@ -11,3 +11,4 @@ session.json
 .DS_Store
 .envrc
 *_local.go
+dist/

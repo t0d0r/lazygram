@@ -29,7 +29,11 @@
   alone; only `make purge` removes it.
 - Unlinking is done from the phone (Settings -> Devices -> terminate); the
   next start then exits with the "not linked" hint.
-- Third-party dependency: github.com/gotd/td; review upgrades before bumping.
+- Third-party dependencies: github.com/gotd/td, modernc.org/sqlite; review
+  upgrades before bumping.
+- `lazygram update` is the only network use besides Telegram; downloads are
+  HTTPS-only, size-capped and checked against SHA256SUMS; release binaries
+  never contain a registration (specs/release.md).
 - Run gitleaks before the first push and review `git log -p`.
 
 ## Terminal injection

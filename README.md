@@ -5,13 +5,40 @@ from all your chats as one chronological scrollback, like a single IRC
 channel (BitchX / irssi style), and lets you open the full history of any chat
 in a searchable pager. Feature goals are inspired by nchat.
 
+## Install
+
+```sh
+brew install t0d0r/tap/lazygram
+```
+
+Or download a static binary for Linux or macOS from the
+[releases](https://github.com/t0d0r/lazygram/releases) (`uname -m`:
+`x86_64` is amd64, `aarch64`/`arm64` is arm64):
+
+```sh
+V=v0.3.0 A=darwin-arm64
+curl -LO https://github.com/t0d0r/lazygram/releases/download/$V/lazygram-$V-$A.tar.gz
+curl -LO https://github.com/t0d0r/lazygram/releases/download/$V/SHA256SUMS
+shasum -a 256 -c SHA256SUMS --ignore-missing   # sha256sum on Linux
+tar -xzf lazygram-$V-$A.tar.gz
+install -m 0755 lazygram-$V-$A/lazygram ~/.local/bin/
+```
+
+Or build from source: `make build` (needs Go), `make install` copies it to
+`~/.local/bin`.
+
+Update later with `lazygram update`: it upgrades through brew when
+installed that way, otherwise replaces the binary with the latest release
+after checking it against the release's SHA256SUMS. `lazygram update -check`
+only reports; `-yes` skips the question. A build from source is never
+replaced.
+
 ## Quick start
 
 ```sh
-make build
-./lazygram login    # link your Telegram account: scan a QR code with the phone app
-./lazygram          # read your chats
-./lazygram demo     # or try it with invented data, no account needed
+lazygram login    # link your Telegram account: scan a QR code with the phone app
+lazygram          # read your chats
+lazygram demo     # or try it with invented data, no account needed
 ```
 
 Started without a linked account, lazygram exits and says how to link one or
@@ -94,8 +121,13 @@ has it.
 ```sh
 make check    # gofmt + go vet + golangci-lint + tests
 make smoke    # non-interactive: demo sync once, print one screen, exit
+make dist     # release tarballs + SHA256SUMS into dist/ (never with your registration)
 make help     # all targets
 ```
+
+Releases: tag `vX.Y.Z`, `make dist`, `make release` (uses `gh`), then bump
+the formula in [t0d0r/homebrew-tap](https://github.com/t0d0r/homebrew-tap).
+See specs/release.md.
 
 ## Architecture
 
@@ -107,6 +139,7 @@ internal/provider       Provider interface (Name, Chats, Sync)
 internal/provider/demo  offline scripted provider
 internal/provider/telegram  Telegram connector (gotd/td MTProto), QR login
 internal/qrcode         QR code to terminal text (half-block or ASCII)
+internal/update         self-update from GitHub releases (brew or binary)
 internal/command        slash-command parser
 internal/config         state directory and stored application registration
 internal/tui            bubbletea model and rendering
@@ -141,3 +174,13 @@ specs/providers.md.
   application registration; the session file is the only login artifact.
 - Control characters (including ESC) are stripped from sender and text before
   rendering, so remote messages cannot inject terminal escape sequences.
+- Apart from Telegram itself, lazygram contacts the network only when
+  `lazygram update` runs. Downloads are checked against the release's
+  SHA256SUMS, which catches broken files but is not a signature; HTTPS to
+  GitHub is what authenticates them. Release binaries are built without any
+  registration; a brew or release install asks for yours once at
+  `lazygram login` (or takes `TG_API_ID`/`TG_API_HASH` from the environment).
+
+## License
+
+BSD 2-Clause (the FreeBSD license). See `LICENSE`.

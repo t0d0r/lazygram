@@ -141,7 +141,8 @@ budget (enough for a FLOOD_WAIT retry); polls skip while a sync runs.
 
 ## Subcommands and flags
 
-`lazygram` (linked Telegram account), `lazygram demo`, `lazygram login`.
+`lazygram` (linked Telegram account), `lazygram demo`, `lazygram login`,
+`lazygram update` (specs/release.md).
 Flags: `-data DIR` (state directory, default `~/.local/state/lazygram`),
 `-smoke`, `-ascii` (login QR code with `#`), `-version`. Flags may come
 before or after the subcommand (`lazygram login -ascii`); any other extra

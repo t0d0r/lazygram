@@ -4,6 +4,7 @@
 //	lazygram          start with the linked Telegram account
 //	lazygram login    link this device to Telegram by scanning a QR code
 //	lazygram demo     start with invented offline data, no account needed
+//	lazygram update   install the latest release
 package main
 
 import (
@@ -28,7 +29,9 @@ import (
 	"lazygram/internal/tui"
 )
 
-var version = "0.2.0"
+// version is set at build time with -ldflags "-X main.version=..." (git
+// describe output, or the release version in Homebrew builds).
+var version = "dev"
 
 // buildAppID and buildAppHash carry a Telegram application registration in
 // the binary, like nchat's built-in one, so a personal build never asks for
@@ -46,6 +49,8 @@ type options struct {
 	dataDir string
 	smoke   bool
 	ascii   bool
+	check   bool // update: only report
+	yes     bool // update: do not ask
 }
 
 func main() {
@@ -74,12 +79,16 @@ func run(args []string) error {
 	fs.StringVar(&o.dataDir, "data", "", "state directory (default ~/.local/state/lazygram)")
 	fs.BoolVar(&o.smoke, "smoke", false, "sync once, print one screen, and exit (no terminal needed)")
 	fs.BoolVar(&o.ascii, "ascii", false, "draw the login QR code with # characters instead of block characters")
+	fs.BoolVar(&o.check, "check", false, "update: only report whether a newer release exists")
+	fs.BoolVar(&o.yes, "yes", false, "update: install without asking")
+	fs.BoolVar(&o.yes, "y", false, "same as -yes")
 	showVersion := fs.Bool("version", false, "print the version and exit")
 	fs.Usage = func() {
-		_, _ = fmt.Fprint(fs.Output(), "usage: lazygram [flags] [login|demo]\n\n"+
+		_, _ = fmt.Fprint(fs.Output(), "usage: lazygram [flags] [login|demo|update]\n\n"+
 			"  (none)  start with the linked Telegram account\n"+
 			"  login   link this device to Telegram by scanning a QR code\n"+
-			"  demo    start with invented offline data, no account needed\n\nflags:\n")
+			"  demo    start with invented offline data, no account needed\n"+
+			"  update  install the latest release (-check only reports, -yes skips the question)\n\nflags:\n")
 		fs.PrintDefaults()
 	}
 	if err := fs.Parse(args); err != nil {
@@ -125,6 +134,8 @@ func run(args []string) error {
 		return runTUI(o, demo.New(), st, 5*time.Second)
 	case "login":
 		return runLogin(o)
+	case "update":
+		return runUpdate(o.check, o.yes, os.Stdin, os.Stdout)
 	default:
 		fs.Usage()
 		return exitError{fmt.Sprintf("lazygram: unknown command %q\n", cmd), 2}

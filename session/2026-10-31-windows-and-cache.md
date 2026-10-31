@@ -81,3 +81,11 @@ at the hidden password prompt takes effect only after Enter.
   (input restored). The window layout (open windows, current) is stored
   sealed in the cache (`Store.SetState`) on every change and restored at
   start.
+
+## Release tooling
+
+- BSD-2-Clause LICENSE; `version` set from `git describe` by `make build`;
+  `make dist` builds static tarballs for 4 platforms with `-tags release`
+  and refuses if `app_local.go` (now `//go:build !release`) would be
+  compiled in; `make release` publishes with gh. `lazygram update` ported
+  from lazyai (brew or binary, SHA256SUMS-checked, no deb).
