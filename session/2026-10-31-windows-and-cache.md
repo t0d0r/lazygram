@@ -177,3 +177,6 @@ at the hidden password prompt takes effect only after Enter.
   activity colour, nothing else coloured.
 - Tab on an empty prompt cycles windows (Shift-Tab backwards); with text
   it completes as before.
+- v0.4.3 released from 776b2ff (single-colour window bar, Tab cycles
+  windows on an empty prompt): assets verified, no registration inside;
+  formula at 0.4.3, brew upgrade and brew test passed, tap pushed.
