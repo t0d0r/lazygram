@@ -46,6 +46,7 @@
 - [x] lazygram update: brew or binary, SHA256SUMS-checked (specs/release.md)
 - [x] GitHub repository (github.com/t0d0r/lazygram), releases v0.3.0, v0.4.0, v0.4.2, v0.4.3, v0.4.8; Homebrew formula in t0d0r/homebrew-tap at 0.4.11
 - [x] v0.4.12 released (tarballs, SHA256SUMS verified); formula at 0.4.12
+- [x] v0.4.13 released after green Linux and macOS CI (tarballs, SHA256SUMS verified); formula at 0.4.13
 - [ ] delete the stray GitHub release and tag `v0.4.11-1-gd0bdc3f` (needs `gh release delete ... --cleanup-tag` by hand)
 - [x] figlet banners at start and exit (specs/ui.md)
 - [x] /theme with nine colour schemes, persisted (specs/ui.md)

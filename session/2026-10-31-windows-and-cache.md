@@ -303,3 +303,9 @@ at the hidden password prompt takes effect only after Enter.
   required six lines of exit banner and so failed whenever the random
   face was the two-line wordmark (the same flake seen once locally);
   the assertion now checks the surrounding text only.
+- v0.4.13 tagged at the CI-verified head and released (assets checked
+  against SHA256SUMS, downloaded binary runs); the Homebrew formula
+  builds from the v0.4.13 source tarball (tap rebased over an unrelated
+  stopan-cli bump before the push).
+- Open: the stray GitHub release and tag `v0.4.11-1-gd0bdc3f` still
+  need deleting by hand.
