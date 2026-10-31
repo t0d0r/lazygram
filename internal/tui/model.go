@@ -1643,19 +1643,31 @@ func (m *Model) activity() string {
 	return "[Act: " + strings.Join(act, ",") + "] "
 }
 
+// seg paints one status segment in a palette colour on the status
+// background; i picks the colour, so segments differ but stay stable.
+func seg(text string, i int, bold bool) string {
+	st := lipgloss.NewStyle().Background(statusBG()).Foreground(palette[i%len(palette)]).Bold(bold)
+	return st.Render(text)
+}
+
 func (m *Model) statusLine() string {
-	sync := "never synced"
-	if !m.lastSync.IsZero() {
-		sync = "synced " + m.lastSync.Format("15:04:05")
+	sync, syncColor := "never synced", 6
+	switch {
+	case m.syncing:
+		sync, syncColor = "syncing", 4
+	case !m.lastSync.IsZero():
+		sync, syncColor = "synced "+m.lastSync.Format("15:04:05"), 2
 	}
-	if m.syncing {
-		sync = "syncing"
-	}
-	left := fmt.Sprintf(" [%s] [%s] [%d:%s] ", time.Now().Format("15:04"), m.opt.Provider.Name(), m.cur, m.winName(m.cur))
-	text := infoStyle.Render(left) + actStyle.Render(m.activity()) +
-		infoStyle.Render(fmt.Sprintf("[%d msgs] [%s] ", len(m.msgs), sync))
-	if w := m.wins[m.cur]; w.scroll > 0 && m.mode == modeWin {
-		text += infoStyle.Render(fmt.Sprintf("[-%d lines] ", w.scroll))
+	w := m.wins[m.cur]
+	text := infoStyle.Render(" ") +
+		seg("["+time.Now().Format("15:04")+"]", 5, false) + infoStyle.Render(" ") +
+		seg("["+m.opt.Provider.Name()+"]", 0, false) + infoStyle.Render(" ") +
+		seg(fmt.Sprintf("[%d:%s]", m.cur, m.winName(m.cur)), 3, true) + infoStyle.Render(" ") +
+		actStyle.Render(m.activity()) +
+		seg(fmt.Sprintf("[%d msgs]", len(m.msgs)), 1, false) + infoStyle.Render(" ") +
+		seg("["+sync+"]", syncColor, false) + infoStyle.Render(" ")
+	if w.scroll > 0 && m.mode == modeWin {
+		text += seg(fmt.Sprintf("[-%d lines]", w.scroll), 7, false) + infoStyle.Render(" ")
 	}
 	if m.status != "" {
 		if m.isErr {
@@ -1664,12 +1676,12 @@ func (m *Model) statusLine() string {
 			text += infoStyle.Render(m.status)
 		}
 	}
-	if w := m.wins[m.cur]; w.chatID != "" && m.mode == modeWin {
+	if w.chatID != "" && m.mode == modeWin {
 		how := " ctrl-x: to send"
 		if w.enterSends {
 			how = " enter: to send"
 		}
-		text += infoStyle.Render(how)
+		text += seg(how, 2, false)
 	}
 	return lipgloss.NewStyle().Background(statusBG()).Render(fitLine(text, m.width))
 }
@@ -1690,8 +1702,10 @@ func (m *Model) windowBar() (string, []span) {
 			b.WriteString(hiStyle.Render(tag))
 		case w.unread > 0:
 			b.WriteString(actStyle.Render(tag))
-		default:
+		case i == 0:
 			b.WriteString(infoStyle.Render(tag))
+		default: // each chat in its own colour, the one its lines use
+			b.WriteString(lipgloss.NewStyle().Background(statusBG()).Foreground(colorFor(w.chatID)).Render(tag))
 		}
 		b.WriteString(infoStyle.Render(" "))
 	}

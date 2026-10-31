@@ -167,3 +167,5 @@ at the hidden password prompt takes effect only after Enter.
   follow the same steps.
 - Ctrl-X holds the text for 600 ms before sending so a fast second Ctrl-X
   cancels the send, restores the text and only toggles "Enter sends".
+- Status bar segments in distinct palette colours; window bar tags in each
+  chat's colour.
