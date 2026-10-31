@@ -60,9 +60,8 @@ terminal. Pure Go, BSD-2-Clause. Upstream: https://github.com/t0d0r/lazygram
 ## Notes
 
 - No AUR or official Arch package of that name exists.
-- Self-update: the next upstream release (0.4.15) makes `lazygram update`
-  refuse to touch a pacman-owned binary and point at pacman instead. On
-  0.4.14 the command stops with "cannot write /usr/bin (rerun with sudo,
-  or install the release by hand)"; the upstream documentation tells
-  users not to do that and to use pacman. If you prefer, I can resubmit
-  once 0.4.15 is out so the first packaged version already refuses.
+- Self-update: from 0.4.15 `lazygram update` refuses to touch a
+  pacman-owned binary and points at pacman instead. On 0.4.14 the
+  command stops with "cannot write /usr/bin (rerun with sudo, or install
+  the release by hand)"; the upstream documentation tells users not to do
+  that and to use pacman.

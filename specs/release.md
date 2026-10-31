@@ -124,7 +124,7 @@ the maintainer side (build and test evidence, submission steps).
   says not to.
 - A new release needs: the tag, `make release`, then the watch does the
   rest; a packaging change at the same version bumps `pkgrel`. The first
-  submission should carry the release with the refusal (v0.4.15, whose
-  tarball also holds `packaging/`, so the entry and icon are installed
-  from it); until then the recipe names 0.4.14 and the documentation
-  states the boundary.
+  submission should carry the latest release (v0.4.16 at the time of
+  writing; v0.4.15 and later carry the refusal and `packaging/` in the
+  tarball, so the entry and icon are installed from it); until then the
+  recipe names 0.4.14 and the documentation states the boundary.

@@ -82,7 +82,7 @@
 - [x] self-update never replaces a package-managed binary; exit hint names the package manager
 - [x] docs: docs/arch-omarchy.md, README install line, specs/release.md and specs/security.md
 - [x] built and tested in Arch x86_64 and Arch Linux ARM aarch64 containers; omarchy-pkgs validators run
-- [ ] release v0.4.15 (self-update refusal for packaged installs; tarball carries packaging/), then point the recipe at it: pkgver, updpkgsums, entry and icon from the tarball instead of the local sources
+- [ ] point the recipe at v0.4.16 (released 2026-10-31; refuses to self-update, tarball carries packaging/): pkgver, updpkgsums, entry and icon from the tarball instead of the local sources, `wl-clipboard: system clipboard for mouse selections on Wayland` in optdepends (the clipboard code falls back to wl-copy, xclip or xsel; 0.4.14 has none of it), rebuild in the containers
 - [ ] submit: fork omacom/omarchy-pkgs, copy packaging/omarchy/lazygram to pkgbuilds/lazygram, open the PR (packaging/omarchy/README.md has the steps and packaging/omarchy/PR.md the text); needs the build-approved label from a maintainer
 - [ ] after the package is published: README install line "omarchy pkg add lazygram" first, verify both channels and architectures
 - [ ] man page and shell completions (optional; the recipe would install them)
@@ -99,4 +99,4 @@
 - [x] input cursor: Left/Right, Ctrl-A/E, Delete, Ctrl-K, Ctrl-W before the cursor; completion at the cursor (specs/ui.md)
 - [x] mouse drag selects text and copies it on release: OSC 52 in the frame plus a system tool, /clip modes kept, clicks act on release (specs/ui.md, docs/clipboard.md)
 - [ ] double click selects a word, triple a row; Shift-click extends (specs/ui.md)
-- [ ] release v0.4.15 with the mouse selection and the self-update refusal
+- [x] release v0.4.15 with the mouse selection and the self-update refusal (v0.4.15 and v0.4.16 released 2026-10-31; formula still at 0.4.14)

@@ -25,10 +25,10 @@ programs (omarchy-speedtest, cliamp).
 | state | `~/.local/state/lazygram`, created by lazygram, owner-only; nothing in `/etc` |
 | license | BSD-2-Clause, installed to `/usr/share/licenses/lazygram/` |
 | Omarchy metadata | required (`.omarchy/package.json`); GitHub release watch so releases are proposed by the repository bot |
-| gap, fixed in code | `lazygram update` would try to replace `/usr/bin/lazygram`; now `update.Detect` reports `Package` for a binary under `/usr` outside `/usr/local`, the update refuses with an error before asking anything, and the exit hint names the package manager. Ships with the next release (0.4.15): the 0.4.14 package stops with "cannot write /usr/bin (rerun with sudo, ...)" and with sudo would replace the file; the user documentation says not to |
+| gap, fixed in code | `lazygram update` would try to replace `/usr/bin/lazygram`; now `update.Detect` reports `Package` for a binary under `/usr` outside `/usr/local`, the update refuses with an error before asking anything, and the exit hint names the package manager. Shipped in v0.4.15 (released 2026-10-31); the 0.4.14 package stops with "cannot write /usr/bin (rerun with sudo, ...)" and with sudo would replace the file; the user documentation says not to |
 | gap, fixed | no launcher entry or icon; added in the form of Omarchy's own TUI entries (`xdg-terminal-exec --app-id=org.omarchy.lazygram -e sh -c "lazygram \|\| { ...; read -r _; }"`, `Terminal=false`, `TryExec=xdg-terminal-exec`): the class `omarchy-launch-tui` would assign, and the window stays open on the not-linked hint instead of flashing shut |
 | gap, open | the entry and icon live next to the recipe until a release tarball carries `packaging/`; then install them from the tarball and bump `pkgrel` |
-| gap, open | the first submission should be of 0.4.15, so the packaged binary already refuses to self-update |
+| gap, open | the recipe names 0.4.14; upstream is at v0.4.16, which refuses to self-update and carries `packaging/`: point the recipe at it before submitting (Submit, step 0) |
 | gap, open | no man page, no shell completions (optional) |
 | gap, open | the stray upstream tag `v0.4.11-1-gd0bdc3f` (ignored by the watch pattern, which matches whole tags) should be deleted |
 
@@ -118,21 +118,21 @@ matches `v0.4.14` whole and does not match `v0.4.11-1-gd0bdc3f`.
   `~/.local/share/applications`); Remove > TUI removes only that one and
   the packaged entry shows again.
 - `omarchy pkg add lazygram` after publication; `omarchy-update` carries
-  the next version; `lazygram update` (0.4.15) names pacman.
+  the next version; `lazygram update` (0.4.15 and later) names pacman.
 - A real QR login and a session on the packaged binary; nothing in the
   recipe changes that code path, but it has not been run from the package.
 
 ## Submit it to omarchy-pkgs
 
-0. Preferred first: release 0.4.15 (the self-update refusal, and a
-   tarball that carries `packaging/`), per specs/release.md: `make check`,
-   commit, `git tag -a v0.4.15 -m "lazygram v0.4.15"`, push, `make dist`,
-   `make release`, formula bump. Then in the recipe set `pkgver=0.4.15`,
-   install `lazygram.desktop` and `lazygram.svg` from
-   `packaging/omarchy/lazygram/` inside the tarball instead of the two
-   local sources, run `updpkgsums`, rebuild in the containers, and retitle
-   PR.md. Submitting 0.4.14 as it is also works; PR.md says what 0.4.14
-   does and the docs state the boundary.
+0. Point the recipe at the latest release first. v0.4.16 (released
+   2026-10-31) carries the self-update refusal and `packaging/` in its
+   tarball: set `pkgver=0.4.16`, install `lazygram.desktop` and
+   `lazygram.svg` from `packaging/omarchy/lazygram/` inside the tarball
+   instead of the two local sources, add `wl-clipboard` to `optdepends`
+   (the clipboard fallback for mouse selections on Wayland), run
+   `updpkgsums`, rebuild in the containers, and retitle PR.md. Submitting
+   0.4.14 as it is also works; PR.md says what 0.4.14 does and the docs
+   state the boundary.
 1. Keep this repository's `packaging/omarchy/lazygram/` as the source of
    truth; the PR copies it.
 2. Fork and branch:

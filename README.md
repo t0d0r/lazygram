@@ -59,6 +59,15 @@ once it is in pkgs.omarchy.org, `omarchy pkg add lazygram`). See
 [docs/arch-omarchy.md](docs/arch-omarchy.md) for launching from the Omarchy
 menu, troubleshooting, upgrade and uninstall.
 
+State of the package (2026-11-01): the recipe builds and passes its
+checks on x86_64 and aarch64 and the omarchy-pkgs validators accept it;
+it is not in pkgs.omarchy.org yet. The pull request to omarchy-pkgs has
+not been opened; once it is, it needs a maintainer's `build-approved`
+label before it builds and merges. The recipe still names 0.4.14 while
+the latest release is v0.4.16, so it is pointed at that release first
+(packaging/omarchy/README.md, step 0). Until then install with
+`makepkg -si` as above.
+
 Or download a static binary for Linux or macOS from the
 [releases](https://github.com/t0d0r/lazygram/releases) (`uname -m`:
 `x86_64` is amd64, `aarch64`/`arm64` is arm64):
