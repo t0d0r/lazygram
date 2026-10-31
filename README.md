@@ -109,6 +109,7 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/theme [name]`            | colour themes: default, solarized, gruvbox, dracula, nord, monokai, tokyonight, vim, emacs |
 | `/about`                   | version, author, build and libraries          |
 | `/fx`                      | running lights over links and buttons on/off  |
+| `/mouse`                   | mouse reporting on/off (off: drag selects text; or hold Shift/Option while dragging) |
 | `/refresh`, `/help`, `/quit` | sync now; print the help into the window; leave |
 
 In a chat window, type text and press **Ctrl-X** to send it to that chat;

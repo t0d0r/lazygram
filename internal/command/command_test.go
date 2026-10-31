@@ -36,6 +36,7 @@ func TestParse(t *testing.T) {
 		{"/msg @ada hello there", Command{Msg, "@ada hello there"}, false},
 		{"/about", Command{About, ""}, false},
 		{"/fx", Command{Fx, ""}, false},
+		{"/mouse", Command{Mouse, ""}, false},
 		{"/bogus", Command{}, true},
 		{"/", Command{}, true},
 		{"hello", Command{}, true},

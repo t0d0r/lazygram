@@ -30,6 +30,7 @@ const (
 	Msg          // send a message: Arg is "<@user|#chan> <text>"; the window opens if missing
 	About        // print version, author and build information
 	Fx           // toggle the running lights over clickable text
+	Mouse        // toggle mouse reporting (off lets the terminal select text)
 )
 
 // Command is a parsed slash command.
@@ -57,6 +58,7 @@ var table = map[string]Kind{
 	"msg": Msg, "say": Msg, "tell": Msg,
 	"about": About, "version": About,
 	"fx": Fx, "lights": Fx, "anim": Fx,
+	"mouse": Mouse,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -110,4 +112,5 @@ const HelpText = `Commands
                          show where it was saved
   /theme [name]          list the colour themes, or switch to one
   /about                 version, author and build information
-  /fx                    running lights over links and buttons on or off`
+  /fx                    running lights over links and buttons on or off
+  /mouse                 mouse reporting on or off (off: drag selects text)`

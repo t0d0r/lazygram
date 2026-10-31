@@ -1382,3 +1382,26 @@ func TestFetchInFlightGuard(t *testing.T) {
 		t.Fatal("after the first completes, a fetch may run again")
 	}
 }
+
+func TestMouseToggleIsKeptAndAppliedAtStart(t *testing.T) {
+	st, _ := store.Open(store.Memory, bytes.Repeat([]byte{9}, 32))
+	defer func() { _ = st.Close() }()
+	m := New(Options{Store: st, Provider: newFake()})
+	m.fx = false
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	cmd := enter(m, "/mouse")
+	if m.mouseOn || cmd == nil || !strings.Contains(m.status, "drag selects") {
+		t.Fatalf("off: %v %q", m.mouseOn, m.status)
+	}
+	var saved bool
+	if ok, _ := st.State(mouseKey, &saved); !ok || saved {
+		t.Fatal("kept")
+	}
+	again := New(Options{Store: st, Provider: newFake()})
+	if again.mouseOn || again.Init() == nil {
+		t.Fatal("a saved off state is applied at start")
+	}
+	if cmd := enter(m, "/mouse"); !m.mouseOn || cmd == nil {
+		t.Fatal("on again")
+	}
+}

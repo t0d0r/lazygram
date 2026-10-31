@@ -43,8 +43,9 @@ const (
 )
 
 const (
-	fxKey          = "fx" // store state key for the running lights
-	fxTick         = 60 * time.Millisecond
+	fxKey          = "fx"    // store state key for the running lights
+	mouseKey       = "mouse" // store state key for mouse reporting
+	fxTick         = 30 * time.Millisecond
 	maxHistory     = 200
 	doubleCtrlX    = 600 * time.Millisecond
 	layoutKey      = "windows" // store state key for the window layout
@@ -100,6 +101,7 @@ type Model struct {
 
 	hover string // the clickable thing under the pointer, as a hover key
 
+	mouseOn bool         // mouse reporting; off lets the terminal select text
 	fx      bool         // running lights over clickable text
 	phase   int          // animation phase
 	ticking bool         // an fx tick is scheduled
@@ -188,6 +190,9 @@ func New(opt Options) *Model {
 		wins: []*win{{}}, status: "type /help for commands", started: time.Now(), fx: true, rcache: &renderCache{}}
 	if found, err := opt.Store.State(fxKey, &m.fx); !found || err != nil {
 		m.fx = true
+	}
+	if found, err := opt.Store.State(mouseKey, &m.mouseOn); !found || err != nil {
+		m.mouseOn = true
 	}
 	m.chats, _ = opt.Store.Chats()
 	m.msgs, _ = opt.Store.Messages("", opt.Backlog)
@@ -296,6 +301,9 @@ func (m *Model) Init() tea.Cmd {
 	}
 	if m.cur > 0 {
 		cmds = append(cmds, m.switchTo(m.cur))
+	}
+	if !m.mouseOn { // the program starts with the mouse on; honour the saved choice
+		cmds = append(cmds, tea.DisableMouse)
 	}
 	return tea.Batch(cmds...)
 }
@@ -1251,6 +1259,16 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		return m.msg(c.Arg)
 	case command.About:
 		m.about()
+	case command.Mouse:
+		m.mouseOn = !m.mouseOn
+		_ = m.opt.Store.SetState(mouseKey, m.mouseOn)
+		if m.mouseOn {
+			m.setInfo("mouse on: click to act; hold Shift (or Option on macOS) while dragging to select text")
+			return m, tea.EnableMouseAllMotion
+		}
+		m.hover = ""
+		m.setInfo("mouse off: drag selects text; /mouse turns clicks back on")
+		return m, tea.DisableMouse
 	case command.Fx:
 		m.fx = !m.fx
 		_ = m.opt.Store.SetState(fxKey, m.fx)
@@ -1945,6 +1963,8 @@ const keyHelp = `Keys
 Themes: /theme lists the colour schemes, /theme <name> switches (kept).
 Clickable text is bright and underlined; a running light plays over the
 one under the mouse pointer. /fx turns the light on or off (kept).
+To select text with the mouse, hold Shift (Option on macOS) while
+dragging, or /mouse to turn mouse reporting off and on (kept).
 Mouse: click a chat name or nick in window 0 to open its window, a tag in
 the window bar to focus it, a row in a list to open it, a link or a
 [photo] / [file] token to open it with the system; the wheel scrolls.

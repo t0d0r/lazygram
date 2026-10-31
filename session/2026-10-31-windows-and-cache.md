@@ -204,3 +204,6 @@ at the hidden password prompt takes effect only after Enter.
   browser. Refetch of the pressed message still races a very slow bot.
 - Running light: one character bouncing ping-pong over the hovered element
   at 60 ms; the hovered message is not cached.
+- `/mouse` toggles mouse reporting (tea.DisableMouse / EnableMouseAllMotion),
+  kept in state and applied at start; docs note the Shift/Option drag for
+  selecting text while reporting is on.

@@ -104,6 +104,7 @@ as notices; there is no separate help view.
 | `/theme [name]`               | list the colour themes or switch (see Themes)        |
 | `/about`, `/version`          | version, author, repository, license, build, libraries, uptime |
 | `/fx`                         | running lights over clickable text on or off (kept) |
+| `/mouse`                      | mouse reporting on or off; off lets the terminal select text (kept) |
 
 Short forms: `/w`, `/j`, `/join`, `/query` for `/win`; `/wc`, `/part` for
 `/close`; `/history` for `/last`; `/find`, `/log` for `/search`; `/wi`,
@@ -145,14 +146,18 @@ hex values, downsampled by lipgloss on 256-colour terminals.
 Clickable text looks clickable: links are underlined in the theme's link
 colour, attachment tokens bold in the same colour, bot buttons in the
 button colour. A running light (a single bright character bouncing back and forth
-over the element, moving every 60 ms) plays over the element under the
+over the element, moving every 30 ms) plays over the element under the
 mouse pointer only: a chat
 name, a nick, a link, an attachment token, a button line or a window-bar
 tag. Hovering needs the terminal to report pointer motion (all-motion
 mouse mode). The animation ticks only while something is hovered, and
 rendered messages are cached per width and theme and the hovered message
 is simply not cached, so only it re-renders each tick. `/fx` turns the light off or on; the choice is
-kept. Clicks act on what is under the pointer as of the last render: a chat name
+kept. While lazygram reports the mouse, the terminal's own drag-select
+needs a modifier: Shift in most Linux terminals, Option in macOS
+Terminal and iTerm2. `/mouse` turns mouse reporting off (drag selects as
+usual, clicks do nothing) and on again; the choice is kept and applied at
+start. Clicks act on what is under the pointer as of the last render: a chat name
 in the server window opens or focuses that chat's window; a nick opens the
 chat whose alias or title equals it exactly (otherwise "no chat named ..."); a
 `[N:name]` tag in the window bar focuses window N; a row in `/list` or
