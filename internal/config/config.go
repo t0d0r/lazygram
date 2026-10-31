@@ -107,6 +107,44 @@ func SaveApp(dir string, a App) error {
 	return os.Rename(tmp, filepath.Join(dir, appFile))
 }
 
+// Environment variable names accepted as a source of the registration, in
+// order of preference: lazygram's own names, then nchat's.
+var (
+	envAppID   = []string{"TG_API_ID", "TG_APIID"}
+	envAppHash = []string{"TG_API_HASH", "TG_APIHASH"}
+)
+
+// AppFromEnv reads the registration from the environment (for example a
+// git-ignored direnv .envrc). found is false when neither variable is set.
+// One without the other, or an invalid value, is an error that names the
+// variable and never its value.
+func AppFromEnv(getenv func(string) string) (app App, found bool, err error) {
+	idName, id := firstSet(getenv, envAppID)
+	hashName, hash := firstSet(getenv, envAppHash)
+	switch {
+	case id == "" && hash == "":
+		return App{}, false, nil
+	case id == "":
+		return App{}, true, fmt.Errorf("%s is set but %s is not", hashName, envAppID[0])
+	case hash == "":
+		return App{}, true, fmt.Errorf("%s is set but %s is not", idName, envAppHash[0])
+	}
+	app, err = ParseApp(id, hash)
+	if err != nil {
+		return App{}, true, fmt.Errorf("%s/%s: %w", idName, hashName, err)
+	}
+	return app, true, nil
+}
+
+func firstSet(getenv func(string) string, names []string) (string, string) {
+	for _, n := range names {
+		if v := strings.TrimSpace(getenv(n)); v != "" {
+			return n, v
+		}
+	}
+	return "", ""
+}
+
 // Telegram is what the connector needs.
 type Telegram struct {
 	App        App

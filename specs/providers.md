@@ -34,11 +34,15 @@ No environment variables. Everything is under `<data>/telegram/`:
 - `app.json`: the Telegram application registration (api id and hash from
   https://my.telegram.org). Decision: lazygram ships no registration of its
   own and does not reuse nchat's; nchat's SCOPE.md asks forks to obtain their
-  own because a shared registration gets rate-limited or banned. The first
-  `lazygram login` asks for it once (hash hidden) and stores it 0600. A
-  personal build may embed one with `-ldflags -X main.buildAppID=...
-  -X main.buildAppHash=...` (`make build TG_API_ID=... TG_API_HASH=...`); a
-  stored file wins over the embedded value.
+  own because a shared registration gets rate-limited or banned.
+  Resolution order at every start: `app.json`, then the environment
+  (`TG_API_ID`/`TG_API_HASH`, or nchat's `TG_APIID`/`TG_APIHASH`), then the
+  value embedded at build time (`-ldflags -X main.buildAppID=...
+  -X main.buildAppHash=...`, `make build TG_API_ID=... TG_API_HASH=...`).
+  `lazygram login` stores whatever it resolved from the environment, or asks
+  (hash hidden) when nothing is found, so later starts need no environment.
+  A variable set without its partner, or with a bad value, is an error that
+  names the variable, never the value.
 - `session.json`: the gotd session (auth key and account authorization),
   written 0600.
 - the history cache (specs/storage.md).

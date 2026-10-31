@@ -1,9 +1,10 @@
 # Security
 
-- No environment variables and no flags carry credentials. The Telegram
-  application registration is typed once at `lazygram login` (hash hidden)
-  and stored 0600 in the state directory; errors never print its value.
-  lazygram ships no registration and does not reuse nchat's.
+- No flags carry credentials. The Telegram application registration comes
+  from the git-ignored `app.json`, from `TG_API_ID`/`TG_API_HASH` in the
+  environment (a direnv `.envrc` is git-ignored too), from a personal build,
+  or is typed once at `lazygram login` (hash hidden); errors never print its
+  value. lazygram ships no registration and does not reuse nchat's.
 - The tree must contain no secrets, session files, phone numbers, user ids,
   real chat titles or messages. Demo data is invented. `.gitignore` covers
   `.env*`, `*.pem`, `*.key`, session files and `.state/`.

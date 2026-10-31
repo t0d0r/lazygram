@@ -87,3 +87,25 @@ func TestTelegramDirUnderData(t *testing.T) {
 		t.Fatal(TelegramDir("/d"))
 	}
 }
+
+func TestAppFromEnv(t *testing.T) {
+	env := func(m map[string]string) func(string) string { return func(k string) string { return m[k] } }
+	if _, found, err := AppFromEnv(env(nil)); found || err != nil {
+		t.Fatalf("unset: %v %v", found, err)
+	}
+	app, found, err := AppFromEnv(env(map[string]string{"TG_API_ID": " 42 ", "TG_API_HASH": goodHash}))
+	if err != nil || !found || app.APIID != 42 || app.APIHash != goodHash {
+		t.Fatalf("%+v %v %v", app, found, err)
+	}
+	app, _, err = AppFromEnv(env(map[string]string{"TG_APIID": "7", "TG_APIHASH": goodHash}))
+	if err != nil || app.APIID != 7 {
+		t.Fatalf("nchat names: %+v %v", app, err)
+	}
+	if _, found, err := AppFromEnv(env(map[string]string{"TG_API_ID": "42"})); !found || err == nil || !strings.Contains(err.Error(), "TG_API_HASH") {
+		t.Fatalf("half set: %v %v", found, err)
+	}
+	_, _, err = AppFromEnv(env(map[string]string{"TG_API_ID": "nope", "TG_API_HASH": goodHash}))
+	if err == nil || strings.Contains(err.Error(), "nope") || strings.Contains(err.Error(), goodHash) || !strings.Contains(err.Error(), "TG_API_ID") {
+		t.Fatalf("invalid: %v", err)
+	}
+}

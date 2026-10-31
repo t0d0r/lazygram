@@ -33,11 +33,12 @@ func runLogin(o options) error {
 		return errors.New("login needs an interactive terminal")
 	}
 	p := &ttyPrompter{in: bufio.NewReader(os.Stdin), out: os.Stderr}
-	cfg, found, err := telegramConfig(o.dataDir)
+	cfg, src, err := telegramConfig(o.dataDir)
 	if err != nil {
 		return err
 	}
-	if !found {
+	switch src {
+	case appNone:
 		app, err := askApp(p)
 		if err != nil {
 			return err
@@ -46,6 +47,12 @@ func runLogin(o options) error {
 			return err
 		}
 		cfg.App = app
+	case appEnv:
+		// Store it so later starts work without the environment.
+		if err := config.SaveApp(cfg.SessionDir, cfg.App); err != nil {
+			return err
+		}
+		p.say("using the application registration from the environment; stored in the state directory\n")
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)

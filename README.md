@@ -30,10 +30,19 @@ account has two-step verification, the password is asked once, hidden. Use
 
 Telegram's protocol requires every client to identify with an application id
 and hash. nchat ships its own; lazygram does not (nchat's documentation asks
-forks not to reuse theirs). The first `lazygram login` asks for yours once,
-from https://my.telegram.org under "API development tools", and stores them
-in the state directory. A personal build can embed them instead:
-`make build TG_API_ID=... TG_API_HASH=...` (never commit those values).
+forks not to reuse theirs). Get yours once from https://my.telegram.org under
+"API development tools" and give them to lazygram in one of three ways:
+
+- `TG_API_ID` and `TG_API_HASH` in the environment, for example from a
+  direnv `.envrc` in the project directory (git-ignored). `lazygram login`
+  takes them from there, stores them in the state directory and never asks.
+  nchat's names `TG_APIID` / `TG_APIHASH` are accepted too.
+- Type them at the first `lazygram login`; they are stored the same way.
+- Embed them in a personal build: `make build TG_API_ID=... TG_API_HASH=...`
+  (with direnv active, `make build` picks them up by itself).
+
+A stored registration wins over the environment; delete
+`<state>/telegram/app.json` to switch. Never commit these values.
 
 ## Using it
 

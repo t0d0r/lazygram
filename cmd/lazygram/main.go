@@ -107,30 +107,54 @@ func run(args []string) error {
 	}
 }
 
-// telegramConfig loads the stored application registration, or the one
-// embedded at build time. found is false when there is none.
-func telegramConfig(dataDir string) (cfg config.Telegram, found bool, err error) {
+// appSource says where the application registration came from.
+type appSource int
+
+const (
+	appNone   appSource = iota
+	appStored           // app.json in the state directory
+	appEnv              // TG_API_ID / TG_API_HASH in the environment
+	appBuilt            // embedded at build time
+)
+
+// telegramConfig resolves the application registration: the stored file
+// wins, then the environment, then the build-time value.
+func telegramConfig(dataDir string) (cfg config.Telegram, src appSource, err error) {
 	dir := config.TelegramDir(dataDir)
+	cfg = config.Telegram{SessionDir: dir}
 	app, found, err := config.LoadApp(dir)
 	if err != nil {
-		return cfg, found, err
+		return cfg, appNone, err
 	}
-	if !found && buildAppID != "" {
+	if found {
+		cfg.App = app
+		return cfg, appStored, nil
+	}
+	app, found, err = config.AppFromEnv(os.Getenv)
+	if err != nil {
+		return cfg, appNone, err
+	}
+	if found {
+		cfg.App = app
+		return cfg, appEnv, nil
+	}
+	if buildAppID != "" {
 		app, err = config.ParseApp(buildAppID, buildAppHash)
 		if err != nil {
-			return cfg, false, fmt.Errorf("embedded application registration: %w", err)
+			return cfg, appNone, fmt.Errorf("embedded application registration: %w", err)
 		}
-		found = true
+		cfg.App = app
+		return cfg, appBuilt, nil
 	}
-	return config.Telegram{App: app, SessionDir: dir}, found, nil
+	return cfg, appNone, nil
 }
 
 func runTelegram(o options) error {
-	cfg, found, err := telegramConfig(o.dataDir)
+	cfg, src, err := telegramConfig(o.dataDir)
 	if err != nil {
 		return err
 	}
-	if !found || !telegram.HasSession(cfg) {
+	if src == appNone || !telegram.HasSession(cfg) {
 		return exitError{notLinked, 2}
 	}
 	client := telegram.NewClient(cfg)

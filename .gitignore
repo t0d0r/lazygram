@@ -9,3 +9,4 @@ session.json
 /lazygram
 *.log
 .DS_Store
+.envrc
