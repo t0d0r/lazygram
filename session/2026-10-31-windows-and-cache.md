@@ -89,3 +89,19 @@ at the hidden password prompt takes effect only after Enter.
   and refuses if `app_local.go` (now `//go:build !release`) would be
   compiled in; `make release` publishes with gh. `lazygram update` ported
   from lazyai (brew or binary, SHA256SUMS-checked, no deb).
+
+## v0.3.0 prepared, publish pending
+
+- Tag `v0.3.0` created locally on 51aa408. `make dist` built the four
+  tarballs and SHA256SUMS in `dist/`; the darwin-arm64 binary reports
+  `lazygram v0.3.0`, exits 2 when not linked, and contains no registration
+  (the dev build does, as intended).
+- `t0d0r/homebrew-tap` cloned to `../homebrew-tap` with
+  `Formula/lazygram.rb` (sha256 placeholder until the tag is on GitHub) and
+  a README row; uncommitted.
+- Creating the GitHub repository and pushing were not performed from this
+  session (publishing requires the operator). Remaining steps, in order:
+  `gh repo create t0d0r/lazygram --public --source=. --remote=origin --push`,
+  `git push origin v0.3.0`, `make release`, fill the formula's sha256 from
+  the tag's source tarball, `brew install --build-from-source
+  t0d0r/tap/lazygram`, `brew test lazygram`, push the tap.
