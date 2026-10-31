@@ -270,6 +270,7 @@ at the hidden password prompt takes effect only after Enter.
   faces and a spaced wordmark `logo.Random(width)` picks one that fits.
 - A window whose chat had no cached messages rolls in (start-up style)
   when its first history fetch lands; windows with content never do.
-- Tags v0.4.7 .. v0.4.10 pushed; v0.4.8 released on GitHub, the formula
-  builds from the v0.4.10 source tarball. `make release` for the later
-  tags is refused from the agent session and has to be run by hand.
+- Tags v0.4.7 .. v0.4.11 pushed; v0.4.8 released on GitHub (tarballs and
+  SHA256SUMS); the Homebrew formula builds from the v0.4.11 source
+  tarball. dist/ holds the v0.4.11 tarballs; `make release` at the
+  v0.4.11 tag is the open step (it is refused from the agent session).
