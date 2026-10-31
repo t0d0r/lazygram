@@ -207,3 +207,5 @@ at the hidden password prompt takes effect only after Enter.
 - `/mouse` toggles mouse reporting (tea.DisableMouse / EnableMouseAllMotion),
   kept in state and applied at start; docs note the Shift/Option drag for
   selecting text while reporting is on.
+- Light speed derives from element length: a pass takes 400 ms (hover
+  clock in milliseconds instead of a tick counter).

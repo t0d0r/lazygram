@@ -1305,7 +1305,7 @@ func TestRunningLightFollowsTheMouse(t *testing.T) {
 	}
 	m.View()
 	_, cmd := m.Update(fxTickMsg{})
-	if !m.animOn || cmd == nil {
+	if !m.animOn || cmd == nil || m.phaseOpt() < 0 {
 		t.Fatal("the light runs under the pointer")
 	}
 	m.Update(tea.MouseMsg{X: 0, Y: 0, Action: tea.MouseActionMotion})

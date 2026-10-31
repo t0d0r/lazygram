@@ -111,7 +111,7 @@ type lineOpts struct {
 	nameW     int                        // padded chat column width
 	fullDate  bool                       // history pager shows the date on every line
 	highlight string                     // case-insensitive text to highlight
-	phase     int                        // running-light position; -1 means no animation
+	phase     int                        // hover time in milliseconds for the light; -1 means none
 	hover     string                     // hover key of the element under the pointer; only it animates
 	cache     *renderCache               // optional per-message cache
 }
@@ -125,18 +125,22 @@ func (o lineOpts) hovered(kind spanKind, target string) int {
 	return o.phase
 }
 
+// travelMs is how long the light takes from one end of an element to the
+// other, whatever its length: long links and short nicks take the same.
+const travelMs = 400
+
 // bouncePos is where the single light sits on an element of n characters
-// at a given phase: it runs to the end and back, ping-pong.
-func bouncePos(phase, n int) int {
+// after ms milliseconds of hovering: it runs to the end and back,
+// ping-pong, at a speed that keeps the travel time constant.
+func bouncePos(ms, n int) int {
 	if n <= 1 {
 		return 0
 	}
-	period := 2 * (n - 1)
-	pos := phase % period
-	if pos >= n {
-		pos = period - pos
+	t := ms % (2 * travelMs)
+	if t > travelMs {
+		t = 2*travelMs - t
 	}
-	return pos
+	return (t*(n-1) + travelMs/2) / travelMs
 }
 
 // renderCache remembers rendered messages; a message without animated
@@ -171,7 +175,8 @@ func (c *renderCache) put(key string, v cached) {
 }
 
 // clickable paints text as something the mouse can act on, with one bright
-// character bouncing back and forth over it at phase (none when phase < 0).
+// character bouncing back and forth over it; phase is the hover time in
+// milliseconds (none when phase < 0).
 func clickable(text string, base lipgloss.Style, phase int) string {
 	if phase < 0 {
 		return base.Render(text)

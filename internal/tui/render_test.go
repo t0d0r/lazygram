@@ -274,11 +274,15 @@ func TestLinksTrimPunctuationAndPreferExactMatches(t *testing.T) {
 }
 
 func TestBouncePos(t *testing.T) {
-	want := []int{0, 1, 2, 3, 2, 1, 0, 1, 2}
-	for phase, w := range want {
-		if got := bouncePos(phase, 4); got != w {
-			t.Fatalf("phase %d: got %d want %d", phase, got, w)
+	// A full pass takes travelMs whatever the length: the end is reached at
+	// travelMs, the start again at 2*travelMs.
+	for _, n := range []int{2, 5, 40} {
+		if bouncePos(0, n) != 0 || bouncePos(travelMs, n) != n-1 || bouncePos(2*travelMs, n) != 0 {
+			t.Fatalf("n=%d: %d %d %d", n, bouncePos(0, n), bouncePos(travelMs, n), bouncePos(2*travelMs, n))
 		}
+	}
+	if bouncePos(travelMs/2, 5) != 2 || bouncePos(travelMs+travelMs/2, 5) != 2 {
+		t.Fatal("halfway, both directions")
 	}
 	if bouncePos(5, 1) != 0 || bouncePos(5, 0) != 0 {
 		t.Fatal("short elements")

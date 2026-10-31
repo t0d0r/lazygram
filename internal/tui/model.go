@@ -103,7 +103,7 @@ type Model struct {
 
 	mouseOn bool         // mouse reporting; off lets the terminal select text
 	fx      bool         // running lights over clickable text
-	phase   int          // animation phase
+	hoverAt time.Time    // when the pointer reached the hovered element
 	ticking bool         // an fx tick is scheduled
 	animOn  bool         // the last View showed something animated
 	rcache  *renderCache // rendered messages, reused across ticks
@@ -546,8 +546,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case fxTickMsg:
-		m.ticking = false
-		m.phase++
+		m.ticking = false // the next View reads the hover clock
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 	case chatsMsg:
@@ -702,6 +701,7 @@ func hoverKey(s span) string { return fmt.Sprintf("%d:%s", s.kind, s.target) }
 func (m *Model) mouse(e tea.MouseMsg) (tea.Model, tea.Cmd) {
 	w := m.wins[m.cur]
 	if e.Action == tea.MouseActionMotion {
+		was := m.hover
 		m.hover = ""
 		if e.Y >= 0 && e.Y < len(m.clicks) {
 			for _, s := range m.clicks[e.Y] {
@@ -709,6 +709,9 @@ func (m *Model) mouse(e tea.MouseMsg) (tea.Model, tea.Cmd) {
 					m.hover = hoverKey(s)
 				}
 			}
+		}
+		if m.hover != was {
+			m.hoverAt = time.Now() // the light starts from the left edge
 		}
 		return m, nil
 	}
@@ -1685,12 +1688,14 @@ func (m *Model) lines() []string {
 	return lines
 }
 
-// phaseOpt is the animation phase for rendering: -1 when lights are off.
+// phaseOpt is the light's clock for rendering: milliseconds since the
+// pointer reached the hovered element, or -1 when lights are off or
+// nothing is hovered.
 func (m *Model) phaseOpt() int {
-	if !m.fx {
+	if !m.fx || m.hover == "" {
 		return -1
 	}
-	return m.phase
+	return int(time.Since(m.hoverAt) / time.Millisecond)
 }
 
 func (m *Model) richLines() ([]string, [][]span) {
@@ -1927,7 +1932,7 @@ func (m *Model) windowBar() (string, []span) {
 			st = actStyle
 		}
 		if m.fx && m.hover == hoverKey(span{kind: spanWin, target: strconv.Itoa(i)}) {
-			b.WriteString(clickable(tag, st, m.phase))
+			b.WriteString(clickable(tag, st, m.phaseOpt()))
 		} else {
 			b.WriteString(st.Render(tag))
 		}

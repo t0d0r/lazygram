@@ -146,8 +146,8 @@ hex values, downsampled by lipgloss on 256-colour terminals.
 Clickable text looks clickable: links are underlined in the theme's link
 colour, attachment tokens bold in the same colour, bot buttons in the
 button colour. A running light (a single bright character bouncing back and forth
-over the element, moving every 30 ms) plays over the element under the
-mouse pointer only: a chat
+over the element; one end-to-end pass takes 400 ms whatever the length,
+redrawn every 30 ms) plays over the element under the mouse pointer only: a chat
 name, a nick, a link, an attachment token, a button line or a window-bar
 tag. Hovering needs the terminal to report pointer motion (all-motion
 mouse mode). The animation ticks only while something is hovered, and
