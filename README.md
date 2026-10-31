@@ -182,12 +182,13 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/refresh`, `/help`, `/quit` | sync now; print the command list, with every short form, into the server window (it ends by naming `/keys`); leave |
 | `/keys`                    | print the keyboard shortcuts into the server window |
 
-In a chat window, type text and press **Ctrl-X** to send it to that chat;
-Enter is for commands (press Ctrl-X twice quickly to make Enter send in
-that window, and again to switch back; a fast double Ctrl-X never sends,
-it only switches; the status line ends with `ctrl-x: to send` or
-`enter: to send`). The sent line shows up as `<me>` once the service
-has it. Bot messages with buttons show them underneath as
+In a chat window, type text and press **Ctrl-X** to send it to that chat,
+as typed: a line that starts with `/` goes out as a message too, Ctrl-X
+never runs commands. Enter is for commands (press Ctrl-X twice quickly to
+make Enter send in that window, and again to switch back; a fast double
+Ctrl-X never sends, it only switches; the status line ends with
+`ctrl-x: to send` or `enter: to send`). The sent line shows up as `<me>`
+once the service has it. Bot messages with buttons show them underneath as
 `[1] Yes  [2] Docs (link)  (msg 1234)`; `/press 1` answers the bot and the
 edited message replaces the old line, link buttons only print their URL,
 reply-keyboard buttons send their label. Photos show as `[photo]`: click
@@ -200,14 +201,14 @@ viewer instead.
 | Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash: commands, chats, themes, `/open out` and attachment message ids, `/win list`, paths after `/send` |
 | Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
 | Alt-0 .. Alt-9      | window 0 .. 9 (Esc then the digit works too)       |
-| Up / Down           | input history (commands and sent lines)            |
+| Up / Down           | input history (commands and sent lines; a recalled line is input again: Ctrl-X sends it, Enter runs it when it starts with `/`) |
 | Left / Right        | move the cursor in the input; Ctrl-A / Ctrl-E start / end; Delete removes under the cursor (as Backspace at the end), Ctrl-W the word before it, Ctrl-K to the end |
 | PgUp / PgDn         | scroll a page; Home / End oldest / newest          |
 | Ctrl-R              | sync now                                           |
 | F1                  | print the command list into the server window (`/keys` for this table) |
 | Esc                 | close the list or pager, else clear the input      |
-| Ctrl-X              | send the typed text to this window's chat          |
-| Ctrl-X twice        | toggle "Enter sends" for this window               |
+| Ctrl-X              | send the typed text to this window's chat, as typed (a line starting with `/` is sent, not run; Enter runs commands) |
+| Ctrl-X twice        | toggle "Enter sends" for this window (Ctrl-X then adds a line, but still sends a line starting with `/` unless it has a leading space) |
 | Ctrl-C              | quit                                               |
 | mouse               | click chat names, nicks, window tags, list rows, links and `[photo]` tokens (a running light shows what is under the pointer); wheel scrolls; drag selects text and copies it on release |
 

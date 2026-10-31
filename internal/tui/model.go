@@ -797,7 +797,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if p := m.pending; p != nil && p.seq == msg.seq {
 			m.pending = nil
 			m.remember(p.text)
-			m.setInfo("sending to " + m.nameOf(p.chatID) + "...")
+			m.setInfo("sending to " + m.nameOf(p.chatID) + asText(p.text) + "...")
 			return m, m.sendCmd(p.chatID, p.text)
 		}
 	case openedMsg:
@@ -1211,6 +1211,9 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyEnter:
 		return m.enter()
 	case tea.KeyCtrlX:
+		if m.mode != modeWin { // the list and the pager: nothing to send, no toggle armed
+			return m, nil
+		}
 		now := time.Now()
 		// A second Ctrl-X within the window toggles "Enter sends"; text held
 		// back by the first one is not sent but put back in the input.
@@ -1233,8 +1236,14 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		m.lastCtrlX = now
-		if w.enterSends && w.chatID != "" && m.mode == modeWin && strings.TrimSpace(string(m.input)) != "" {
-			m.insert('\n') // Enter sends: Ctrl-X adds a line instead
+		typed := strings.TrimSpace(string(m.input))
+		if w.enterSends && w.chatID != "" && typed != "" &&
+			(!strings.HasPrefix(typed, "/") || strings.HasPrefix(string(m.input), " ")) {
+			// Enter sends: Ctrl-X adds a line instead. A line that starts
+			// with "/" is the exception: Enter would run it as a command,
+			// so Ctrl-X sends it as text. With a leading space Enter sends
+			// it as text too, so that form keeps the line break.
+			m.insert('\n')
 			m.setInfo("line added; Enter sends the message")
 			return m, nil
 		}
@@ -1332,10 +1341,12 @@ type pendingSend struct {
 }
 
 // sendable checks that the typed text can go to the current window's chat
-// and returns it; it reports errors in the status line.
+// and returns it; it reports errors in the status line. The text goes as
+// typed (surrounding whitespace trimmed): a line that starts with "/" is
+// a message like any other here, never a command. Enter is what runs
+// commands.
 func (m *Model) sendable() (chatID, text string, ok bool) {
-	raw := string(m.input)
-	text = strings.TrimSpace(raw)
+	text = strings.TrimSpace(string(m.input))
 	w := m.wins[m.cur]
 	switch {
 	case m.mode != modeWin, text == "":
@@ -1343,11 +1354,17 @@ func (m *Model) sendable() (chatID, text string, ok bool) {
 	case w.chatID == "":
 		m.setErr("the server window has no chat; /win to a chat first")
 		return "", "", false
-	case strings.HasPrefix(text, "/") && !strings.HasPrefix(raw, " "): // a leading space sends it as text
-		m.setErr("that looks like a command: Enter runs it; prefix a space to send it as text")
-		return "", "", false
 	}
 	return w.chatID, text, true
+}
+
+// asText names the way a line goes out when it could be mistaken for a
+// command, so the status line makes it plain.
+func asText(text string) string {
+	if strings.HasPrefix(text, "/") {
+		return " as text, not a command"
+	}
+	return ""
 }
 
 // send posts the typed text to the current window's chat at once (Enter
@@ -1359,7 +1376,7 @@ func (m *Model) send() (tea.Model, tea.Cmd) {
 	}
 	m.input, m.curBack = nil, 0
 	m.remember(text)
-	m.setInfo("sending to " + m.nameOf(chatID) + "...")
+	m.setInfo("sending to " + m.nameOf(chatID) + asText(text) + "...")
 	return m, m.sendCmd(chatID, text)
 }
 
@@ -1373,7 +1390,7 @@ func (m *Model) holdSend() (tea.Model, tea.Cmd) {
 	m.input, m.curBack = nil, 0
 	m.pendingSeq++
 	m.pending = &pendingSend{chatID: chatID, text: text, seq: m.pendingSeq}
-	m.setInfo("sending to " + m.nameOf(chatID) + "... (Ctrl-X again to keep the text and toggle)")
+	m.setInfo("sending to " + m.nameOf(chatID) + asText(text) + "... (Ctrl-X again to keep the text and toggle)")
 	seq := m.pendingSeq
 	return m, tea.Tick(doubleCtrlX, func(time.Time) tea.Msg { return sendLaterMsg{seq: seq} })
 }
@@ -2525,16 +2542,22 @@ const keyHelp = `Keys
   Tab                    on an empty prompt: next window (Shift-Tab previous);
                          otherwise complete like bash: a command, a @user /
                          #chan or a theme; Tab again lists the possibilities
-  Ctrl-X                 send the typed text to this chat (after a short pause);
-                         Enter then adds a line to the message
+  Ctrl-X                 send the typed text to this chat (after a short pause),
+                         as typed: a line starting with / goes out as a message,
+                         never as a command (Enter runs commands); Enter then
+                         adds a line to the message
   Ctrl-X twice (fast)    toggle "Enter sends" for this window; nothing is sent;
-                         Ctrl-X then adds a line instead
+                         Ctrl-X then adds a line instead, except to a line
+                         starting with / (no leading space), which it still
+                         sends as text
   Ctrl-N / Ctrl-P        next / previous window (Alt-Right / Alt-Left too)
   Alt-0..9, Esc 0..9     window 0..9 (0 is the server window)
   Left / Right           move the cursor; Ctrl-A / Ctrl-E line start / end;
                          Backspace / Delete remove before / under the cursor;
                          Ctrl-W the word before it, Ctrl-K to the end, Ctrl-U all
-  Up / Down              walk the input history (commands and sent lines)
+  Up / Down              walk the input history (commands and sent lines); a
+                         recalled line is input again: Ctrl-X sends it, Enter
+                         runs it when it starts with /
   PgUp / PgDn            scroll a page (the wheel scrolls too)
   Home / End             oldest / newest
   Ctrl-R                 sync now

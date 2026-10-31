@@ -652,10 +652,15 @@ func TestCtrlXSendsInChatWindowOnly(t *testing.T) {
 		t.Fatalf("sent=%v status=%q", f.sent, m.status)
 	}
 	m.lastCtrlX = time.Time{}
-	typ(m, "/quit")
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
-	if !m.isErr || len(f.sent) != 1 || m.pending != nil {
-		t.Fatal("command-like text must not be sent by Ctrl-X")
+	typ(m, "/win 0")
+	_, tick = m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if m.isErr || tick == nil || m.pending == nil || m.pending.text != "/win 0" || m.cur == 0 {
+		t.Fatalf("slash text is held for sending, not run: pending=%v cur=%d status=%q", m.pending, m.cur, m.status)
+	}
+	_, cmd = m.Update(tick())
+	m.Update(cmd())
+	if len(f.sent) != 2 || f.sent[1] != "c2:/win 0" || m.cur == 0 {
+		t.Fatalf("slash text goes out as typed, no command runs: sent=%v cur=%d", f.sent, m.cur)
 	}
 	m.input = nil
 	typ(m, "plain text")
@@ -1486,14 +1491,14 @@ func TestRunningLightFollowsTheMouse(t *testing.T) {
 	}
 }
 
-func TestLeadingSpaceSendsSlashText(t *testing.T) {
+func TestCtrlXTrimsSurroundingWhitespace(t *testing.T) {
 	f := newFake()
 	m := setup(t, f)
 	enter(m, "/win @alice")
-	typ(m, " /not a command")
+	typ(m, " /not a command ")
 	_, tick := m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
 	if tick == nil || m.pending == nil || m.pending.text != "/not a command" {
-		t.Fatalf("a leading space must send the text: pending=%v", m.pending)
+		t.Fatalf("surrounding whitespace is trimmed, the rest is sent: pending=%v", m.pending)
 	}
 }
 
@@ -1565,6 +1570,183 @@ func TestMouseToggleIsKeptAndAppliedAtStart(t *testing.T) {
 	}
 	if cmd := enter(m, "/mouse"); !m.mouseOn || cmd == nil {
 		t.Fatal("on again")
+	}
+}
+
+// TestCtrlXSendsSlashTextEnterRunsIt: Ctrl-X posts a line that starts with
+// "/" to the chat as typed, bypassing the command parser, in both send
+// modes; Enter keeps running such a line as a command.
+func TestCtrlXSendsSlashTextEnterRunsIt(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	enter(m, "/win @alice")
+	alice, ran := m.cur, m.cmdsN
+
+	// Ctrl-X sends (the default): the slash line is held, then sent as text.
+	typ(m, "/help me, I am lost")
+	m.lastCtrlX = time.Time{}
+	_, tick := m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if m.isErr || tick == nil || m.pending == nil || m.pending.text != "/help me, I am lost" || len(m.input) != 0 {
+		t.Fatalf("held as text: pending=%v input=%q status=%q", m.pending, string(m.input), m.status)
+	}
+	if !strings.Contains(m.status, "as text, not a command") {
+		t.Fatalf("the status says how it goes out: %q", m.status)
+	}
+	_, cmd := m.Update(tick())
+	if !strings.Contains(m.status, "as text, not a command") {
+		t.Fatalf("the status still says so when the hold ends: %q", m.status)
+	}
+	m.Update(cmd())
+	if len(f.sent) != 1 || f.sent[0] != "c2:/help me, I am lost" || m.cur != alice || m.cmdsN != ran || m.isErr {
+		t.Fatalf("sent as typed, no command ran: sent=%v cur=%d cmds=%d status=%q", f.sent, m.cur, m.cmdsN, m.status)
+	}
+
+	// Enter still runs the command.
+	typ(m, "/win 0")
+	press(m, tea.KeyEnter)
+	if m.cur != 0 || m.cmdsN != ran+1 || len(f.sent) != 1 {
+		t.Fatalf("Enter runs commands: cur=%d cmds=%d sent=%v", m.cur, m.cmdsN, f.sent)
+	}
+
+	// With "Enter sends" on, Ctrl-X sends a slash line instead of adding a
+	// line break, and Enter still runs it as a command.
+	enter(m, "/win @alice")
+	press(m, tea.KeyCtrlX)
+	press(m, tea.KeyCtrlX) // fast double: Enter sends in @alice
+	if !m.wins[m.cur].enterSends {
+		t.Fatal("Enter sends expected")
+	}
+	typ(m, "/shrug")
+	m.lastCtrlX = time.Time{}
+	_, tick = m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if tick == nil || m.pending == nil || m.pending.text != "/shrug" || len(m.input) != 0 {
+		t.Fatalf("Ctrl-X sends slash text when Enter sends: input=%q pending=%v", string(m.input), m.pending)
+	}
+	_, cmd = m.Update(tick())
+	m.Update(cmd())
+	if len(f.sent) != 2 || f.sent[1] != "c2:/shrug" {
+		t.Fatalf("sent=%v", f.sent)
+	}
+	typ(m, "plain")
+	m.lastCtrlX = time.Time{}
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if string(m.input) != "plain\n" || m.pending != nil {
+		t.Fatalf("plain text still gets a line break: %q", string(m.input))
+	}
+	m.input, m.curBack = nil, 0
+	typ(m, "/win 0")
+	press(m, tea.KeyEnter)
+	if m.cur != 0 || len(f.sent) != 2 {
+		t.Fatalf("Enter runs the command when Enter sends: cur=%d sent=%v", m.cur, f.sent)
+	}
+
+	// A leading space still sends a slash line with Enter in that mode.
+	enter(m, "/win @alice")
+	typ(m, " /literal")
+	cmd = press(m, tea.KeyEnter)
+	if cmd == nil || !strings.Contains(m.status, "as text, not a command") {
+		t.Fatalf("expected a send command and the status to say how: %q", m.status)
+	}
+	m.Update(cmd())
+	if len(f.sent) != 3 || f.sent[2] != "c2:/literal" {
+		t.Fatalf("sent=%v", f.sent)
+	}
+
+	// With a leading space Ctrl-X keeps adding a line break in that mode,
+	// since Enter sends that form as text: a message may have several
+	// lines and still start with a slash.
+	typ(m, " /x")
+	m.lastCtrlX = time.Time{}
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if string(m.input) != " /x\n" || m.pending != nil {
+		t.Fatalf("leading space keeps the line break: input=%q pending=%v", string(m.input), m.pending)
+	}
+	typ(m, "more")
+	cmd = press(m, tea.KeyEnter)
+	if cmd == nil {
+		t.Fatal("expected a send command")
+	}
+	m.Update(cmd())
+	if len(f.sent) != 4 || f.sent[3] != "c2:/x\nmore" {
+		t.Fatalf("sent=%v", f.sent)
+	}
+
+	// The server window still refuses, slash or not.
+	enter(m, "/win 0")
+	typ(m, "/anything")
+	m.lastCtrlX = time.Time{}
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if !m.isErr || m.pending != nil || len(f.sent) != 4 {
+		t.Fatalf("server window: status=%q pending=%v sent=%v", m.status, m.pending, f.sent)
+	}
+}
+
+// TestRecalledSlashLineSendsWithCtrlXRunsWithEnter: a slash line sent as
+// text lands in the history like any other line; recalled, it is input
+// again, so Ctrl-X sends it and Enter runs it.
+func TestRecalledSlashLineSendsWithCtrlXRunsWithEnter(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	enter(m, "/win @alice")
+	alice := m.cur
+	typ(m, "/win 0")
+	m.lastCtrlX = time.Time{}
+	_, tick := m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	_, cmd := m.Update(tick())
+	m.Update(cmd())
+	press(m, tea.KeyUp)
+	if string(m.input) != "/win 0" {
+		t.Fatalf("recalled: %q", string(m.input))
+	}
+	m.lastCtrlX = time.Time{}
+	_, tick = m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if tick == nil || m.pending == nil || m.pending.text != "/win 0" {
+		t.Fatalf("Ctrl-X resends the recalled line: %v", m.pending)
+	}
+	_, cmd = m.Update(tick())
+	m.Update(cmd())
+	if len(f.sent) != 2 || f.sent[1] != "c2:/win 0" || m.cur != alice {
+		t.Fatalf("sent=%v cur=%d", f.sent, m.cur)
+	}
+	press(m, tea.KeyUp)
+	press(m, tea.KeyEnter) // Enter runs the recalled line as a command
+	if m.cur != 0 || len(f.sent) != 2 {
+		t.Fatalf("Enter runs the recalled line: cur=%d sent=%v", m.cur, f.sent)
+	}
+}
+
+// TestCtrlXDoesNothingInListAndPager: outside a window Ctrl-X sends
+// nothing, errs nothing and does not arm the double-press toggle.
+func TestCtrlXDoesNothingInListAndPager(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	enter(m, "/win @alice")
+	enter(m, "/search hi")
+	if m.mode != modePager {
+		t.Fatalf("mode %v", m.mode)
+	}
+	typ(m, "/win 0")
+	m.lastCtrlX = time.Time{}
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if cmd != nil || m.pending != nil || len(f.sent) != 0 || m.mode != modePager || m.isErr {
+		t.Fatalf("pager: pending=%v sent=%v mode=%v status=%q", m.pending, f.sent, m.mode, m.status)
+	}
+	press(m, tea.KeyEsc) // back to the window
+	typ(m, "text")
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX}) // right after: a plain send, not a double press
+	if m.wins[m.cur].enterSends || m.pending == nil || m.pending.text != "text" {
+		t.Fatalf("a Ctrl-X in the pager must not arm the toggle: enterSends=%v pending=%v", m.wins[m.cur].enterSends, m.pending)
+	}
+	m.pending = nil
+	enter(m, "/list")
+	if m.mode != modeList {
+		t.Fatalf("mode %v", m.mode)
+	}
+	typ(m, "/win 0")
+	m.lastCtrlX = time.Time{}
+	_, cmd = m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if cmd != nil || m.pending != nil || len(f.sent) != 0 || m.mode != modeList || m.isErr {
+		t.Fatalf("list: pending=%v sent=%v mode=%v status=%q", m.pending, f.sent, m.mode, m.status)
 	}
 }
 

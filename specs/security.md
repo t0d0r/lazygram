@@ -20,7 +20,12 @@
 - No interactive Telegram login is performed by the project's tooling; the
   connector fails closed when no authorized session exists.
 - Sending is explicit: only text typed in a chat window and confirmed with
-  Ctrl-X, or given to /me, is sent; Enter never sends. /edit and /delete
+  Ctrl-X (or with Enter in a window where "Enter sends" is on), or given
+  to /me or /msg, is sent. Ctrl-X never runs a command: a line that starts
+  with / and is confirmed with Ctrl-X goes out as text (specs/ui.md,
+  Sending), so a command typed by mistake can reach the current chat as a
+  message; the 600 ms hold, the "as text, not a command" status and a
+  second Ctrl-X within the hold are the way back. /edit and /delete
   touch only this account's newest message in the current chat, on the
   user's command. /send reads only the one local regular file named on
   the command line (64 MiB cap) and sends it to the current chat; Tab

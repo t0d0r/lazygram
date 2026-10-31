@@ -342,21 +342,36 @@ Enter never sends: on plain text in a chat window it adds a line break to
 the message (shown as a return mark in the input line), so messages can
 have several lines; the whole text goes out with Ctrl-X. With "Enter
 sends" on, the roles swap: Enter sends and a single Ctrl-X adds a line
-break (a fast second Ctrl-X still toggles and removes that break). Two Ctrl-X within 600 ms toggle "Enter sends" for the current
+break to plain text (a fast second Ctrl-X still toggles and removes that break). Two Ctrl-X within 600 ms toggle "Enter sends" for the current
 window (the prompt becomes `[@name]> `); with Enter sends on, Enter sends
 at once. Commands still run, and Ctrl-X still sends. The toggle is per
 window and is saved with the layout, so it survives restarts; the status
-line ends with `ctrl-x: to send` or `enter: to send` in a chat window. Ctrl-X refuses in the server window, on empty text, and on text that
-starts with `/` unless the line begins with a space (the space is
-dropped, the rest is sent as text). Send errors go to the
-status line and the window.
+line ends with `ctrl-x: to send` or `enter: to send` in a chat window.
+Ctrl-X sends what was typed (surrounding whitespace trimmed), a line that
+starts with `/` included: it never goes through the command parser, so
+`/help me` typed into a chat and sent with Ctrl-X reaches the chat as
+that text, and the status says `sending to @name as text, not a
+command... (Ctrl-X again to keep the text and toggle)` while it is held.
+Enter is what runs commands, in both modes. With "Enter sends" on,
+Ctrl-X still sends such a line instead of adding a line break (Enter
+would run it). A leading space is dropped as before, so ` /x` plus Enter
+still sends `/x` as text when Enter sends (no hold on that path; its
+status is `sending to @name as text, not a command...`), and ` /x` plus
+Ctrl-X keeps adding a line break in that mode, so a message of several
+lines may start with a slash. Ctrl-X refuses in the server window and on
+empty text, and does nothing in the list or the pager. Decision: Ctrl-X is the one key
+that always means "send", so a message may start with a slash without a
+trick and a wrong key never runs a command; the cost is that a command
+typed and sent with Ctrl-X goes out as text, which the 600 ms hold and
+the status line make visible and a second Ctrl-X takes back. Send errors
+go to the status line and the window.
 
 ## Keys
 
 | key                  | action                                            |
 |----------------------|---------------------------------------------------|
 | Tab / Shift-Tab      | empty prompt: next / previous window; else complete like bash (a second Tab lists) |
-| Ctrl-X twice         | toggle "Enter sends" for this window              |
+| Ctrl-X twice         | toggle "Enter sends" for this window (Ctrl-X then adds a line break to plain text) |
 | Ctrl-N / Ctrl-P      | next / previous window (Alt-Right / Alt-Left too) |
 | Alt-0 .. Alt-9       | window 0 .. 9; Esc followed by the digit does the same (the typed input survives) |
 | Up / Down            | walk the input history (commands and sent lines; in the pager they scroll) |
@@ -366,7 +381,7 @@ status line and the window.
 | Ctrl-R               | sync now                                          |
 | F1                   | focus the server window and print the command reference there (as `/help`) |
 | Esc                  | close the list or pager, else clear the input     |
-| Ctrl-X               | send the typed text to this window's chat         |
+| Ctrl-X               | send the typed text to this window's chat, as typed: a line starting with `/` is sent, not run (Enter runs commands); with "Enter sends" on it still sends such a line |
 | Ctrl-U / Ctrl-W      | clear the input / delete the word before the cursor (and the spaces after it) |
 | Left / Right         | move the cursor one rune; never past the ends      |
 | Ctrl-A / Ctrl-E      | cursor to the start / end of the input            |
@@ -380,6 +395,9 @@ into a per-session history of up to 200 lines, immediate duplicates
 collapsed. In a window, Up walks back through it and Down forward; past
 the newest entry the line that was being typed comes back. Typing leaves
 the walk. In a list Up/Down move the cursor, in the pager they scroll.
+A recalled line is input like a typed one, and the next key decides:
+Ctrl-X sends it as text, Enter runs it when it starts with `/` (in both
+modes). To resend a slash line, recall it and press Ctrl-X.
 
 ## Completion
 
