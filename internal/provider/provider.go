@@ -50,4 +50,8 @@ type Provider interface {
 	Edit(ctx context.Context, chatID, msgID, text string) error
 	// Delete removes one of this account's messages for everyone.
 	Delete(ctx context.Context, chatID, msgID string) error
+	// MarkRead tells the service that the chat was read up to and
+	// including message msgID: a read receipt. It is called only when
+	// the user turned read receipts on; off is the default.
+	MarkRead(ctx context.Context, chatID, msgID string) error
 }

@@ -38,6 +38,8 @@ const (
 	SendFile      // send a local file: Arg is "<path> [caption]"
 	Redraw        // drop the notices and pictures from the window, keep the messages
 	Keys          // print the keyboard shortcut reference into the server window
+	Receipts      // read receipts to the service: Arg is on or off; empty shows the setting
+	MarkRead      // one read receipt for the current window's chat, whatever the setting
 )
 
 // Command is a parsed slash command.
@@ -73,6 +75,8 @@ var table = map[string]Kind{
 	"send": SendFile, "file": SendFile, "upload": SendFile,
 	"redraw": Redraw, "clear": Redraw,
 	"keys": Keys, "shortcuts": Keys, "bindings": Keys,
+	"read-receipts": Receipts, "receipts": Receipts,
+	"mark-as-read": MarkRead, "markread": MarkRead,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -158,4 +162,9 @@ const HelpText = `Commands
                          osc52, tool or off (kept); also /clipboard
   /names                 show chats by nick (@alias) or name (@Title);
                          also /nicks
+  /read-receipts [on|off] report a chat read when you focus its
+                         window with unread messages; off by default,
+                         kept; no argument shows; also /receipts
+  /mark-as-read          one receipt for this window's chat, now,
+                         whatever /read-receipts says; also /markread
 Keyboard shortcuts: type /keys.`

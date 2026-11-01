@@ -31,6 +31,14 @@
   the command line (64 MiB cap) and sends it to the current chat; Tab
   completion after /send lists directory entries but reads no file. Bot buttons are
   pressed only by /press; link buttons are printed, never opened.
+- Read receipts are off by default: lazygram never calls
+  messages.readHistory or channels.readHistory unless `/read-receipts on`
+  was given (kept across runs, shown by `/read-receipts`) or
+  `/mark-as-read` is typed for one chat. With receipts on, a report goes
+  out only when a window with unread messages is focused, for the newest
+  message lazygram holds; a report is visible to the other side of a
+  private chat and marks the chat read on every device of the account
+  (specs/ui.md, Read receipts).
 - Attachments are downloaded only on /open or a click, never on arrival,
   and stored encrypted in the vault (hashed names, same keys as the
   cache). Pictures are shown inside the terminal from memory by default, so

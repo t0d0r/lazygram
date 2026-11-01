@@ -51,6 +51,7 @@ const (
 	revealTime     = 2 * time.Second       // the longest a window's start-up reveal takes
 	mouseKey       = "mouse"               // store state key for mouse reporting
 	namesKey       = "names"               // store state key for showing chats by name
+	receiptsKey    = "read_receipts"       // store state key for read receipts; absent means off
 	fxTick         = 30 * time.Millisecond
 	maxHistory     = 200
 	doubleCtrlX    = 600 * time.Millisecond
@@ -123,13 +124,14 @@ type Model struct {
 
 	revealTick bool // a revealTickMsg is scheduled
 
-	mouseOn bool         // mouse reporting; off lets the terminal select text
-	byName  bool         // show chats as @Title instead of @alias
-	fx      bool         // running lights over clickable text
-	hoverAt time.Time    // when the pointer reached the hovered element
-	ticking bool         // an fx tick is scheduled
-	animOn  bool         // the last View showed something animated
-	rcache  *renderCache // rendered messages, reused across ticks
+	mouseOn  bool         // mouse reporting; off lets the terminal select text
+	receipts bool         // read receipts to the service when a window with unread messages is focused; off by default
+	byName   bool         // show chats as @Title instead of @alias
+	fx       bool         // running lights over clickable text
+	hoverAt  time.Time    // when the pointer reached the hovered element
+	ticking  bool         // an fx tick is scheduled
+	animOn   bool         // the last View showed something animated
+	rcache   *renderCache // rendered messages, reused across ticks
 
 	now          func() time.Time     // the clock the typing state runs on; tests replace it
 	typing       *domain.TypingState  // who is typing where, from the service's reports
@@ -242,6 +244,7 @@ func New(opt Options) *Model {
 		m.clipMode = clipAuto
 	}
 	_, _ = opt.Store.State(namesKey, &m.byName)
+	_, _ = opt.Store.State(receiptsKey, &m.receipts) // absent or unreadable: off
 	m.chats, _ = opt.Store.Chats()
 	m.msgs, _ = opt.Store.Messages("", opt.Backlog)
 	// The banner has the zero time so it stays above everything, however old
@@ -811,6 +814,13 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.note(w, "deleted your message: "+msg.text)
 		}
 		m.setInfo("deleted")
+	case readMsg:
+		switch {
+		case msg.err != nil:
+			m.fail("read receipt for " + m.nameOf(msg.chatID) + ": " + errText(msg.err))
+		case msg.manual:
+			m.setInfo("reported " + m.nameOf(msg.chatID) + " read")
+		}
 	case sendLaterMsg:
 		if p := m.pending; p != nil && p.seq == msg.seq {
 			m.pending = nil
@@ -1130,6 +1140,7 @@ func (m *Model) switchTo(i int) tea.Cmd {
 	m.mode = modeWin
 	m.lastCtrlX = time.Time{} // a double Ctrl-X never spans two windows
 	w := m.wins[i]
+	receipt := m.readCmd(w) // a focus that clears unread messages is what a receipt reports
 	w.unread = 0
 	if w.chatID != "" {
 		m.visited[w.chatID] = true
@@ -1138,6 +1149,9 @@ func (m *Model) switchTo(i int) tea.Cmd {
 		m.setInfo("")
 	}
 	cmds := m.typingTimers() // the window shown decides whether the light runs
+	if receipt != nil {
+		cmds = append(cmds, receipt)
+	}
 	if w.chatID != "" && !w.loaded && !m.loading[w.chatID] {
 		m.note(w, fmt.Sprintf("fetching the last %d messages", recentOnOpen))
 		cmds = append(cmds, m.recentCmd(w.chatID, recentOnOpen))
@@ -1607,6 +1621,10 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		return m, tea.DisableMouse
 	case command.Clip:
 		m.clip(c.Arg)
+	case command.Receipts:
+		m.readReceipts(c.Arg)
+	case command.MarkRead:
+		return m.markAsRead()
 	case command.Fx:
 		m.fx = !m.fx
 		_ = m.opt.Store.SetState(fxKey, m.fx)
@@ -2053,6 +2071,7 @@ type completion struct {
 var argWords = map[string][]string{
 	"/win": {"list"}, "/w": {"list"}, "/window": {"list"},
 	"/list": {"--show-deleted"}, "/l": {"--show-deleted"},
+	"/read-receipts": {"on", "off"}, "/receipts": {"on", "off"},
 }
 
 // openCmds are the spellings of /open; after them Tab completes "out" and

@@ -37,6 +37,8 @@ type api interface {
 	MessagesEditMessage(ctx context.Context, req *tg.MessagesEditMessageRequest) (tg.UpdatesClass, error)
 	MessagesDeleteMessages(ctx context.Context, req *tg.MessagesDeleteMessagesRequest) (*tg.MessagesAffectedMessages, error)
 	ChannelsDeleteMessages(ctx context.Context, req *tg.ChannelsDeleteMessagesRequest) (*tg.MessagesAffectedMessages, error)
+	MessagesReadHistory(ctx context.Context, req *tg.MessagesReadHistoryRequest) (*tg.MessagesAffectedMessages, error)
+	ChannelsReadHistory(ctx context.Context, req *tg.ChannelsReadHistoryRequest) (bool, error)
 }
 
 // service implements Client on top of api. It is read-only. Every History
@@ -253,6 +255,31 @@ func (s *service) Delete(ctx context.Context, chatID, msgID string) error {
 	}
 	if err != nil {
 		return fmt.Errorf("telegram: delete: %w", err)
+	}
+	return nil
+}
+
+// MarkRead sends a read receipt for the chat up to message msgID:
+// channels.readHistory for channels and supergroups, messages.readHistory
+// for users and basic groups. The service marks every message up to that
+// id read on every device of the account, and the other side of a private
+// chat sees it; the caller sends it only when the user asked for receipts.
+func (s *service) MarkRead(ctx context.Context, chatID, msgID string) error {
+	ent, err := s.entity(ctx, chatID)
+	if err != nil {
+		return err
+	}
+	id, err := strconv.Atoi(msgID)
+	if err != nil || id <= 0 {
+		return fmt.Errorf("telegram: bad message id %q", msgID)
+	}
+	if ent.channel != nil {
+		_, err = s.api.ChannelsReadHistory(ctx, &tg.ChannelsReadHistoryRequest{Channel: ent.channel, MaxID: id})
+	} else {
+		_, err = s.api.MessagesReadHistory(ctx, &tg.MessagesReadHistoryRequest{Peer: ent.peer, MaxID: id})
+	}
+	if err != nil {
+		return fmt.Errorf("telegram: read receipt: %w", err)
 	}
 	return nil
 }
@@ -499,6 +526,14 @@ func (f floodAPI) MessagesEditMessage(ctx context.Context, req *tg.MessagesEditM
 
 func (f floodAPI) MessagesDeleteMessages(ctx context.Context, req *tg.MessagesDeleteMessagesRequest) (*tg.MessagesAffectedMessages, error) {
 	return retryFlood(ctx, f.sleep, func() (*tg.MessagesAffectedMessages, error) { return f.api.MessagesDeleteMessages(ctx, req) })
+}
+
+func (f floodAPI) MessagesReadHistory(ctx context.Context, req *tg.MessagesReadHistoryRequest) (*tg.MessagesAffectedMessages, error) {
+	return retryFlood(ctx, f.sleep, func() (*tg.MessagesAffectedMessages, error) { return f.api.MessagesReadHistory(ctx, req) })
+}
+
+func (f floodAPI) ChannelsReadHistory(ctx context.Context, req *tg.ChannelsReadHistoryRequest) (bool, error) {
+	return retryFlood(ctx, f.sleep, func() (bool, error) { return f.api.ChannelsReadHistory(ctx, req) })
 }
 
 func (f floodAPI) ChannelsDeleteMessages(ctx context.Context, req *tg.ChannelsDeleteMessagesRequest) (*tg.MessagesAffectedMessages, error) {

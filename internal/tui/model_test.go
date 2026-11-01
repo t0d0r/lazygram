@@ -35,6 +35,12 @@ type fake struct {
 	deleted   []string // Delete calls as "chat:msg"
 	picture   []byte   // what Fetch returns when set
 	sentFiles []string // SendFile calls as "chat:name:bytes:caption"
+	read      []string // MarkRead calls as "chat:msg"
+}
+
+func (f *fake) MarkRead(_ context.Context, chatID, msgID string) error {
+	f.read = append(f.read, chatID+":"+msgID)
+	return f.err
 }
 
 func (f *fake) Send(_ context.Context, chatID, text string) error {

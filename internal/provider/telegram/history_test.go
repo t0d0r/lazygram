@@ -27,6 +27,7 @@ type fakeAPI struct {
 	fetched []string // "messages" or "channels" per refetch
 	edited  []string // "id:text"
 	deleted []string // "messages:[ids]:revoke" or "channels:[ids]"
+	read    []string // "messages:<max id>" or "channels:<max id>"
 
 	extraDialogs []tg.DialogClass // listed before the fixed dialogs
 	extraChats   []tg.ChatClass
@@ -190,6 +191,16 @@ func (f *fakeAPI) MessagesEditMessage(_ context.Context, r *tg.MessagesEditMessa
 func (f *fakeAPI) MessagesDeleteMessages(_ context.Context, r *tg.MessagesDeleteMessagesRequest) (*tg.MessagesAffectedMessages, error) {
 	f.deleted = append(f.deleted, fmt.Sprintf("messages:%v:%v", r.ID, r.Revoke))
 	return &tg.MessagesAffectedMessages{}, nil
+}
+
+func (f *fakeAPI) MessagesReadHistory(_ context.Context, r *tg.MessagesReadHistoryRequest) (*tg.MessagesAffectedMessages, error) {
+	f.read = append(f.read, fmt.Sprintf("messages:%d", r.MaxID))
+	return &tg.MessagesAffectedMessages{}, nil
+}
+
+func (f *fakeAPI) ChannelsReadHistory(_ context.Context, r *tg.ChannelsReadHistoryRequest) (bool, error) {
+	f.read = append(f.read, fmt.Sprintf("channels:%d", r.MaxID))
+	return true, nil
 }
 
 func (f *fakeAPI) ChannelsDeleteMessages(_ context.Context, r *tg.ChannelsDeleteMessagesRequest) (*tg.MessagesAffectedMessages, error) {
@@ -607,6 +618,29 @@ func TestFetchStreamsIntoMemory(t *testing.T) {
 	lw := &limitWriter{w: io.Discard, left: 3}
 	if _, err := lw.Write([]byte("abcd")); err == nil {
 		t.Fatal("the size cap must hold")
+	}
+}
+
+func TestMarkReadUsesTheCallForThePeer(t *testing.T) {
+	f := newFakeAPI()
+	s := newService(f)
+	ctx := context.Background()
+	if err := s.MarkRead(ctx, "telegram:7", "5"); err != nil || len(f.read) != 1 || f.read[0] != "messages:5" {
+		t.Fatalf("user: %v %v", err, f.read)
+	}
+	if err := s.MarkRead(ctx, "telegram:-1000000000009", "8"); err != nil || len(f.read) != 2 || f.read[1] != "channels:8" {
+		t.Fatalf("channel: %v %v", err, f.read)
+	}
+	for _, bad := range []string{"x", "0", "-3", ""} {
+		if err := s.MarkRead(ctx, "telegram:7", bad); err == nil {
+			t.Fatalf("message id %q accepted", bad)
+		}
+	}
+	if err := s.MarkRead(ctx, "telegram:424242", "5"); err == nil {
+		t.Fatal("unknown chat accepted")
+	}
+	if len(f.read) != 2 {
+		t.Fatalf("errors sent nothing: %v", f.read)
 	}
 }
 

@@ -102,6 +102,7 @@
 - [x] typing indicators: Telegram typing updates to domain.TypingState with expiry, status line with a running light (specs/ui.md, specs/providers.md); released in v0.4.18 (assets verified against SHA256SUMS); formula and the Arch recipe still at 0.4.14
 - [x] Ctrl-X sends a line starting with / as text, bypassing the command parser; Enter keeps running commands (specs/ui.md); released in v0.4.17 (assets verified against SHA256SUMS); formula and the Arch recipe still at 0.4.14
 - [x] release v0.4.15 with the mouse selection and the self-update refusal (v0.4.15 and v0.4.16 released 2026-10-31; formula still at 0.4.14)
+- [~] /read-receipts on|off (off by default, kept) and /mark-as-read: a read receipt when a window with unread messages is focused, or once on request (specs/ui.md, specs/security.md; branch feature/read-receipts)
 - [ ] Ctrl-L performs /redraw (specs/ui.md; attribution: Yanko Simeonov)
 - [ ] /open autocompletes the 10 most recent links in the current chat (specs/ui.md)
 - [ ] /open http://... opens an explicitly supplied URL (specs/ui.md)

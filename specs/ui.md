@@ -180,6 +180,8 @@ names `/keys`, so the keys are one step away from either.
 | `/fx`                         | running lights over clickable text on or off (kept) |
 | `/mouse`                      | mouse reporting on or off; off lets the terminal select text (kept) |
 | `/clip [mode]`                | where a mouse selection is copied: `auto`, `osc52`, `tool`, `off`; no argument shows the mode and the tool (kept) |
+| `/read-receipts [on\|off]`, `/receipts` | read receipts to the service: off by default (kept); on reports a chat read when its window with unread messages is focused; no argument shows the setting (see Read receipts) |
+| `/mark-as-read`, `/markread`  | one read receipt for this window's chat, now, whatever `/read-receipts` says; an error in the server window and for a chat without a known message |
 | `/names`                      | show chats by nick (`@alias`) or by name (`@Title`), kept |
 
 Short forms: `/h` for `/help`; `/shortcuts`, `/bindings` for `/keys`;
@@ -422,6 +424,33 @@ re-arms itself; the service closes the feed when it stops, which ends
 the reads. Nothing is ever sent back: lazygram does not report its own
 typing. Decision: reports are state, not messages; they never enter the
 windows or the cache.
+
+## Read receipts
+
+Off by default: lazygram reports nothing read to the service, whatever
+it shows. `/read-receipts on` (kept in the state store under
+`read_receipts`; absent or unreadable means off) makes lazygram report a
+chat read at the one moment it marks the chat read itself: when a window
+with unread messages is focused (`/win N`, `/win @name`, Alt-N, Ctrl-N,
+Tab, a click on the window bar or a list row). The report covers the
+newest message lazygram holds for the chat (`Provider.MarkRead` with that
+message id), so what lazygram has not shown stays unread at the service;
+with no message of the chat known yet nothing is sent. Nothing is sent
+for the server window, for a window without unread messages, for a
+message arriving in the window already shown, for opening or filtering a
+list, or for the pager. A failed report shows in the status line and the
+server window and is not retried; the local unread count is cleared
+either way. `/mark-as-read` sends one report for the current window's
+chat on request, clears its unread count, and leaves the setting alone:
+it works with receipts off and never turns them on. It is an error in
+the server window ("/win to a chat first") and for a chat without a
+known message ("nothing to report"); the service's answer is shown
+("reported @name read" or the error). Decision: a receipt is visible to
+the other side of a private chat and marks the chat read on every device
+of the account, so it is opt-in; the focus moment is chosen because it
+is the only existing action that clears a window's unread count, and a
+message arriving while a window is shown is not reported because
+lazygram cannot tell whether anyone is looking.
 
 ## Keys
 

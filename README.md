@@ -20,6 +20,9 @@ in a searchable pager. Feature goals are inspired by nchat.
 - Sending: Ctrl-X sends, a double Ctrl-X makes Enter send per window,
   `/me`, `/msg`, `/edit` and `/delete` of your last message, input
   history, bash-style Tab completion (commands, chats, themes, paths)
+- Read receipts stay off unless you turn them on (`/read-receipts on`, or
+  `/mark-as-read` for one chat): Telegram is told a chat was read only
+  when you focus its window with unread messages
 - Who is typing: the status line says `ada is typing` or `ada and bob are
   recording` for the current chat (every chat in the server window), with
   a running light; nothing is ever reported back about you
@@ -203,6 +206,8 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/fx`                      | running lights over links and buttons on/off  |
 | `/mouse`                   | mouse reporting on/off (off: the terminal's own drag selects; or hold Shift/Option while dragging) |
 | `/clip [mode]`             | where a mouse selection is copied: `auto` (terminal and system tool), `osc52`, `tool`, `off`; no argument shows the mode (see [docs/clipboard.md](docs/clipboard.md)) |
+| `/read-receipts [on\|off]` | read receipts: off by default (kept); on tells Telegram a chat was read when you focus its window with unread messages; no argument shows the setting |
+| `/mark-as-read`            | one read receipt for this window's chat, now, whatever `/read-receipts` says |
 | `/redraw`, `/clear`        | drop notices, help text and pictures from this window; messages stay |
 | `/refresh`, `/help`, `/quit` | sync now; print the command list, with every short form, into the server window (it ends by naming `/keys`); leave |
 | `/keys`                    | print the keyboard shortcuts into the server window |

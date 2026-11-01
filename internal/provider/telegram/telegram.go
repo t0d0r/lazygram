@@ -30,6 +30,7 @@ type Client interface {
 	SendFile(ctx context.Context, chatID, name string, data []byte, caption string) error
 	Edit(ctx context.Context, chatID, msgID, text string) error
 	Delete(ctx context.Context, chatID, msgID string) error
+	MarkRead(ctx context.Context, chatID, msgID string) error
 }
 
 // Provider adapts a Client to provider.Provider.
@@ -129,6 +130,14 @@ func (p *Provider) Delete(ctx context.Context, chatID, msgID string) error {
 		return fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
 	}
 	return p.client.Delete(ctx, chatID, msgID)
+}
+
+// MarkRead implements provider.Provider: a read receipt up to msgID.
+func (p *Provider) MarkRead(ctx context.Context, chatID, msgID string) error {
+	if p.client == nil {
+		return fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
+	}
+	return p.client.MarkRead(ctx, chatID, msgID)
 }
 
 // Recent implements provider.Provider.

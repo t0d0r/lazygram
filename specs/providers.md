@@ -12,8 +12,14 @@ type Provider interface {
     SendFile(ctx, chatID, name string, data []byte, caption string) error
     Edit(ctx, chatID, msgID, text string) error
     Delete(ctx, chatID, msgID string) error
+    MarkRead(ctx, chatID, msgID string) error
 }
 ```
+
+`MarkRead` is a read receipt: the chat was read up to and including
+`msgID`. The TUI calls it only with read receipts on, or on
+`/mark-as-read` (specs/ui.md); a provider that cannot report reads
+returns an error.
 
 `Chats` returns every chat with its kind (user, group, channel), alias,
 title, unread count and deleted flag. `Sync` returns what arrived since the
@@ -166,7 +172,12 @@ messages.getHistory, messages.sendMessage (Ctrl-X, /me, reply buttons),
 messages.getBotCallbackAnswer, messages.getMessages and
 channels.getMessages (/press, /open), upload.getFile (/open),
 messages.editMessage (/edit), messages.deleteMessages with revoke or
-channels.deleteMessages (/delete), upload.saveFilePart /
+channels.deleteMessages (/delete), messages.readHistory or
+channels.readHistory with the newest known message as max_id (read
+receipts: only with /read-receipts on or on /mark-as-read; a receipt
+marks the chat read on every device of the account and shows to the
+other side of a private chat; FLOOD_WAIT is retried once like any
+call, other errors surface), upload.saveFilePart /
 upload.saveBigFilePart and messages.sendMedia (/send: gotd's uploader in
 four threads and its message sender, run without the client lock;
 inputMediaUploadedPhoto for image names, inputMediaUploadedDocument with

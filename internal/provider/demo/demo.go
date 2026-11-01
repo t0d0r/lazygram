@@ -234,6 +234,9 @@ func (p *Provider) Edit(_ context.Context, chatID, msgID, text string) error {
 }
 
 // Delete implements provider.Provider for the account's own lines.
+// MarkRead implements provider.Provider: the demo has nobody to tell.
+func (p *Provider) MarkRead(context.Context, string, string) error { return nil }
+
 func (p *Provider) Delete(_ context.Context, chatID, msgID string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
