@@ -127,6 +127,16 @@
   receipt; `/read-receipts off` still said nothing is ever reported.
 - `/mark-as-read` is the only spelling; the `/markread` alias is gone
   from the parser, `/help` and specs/ui.md.
+- Mouse: a double click copies the word under the pointer, a triple
+  click the screen row, Shift-click extends the last selection
+  (internal/tui/selection.go; specs/ui.md, Selection and clipboard). A
+  word is a run of non-blank cells with brackets, quotes and trailing
+  punctuation trimmed; cells are grapheme clusters. Clickable text acts
+  on the first click only. A review found and fixed: Shift-click inside
+  a word or row cut it (it now anchors at the far end), and a screen
+  change between a press and its release copied text from the new
+  screen (the copy is now dropped). Built on branch
+  `feature/mouse-word-select` and merged here.
 
 ## Decisions
 
@@ -158,18 +168,30 @@
   internal/provider/telegram/telegram.go, gotd.go; specs/security.md
 - internal/tui/members.go, members_test.go, model.go, receipts_test.go
 - internal/command/command.go, command_test.go
-- specs/ui.md (Members section, completion, keys, commands),
-  specs/providers.md, specs/storage.md, docs/usage.md, todo/todo.md
+- internal/tui/listactions.go, receipts.go, selection.go, selection_test.go,
+  clipboard.go; go.mod (uniseg direct)
+- specs/ui.md (Windows, Members, completion, keys, commands, Read
+  receipts, Selection and clipboard), specs/providers.md,
+  specs/storage.md, specs/overview.md, docs/usage.md, docs/clipboard.md,
+  README.md, todo/todo.md
 
 ## Verify
 
 `make check`, `go test -race ./internal/...`, `make smoke`. In
-`lazygram demo`: `/win #dev`, type `thanks @a` and Tab twice (lists
-`@ada  @alan`), `/whois gr` Tab, Enter (member whois of grace).
+`lazygram demo`: `/win #dev` (`member list: 5 members`), type `thanks @a`
+and Tab twice (lists `@ada, @alan`), `/whois @` Tab twice (every member,
+barbara without a username last), `/whois margaret_h` (listed, never
+wrote); `/list`, Right, Enter on a row (`reported ... read`); double
+click a word, triple click a row.
 
 ## State and next
 
-- Work is on branch `feature/channel-nicks` in the worktree
-  `../lazygram-channel-nicks`, not yet merged or pushed.
+- Branch `feature/channel-nicks` (worktree `../lazygram-channel-nicks`)
+  holds three local commits on top of origin/master: the channel work,
+  the mouse selection (from `feature/mouse-word-select`) and their merge.
+  Nothing is merged into master or pushed.
+- Open: a mention by name for members without a username (todo);
+  whether the server window should mark where the session starts is
+  moot now that it shows only this session.
 - Next: merge into master and push when approved; then a patch release
-  if wanted.
+  (v0.4.21) with the Homebrew formula and the Arch recipe, if wanted.
