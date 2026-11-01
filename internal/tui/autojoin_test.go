@@ -2,11 +2,15 @@ package tui
 
 import (
 	"bytes"
+	"context"
+	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"lazygram/internal/domain"
 	"lazygram/internal/store"
 )
 
@@ -134,5 +138,54 @@ func TestTabCompletesEachCommandsOwnArguments(t *testing.T) {
 	press(m, tea.KeyTab)
 	if v := body(m); !strings.Contains(v, "off  on") && !strings.Contains(v, "on  off") {
 		t.Errorf("the second Tab lists on and off:\n%s", v)
+	}
+}
+
+// chatsFailing fails its first chat lists, as a start without a
+// connection does.
+type chatsFailing struct {
+	*fake
+	fails int
+}
+
+func (f *chatsFailing) Chats(ctx context.Context) ([]domain.Chat, error) {
+	if f.fails > 0 {
+		f.fails--
+		return nil, errors.New("offline")
+	}
+	return f.fake.Chats(ctx)
+}
+
+func TestStartCheckWaitsForTheFirstChatListNotARefresh(t *testing.T) {
+	st := memStore(t)
+	f := &chatsFailing{fake: newFake(), fails: 1}
+	m := New(Options{Store: st, Provider: f, Poll: time.Millisecond})
+	m.fx = false
+	m.revealAll()
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	m.Init()
+	m.Update(m.chatsCmd()()) // fails
+	if _, w := m.winFor("c3"); w != nil || m.startChecked {
+		t.Fatal("no check without a chat list")
+	}
+	enter(m, "/autojoin")
+	if !strings.Contains(m.status, "autojoin on") {
+		t.Fatalf("%q", m.status)
+	}
+	m.input = nil
+	enter(m, "/autojoin on")
+	if !strings.Contains(m.status, "when the chat list arrives") {
+		t.Errorf("before the check a change acts on it: %q", m.status)
+	}
+	_, cmd := m.Update(tickMsg(time.Now())) // the next poll asks again
+	runAll(m, cmd)
+	i, w := m.winFor("c3")
+	if w == nil || !m.startChecked {
+		t.Fatal("the check runs on the chat list a poll brought")
+	}
+	m.closeWin(i)
+	m.Update(m.chatsCmd()()) // a later refresh
+	if _, w := m.winFor("c3"); w != nil {
+		t.Error("a refresh after the check reopens nothing")
 	}
 }

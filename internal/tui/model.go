@@ -183,6 +183,7 @@ type Model struct {
 	// startChecked: the first chat list from the service ran the start
 	// check (startCheck); autojoin: that check opens windows (/autojoin).
 	startChecked bool
+	chatsAsked   bool // a chat list request is on its way
 	autojoin     bool
 	reportNext   map[string]pendingReport
 	status       string
@@ -387,6 +388,7 @@ func (m *Model) Width() int { return m.width }
 // restored current window.
 func (m *Model) Init() tea.Cmd {
 	m.syncing = true
+	m.chatsAsked = true
 	cmds := []tea.Cmd{m.chatsCmd(), m.syncCmd()}
 	if cmd := m.typingInit(); cmd != nil {
 		cmds = append(cmds, cmd)
@@ -710,6 +712,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 	case chatsMsg:
+		m.chatsAsked = false
 		if msg.err != nil {
 			m.fail("chats: " + errText(msg.err))
 			break
@@ -797,6 +800,10 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.syncing {
 			m.syncing = true
 			cmds = append(cmds, m.syncCmd())
+		}
+		if !m.startChecked && !m.chatsAsked { // the first chat list failed: ask again, so the start check runs on connect
+			m.chatsAsked = true
+			cmds = append(cmds, m.chatsCmd())
 		}
 		return m, tea.Batch(cmds...)
 	case fetchedMsg:
@@ -1293,6 +1300,7 @@ func (m *Model) refresh() tea.Cmd {
 		return nil
 	}
 	m.syncing = true
+	m.chatsAsked = true
 	m.setInfo("syncing now")
 	return tea.Batch(m.chatsCmd(), m.syncCmd())
 }

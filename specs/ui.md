@@ -56,7 +56,10 @@ completion, and an activity indicator.
   people, groups and channels alike (deleted accounts never open
   windows): autojoin, as IRC clients join their channels on connect.
   The start check runs once a session, on the first chat list from the
-  service (a chat list cached from an earlier run does not count); a
+  service (a chat list cached from an earlier run does not count); when
+  that request fails (offline at start, a timeout), each poll asks for
+  the chat list again until it comes, so the check runs on connect, not
+  at a manual `/refresh` hours later; a
   window restored from the last session takes its chat's unread count
   instead of opening a second one, unless it is the window shown. The
   server window says what came of it: `-!- 12 chats, 3 with unread
@@ -67,7 +70,9 @@ completion, and an activity indicator.
   no windows opened; /list shows them)`; restored windows still come
   back and still take their counts, and windows still open when a
   message arrives during the session. `/autojoin` with no argument shows
-  the setting; it never opens or closes windows in the running session.
+  the setting; it never opens or closes windows in the running session,
+  and a change acts at the next start, or, while this start's chat list
+  has not come yet, when it does (the status says which).
   A window opened this way fetches its messages when first shown, as any
   window, so many unread chats cost no burst of requests. Decision: the
   check used to run only when no chat list was cached, which is the

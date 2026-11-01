@@ -14,7 +14,8 @@ import (
 // burst of requests.
 
 // startCheck runs once a session, on the first chat list from the
-// service: a window that exists takes its chat's unread count (unless it
+// service (when the first request fails, each poll asks again, so it
+// runs on connect, not at a later manual /refresh): a window that exists takes its chat's unread count (unless it
 // is the one shown), and with autojoin on every other chat with unread
 // messages opens a window; deleted accounts never do. The server window
 // says what came of it.
@@ -54,6 +55,15 @@ func (m *Model) startCheck() {
 	m.note(m.wins[0], text)
 }
 
+// whenAutojoin says when a changed setting first acts: at the next start,
+// or, while the chat list of this start has not come yet, when it does.
+func (m *Model) whenAutojoin() string {
+	if m.startChecked {
+		return "from the next start"
+	}
+	return "when the chat list arrives"
+}
+
 // setAutojoin implements /autojoin: no argument shows the setting, on or
 // off sets and keeps it for the next start.
 func (m *Model) setAutojoin(arg string) {
@@ -67,11 +77,11 @@ func (m *Model) setAutojoin(arg string) {
 	case "on":
 		m.autojoin = true
 		_ = m.opt.Store.SetState(autojoinKey, true)
-		m.setInfo("autojoin on: from the next start a window opens for every chat with unread messages")
+		m.setInfo("autojoin on: " + m.whenAutojoin() + " a window opens for every chat with unread messages")
 	case "off":
 		m.autojoin = false
 		_ = m.opt.Store.SetState(autojoinKey, false)
-		m.setInfo("autojoin off: from the next start chats with unread messages open no window (/list shows them)")
+		m.setInfo("autojoin off: " + m.whenAutojoin() + " chats with unread messages open no window (/list shows them)")
 	default:
 		m.setErr("/autojoin takes on or off")
 	}
