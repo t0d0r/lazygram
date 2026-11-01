@@ -17,10 +17,12 @@ build: ## build ./lazygram (carries the registration when "make embed" was run)
 test: ## run all tests
 	go test ./...
 
-lint: ## gofmt check, go vet, golangci-lint (staticcheck, errcheck, unused)
+lint: ## gofmt check, go vet, golangci-lint (staticcheck, errcheck, unused), sh -n and shellcheck on install.sh
 	@out="$$(gofmt -l $(GOFILES))"; if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
 	go vet ./...
 	@if command -v golangci-lint >/dev/null 2>&1; then golangci-lint run ./...; else echo "golangci-lint not installed, skipped"; fi
+	sh -n install.sh
+	@if command -v shellcheck >/dev/null 2>&1; then shellcheck -s sh install.sh; else echo "shellcheck not installed, skipped"; fi
 
 check: lint test ## lint and test; must pass before a commit
 
@@ -51,7 +53,7 @@ embed: ## write the git-ignored cmd/lazygram/app_local.go from TG_API_ID/TG_API_
 
 # Release builds use -tags release so the git-ignored app_local.go (a
 # personal registration) can never end up in a published binary.
-dist: ## build release tarballs and SHA256SUMS into dist/ for every DIST_PLATFORMS entry
+dist: ## build release tarballs, install.sh and SHA256SUMS into dist/ for every DIST_PLATFORMS entry
 	@set -e; rm -rf dist; mkdir -p dist; \
 	files="$$(go list -tags release -f '{{join .GoFiles " "}}' ./cmd/lazygram)"; \
 	case " $$files " in *app_local.go*) echo "dist: app_local.go would be built in; aborting"; exit 1;; esac; \
@@ -68,15 +70,17 @@ dist: ## build release tarballs and SHA256SUMS into dist/ for every DIST_PLATFOR
 		COPYFILE_DISABLE=1 tar $$own -czf dist/$$name.tar.gz -C dist $$name; \
 		rm -rf dist/$$name; \
 	done; \
+	cp install.sh dist/install.sh; chmod 0644 dist/install.sh; \
 	cd dist; \
-	if command -v sha256sum >/dev/null; then sha256sum *.tar.gz; else shasum -a 256 *.tar.gz; fi > SHA256SUMS; \
+	if command -v sha256sum >/dev/null; then sha256sum *.tar.gz install.sh; else shasum -a 256 *.tar.gz install.sh; fi > SHA256SUMS; \
 	cat SHA256SUMS
 
 release: ## publish dist/ as the GitHub release for the current tag (needs gh and a clean vX.Y.Z tag)
 	@echo "$(VERSION)" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$' || { echo "release: HEAD must be at a clean vX.Y.Z tag, got $(VERSION)"; exit 1; }
 	@command -v gh >/dev/null || { echo "release: gh is required"; exit 1; }
 	@test -f dist/SHA256SUMS || { echo "release: run make dist first"; exit 1; }
-	gh release create $(VERSION) dist/*.tar.gz dist/SHA256SUMS --title "lazygram $(VERSION)" --generate-notes
+	@test -f dist/install.sh || { echo "release: dist/install.sh missing; run make dist"; exit 1; }
+	gh release create $(VERSION) dist/*.tar.gz dist/install.sh dist/SHA256SUMS --title "lazygram $(VERSION)" --generate-notes
 
 fmt: ## format in place
 	gofmt -w $(GOFILES)

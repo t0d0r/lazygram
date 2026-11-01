@@ -38,29 +38,68 @@ specs/providers.md).
    vX.Y.Z.tar.gz | shasum -a 256`), then `brew install --build-from-source
    t0d0r/tap/lazygram` and `brew test lazygram`.
 5. Push `main` and the tag.
-6. Bump `VERSION` in `install.sh` to the new tag and update the commit
-   the README's installer command points at.
+6. Check that `https://github.com/t0d0r/lazygram/releases/latest/download/install.sh`
+   answers 200 and installs the new version into a scratch prefix
+   (`LAZYGRAM_PREFIX=<dir> sh`); nothing in the script is bumped.
 
 ## Installer script
 
-`install.sh` at the repository root installs one release without Go,
-brew or root: it downloads `lazygram-<version>-<os>-<arch>.tar.gz` and
-`SHA256SUMS` of the pinned release over HTTPS only (`--proto '=https'
---tlsv1.2`), checks the tarball against its line in `SHA256SUMS` with
-`sha256sum` or `shasum`, refuses on any mismatch, extracts only the
-`lazygram` file and puts it in `$LAZYGRAM_PREFIX/bin` (default
-`~/.local/bin`, mode 0755), then runs `lazygram -version` and says when
-that directory is not in `PATH`. The version is pinned in the script
-(`VERSION`, the newest release when the script was last changed) and
-overridable with `LAZYGRAM_VERSION=vX.Y.Z`; anything else is refused.
+`install.sh` at the repository root installs a release without Go, brew
+or root, and is itself an asset of every release, so one stable GitHub
+URL always serves the installer of the release marked latest:
+
+    curl -fsSL https://github.com/t0d0r/lazygram/releases/latest/download/install.sh | sh
+
+GitHub redirects `releases/latest/download/<file>` to that file of the
+latest release; drafts and prereleases are never latest, so the script
+changes only when a release is published. What it does, in POSIX sh
+(`sh -n`, `dash` and `shellcheck -s sh` clean):
+
+1. The version is `LAZYGRAM_VERSION` when set, else the tag named by the
+   `Location` of a HEAD request to `releases/latest` (not followed; the
+   method `lazygram update` uses, no API token, no rate limit). Only an
+   answer under this repository's `releases/tag/` counts, and only a
+   strict `vX.Y.Z` is accepted, so a stray tag such as
+   `v0.4.11-1-gd0bdc3f` is refused.
+2. `lazygram-<version>-<os>-<arch>.tar.gz` and `SHA256SUMS` of that
+   release are downloaded with `curl --proto '=https' --proto-redir
+   '=https' --tlsv1.2`: HTTPS only, redirects to the asset host included.
+3. The tarball must match its line in `SHA256SUMS` (`sha256sum` or
+   `shasum`); a mismatch or a missing line installs nothing.
+4. Only `<name>/lazygram` is extracted; it must be a regular file and
+   report `lazygram <version>` before it is copied next to the target and
+   renamed over `$LAZYGRAM_PREFIX/bin/lazygram` (default `~/.local/bin`,
+   mode 0755), so a running lazygram keeps its file. No sudo, nothing
+   written outside the prefix and a temporary directory removed at exit;
+   a note when the bin directory is not in `PATH`.
+
 Linux and macOS, amd64 and arm64; other systems stop with a message.
-Decision: the script pins a version instead of resolving "latest", so a
-given copy of the script always installs the same bytes, and the README
-points at the script by commit, never by branch, so the command a reader
-copies cannot change under them. A new release bumps `VERSION` here
-(release step 6). The script is validated by `bash -n`, `shellcheck`
-and a real run into a scratch prefix on macOS and in an Arch Linux ARM
-container.
+`make dist` copies `install.sh` into `dist/` and lists it in
+`SHA256SUMS`, so a reader who downloads the script can check it against
+the release; `make release` attaches it and refuses without it.
+`internal/installer` tests the real script offline under `sh` and
+`dash`, from a file and from stdin, with a fake `curl` serving a fake
+release: the latest lookup, HTTPS-only flags on every call, a pinned
+version, and refusals for a stray or malformed version, a redirect to
+another host, no answer, an unknown release, a checksum mismatch, a
+missing line and a binary that reports another version.
+
+Decision: a stable "latest" URL on GitHub only, as a release asset
+rather than a branch file. A release asset changes exactly when a release
+is published and lives next to the tarballs it installs; a raw branch
+file is cached for up to five minutes, is served from another host and
+can be rewritten by any push. Trade-off, stated in the README: whoever
+runs the command gets whatever the latest release carries, so a
+compromised account or release changes it for everyone at once;
+`SHA256SUMS` from the same release catches corruption, not tampering,
+and HTTPS to GitHub is the trust anchor, as for `lazygram update`. The
+README offers reading the script first and pinning a version with
+`LAZYGRAM_VERSION`. GitHub's immutable releases setting, when enabled
+on the repository, stops a published asset from being replaced.
+
+The README command switches to this URL only after the first release
+that carries `install.sh` answers 200 there; until then it points at the
+script by commit.
 
 ## Self-update
 
