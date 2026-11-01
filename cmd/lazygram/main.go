@@ -195,7 +195,45 @@ func telegramConfig(dataDir string) (cfg config.Telegram, src appSource, err err
 	return cfg, appNone, nil
 }
 
+// inUse is the exit for a second lazygram on the same state directory.
+func inUse(dir string) error {
+	return exitError{fmt.Sprintf("another lazygram is using %s.\n\n"+
+		"  One process per state directory: two would share the Telegram session\n"+
+		"  and have it terminated. Stop the other one, or start this one with\n"+
+		"  -data <another directory> and link it separately.\n", dir), 2}
+}
+
+// lockState takes the state directory for this process: a second
+// lazygram on it is refused, and a filesystem that cannot lock files is
+// used with a warning on stderr.
+func lockState(dir string, warn io.Writer) (*config.Lock, error) {
+	lock, err := config.TryLock(dir)
+	if errors.Is(err, config.ErrLocked) {
+		return nil, inUse(dir)
+	}
+	if err != nil {
+		return nil, err
+	}
+	warnUnlocked(warn, dir, lock)
+	return lock, nil
+}
+
+// warnUnlocked tells the user when the state directory could not be
+// locked, so a second lazygram on it would not be refused.
+func warnUnlocked(w io.Writer, dir string, lock *config.Lock) {
+	if lock == nil || !lock.Unlocked {
+		return
+	}
+	_, _ = fmt.Fprintf(w, "lazygram: %s cannot be locked (no file locks on this filesystem or system);\n"+
+		"  a second lazygram on it would not be refused. Prefer -data <a directory on a local disk>.\n", dir)
+}
+
 func runTelegram(o options) error {
+	lock, err := lockState(o.dataDir, os.Stderr)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = lock.Release() }()
 	cfg, src, err := telegramConfig(o.dataDir)
 	if err != nil {
 		return err

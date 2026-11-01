@@ -12,6 +12,61 @@ import (
 	"lazygram/internal/update"
 )
 
+func TestSecondInstanceIsRefused(t *testing.T) {
+	clearEnv(t)
+	dir := t.TempDir()
+	lock, err := config.TryLock(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = lock.Release() }()
+	if lock.Unlocked {
+		t.Skip("no file locks on this platform or filesystem")
+	}
+	err = run([]string{"-data", dir})
+	var ec exitError
+	if !errors.As(err, &ec) || ec.code != 2 || !strings.Contains(ec.msg, "another lazygram is using "+dir) || !strings.Contains(ec.msg, "-data") {
+		t.Fatalf("second instance: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, config.LockFile)); err != nil {
+		t.Fatalf("the lock file lives in the state directory: %v", err)
+	}
+	// lazygram login is refused the same way, before it asks for anything.
+	err = run([]string{"-data", dir, "login"})
+	if !errors.As(err, &ec) || ec.code != 2 || !strings.Contains(ec.msg, "another lazygram is using "+dir) {
+		t.Fatalf("second login: %v", err)
+	}
+	_ = lock.Release()
+	err = run([]string{"-data", dir})
+	if !errors.As(err, &ec) || ec.code != 2 || !strings.Contains(ec.msg, "lazygram login") {
+		t.Fatalf("after the release the usual not-linked exit: %v", err)
+	}
+}
+
+func TestLockStateWarnsWhenItCannotLock(t *testing.T) {
+	var warn strings.Builder
+	l, err := lockState(t.TempDir(), &warn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = l.Release() }()
+	if l.Unlocked != strings.Contains(warn.String(), "cannot be locked") {
+		t.Fatalf("a warning exactly when the directory cannot be locked: unlocked=%v %q", l.Unlocked, warn.String())
+	}
+	// The warning itself, whatever this platform does.
+	warn.Reset()
+	warnUnlocked(&warn, "/some/state", &config.Lock{Unlocked: true})
+	if s := warn.String(); !strings.Contains(s, "/some/state cannot be locked") || !strings.Contains(s, "-data <a directory on a local disk>") {
+		t.Fatalf("warning text: %q", s)
+	}
+	warn.Reset()
+	warnUnlocked(&warn, "/some/state", &config.Lock{})
+	warnUnlocked(&warn, "/some/state", nil)
+	if warn.Len() != 0 {
+		t.Fatalf("no warning for a held lock: %q", warn.String())
+	}
+}
+
 func TestNotLinkedExitsWithHint(t *testing.T) {
 	clearEnv(t)
 	noPublic(t)

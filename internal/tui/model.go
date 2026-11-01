@@ -1364,13 +1364,26 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case tea.KeyCtrlR:
 		return m, m.refresh()
+	case tea.KeyCtrlL: // /redraw
+		m.redraw(w)
 	case tea.KeyF1:
 		return m, m.help()
 	case tea.KeySpace:
 		m.insert(' ')
 	case tea.KeyRunes:
-		for _, r := range k.Runes {
-			if r >= ' ' && r != 0x7f {
+		// A paste arrives as one run of runes, line breaks included: in a
+		// window they stay line breaks of the message (CR LF is one), in a
+		// list or the pager they are dropped like other control characters.
+		for i, r := range k.Runes {
+			switch {
+			case r == '\n' || r == '\r':
+				if r == '\n' && i > 0 && k.Runes[i-1] == '\r' {
+					continue
+				}
+				if m.mode == modeWin {
+					m.insert('\n')
+				}
+			case r >= ' ' && r != 0x7f:
 				m.insert(r)
 			}
 		}
@@ -1683,6 +1696,17 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		}
 		m.setTheme(c.Arg)
 	case command.Open:
+		// /open <link>: one http(s) link with a host goes to the browser,
+		// like a click; a link-looking argument that is not exactly that is
+		// refused, so no text with spaces ever reaches the opener.
+		if f := strings.Fields(c.Arg); len(f) > 0 && strings.HasPrefix(strings.ToLower(f[0]), "http") {
+			if len(f) != 1 || !isWebLink(f[0]) {
+				m.setErr("only one http or https link with a host can be opened")
+				break
+			}
+			m.setInfo("opening " + f[0] + "...")
+			return m, m.openCmd(f[0])
+		}
 		if w.chatID == "" {
 			m.setErr("the server window has no chat; /win to the chat first")
 			break
@@ -2074,13 +2098,15 @@ var argWords = map[string][]string{
 	"/read-receipts": {"on", "off"}, "/receipts": {"on", "off"},
 }
 
-// openCmds are the spellings of /open; after them Tab completes "out" and
-// the ids of this window's messages with attachments.
+// openCmds are the spellings of /open; after them Tab completes "out", the
+// chat's recent links and the ids of this window's messages with
+// attachments.
 var openCmds = map[string]bool{"/open": true, "/fetch": true, "/download": true}
 
 // complete expands the word at the end of the input the way bash does: a
-// command name when the line starts with one, a theme after /theme, "out"
-// and attachment message ids after /open, a command's fixed words (/win
+// command name when the line starts with one, a theme after /theme, "out",
+// the chat's recent links and attachment message ids after /open, a
+// command's fixed words (/win
 // list), a local path after /send, else a chat name (@user or #channel). One candidate is filled in with a
 // space; several are extended to their longest common prefix, and a second
 // Tab that cannot extend further prints them into the window.
@@ -2116,9 +2142,11 @@ func (m *Model) complete() {
 			}
 		}
 	case len(fields) > 0 && openCmds[fields[0]]:
-		// /open [out] <msg>: "out" as the first word, then the ids of the
-		// messages with attachments in this window's chat; nothing in the
-		// server window, where /open is refused anyway.
+		// /open [out] <msg> or /open <link>: "out" as the first word, the
+		// chat's recent links (newest message first) and the ids of the
+		// messages with attachments in this window's chat; after "out" only
+		// the ids; nothing in the server window, which has no chat (an
+		// /open <link> typed there still works).
 		w := m.wins[m.cur]
 		if w.chatID == "" {
 			return
@@ -2126,6 +2154,25 @@ func (m *Model) complete() {
 		prior := fields[1:]
 		if len(prior) == 0 && strings.HasPrefix("out", word) {
 			cands = append(cands, "out")
+		}
+		if len(prior) == 0 { // the chat's recent links, newest first
+			// Matched case-insensitively (word is lower-cased) and filled in
+			// with their own case; when some match the typed case exactly,
+			// only those count, so two links differing in case stay apart.
+			typed := string(m.input[start:])
+			var any, exact []string
+			for _, u := range m.recentLinks(w.chatID, recentLinkCount) {
+				if strings.HasPrefix(strings.ToLower(u), word) {
+					any = append(any, u)
+					if strings.HasPrefix(u, typed) {
+						exact = append(exact, u)
+					}
+				}
+			}
+			if len(exact) > 0 {
+				any = exact
+			}
+			cands = append(cands, any...)
 		}
 		if len(prior) == 0 || len(prior) == 1 && (prior[0] == "out" || prior[0] == "ext" || prior[0] == "viewer") {
 			for _, x := range m.msgs {
@@ -2247,12 +2294,12 @@ func commonPrefix(ss []string) string {
 // asked for, narrowed by the typed text.
 func (m *Model) listItems() []domain.Chat {
 	var out []domain.Chat
-	q := strings.TrimLeft(strings.ToLower(strings.TrimSpace(string(m.input))), "@#")
+	mt := domain.NewMatcher(strings.TrimLeft(strings.TrimSpace(string(m.input)), "@#"))
 	for _, c := range m.chats {
 		if c.Deleted && !m.showDeleted {
 			continue
 		}
-		if q != "" && !strings.Contains(strings.ToLower(c.Alias), q) && !strings.Contains(strings.ToLower(c.Title), q) {
+		if !mt.Empty() && !mt.Match(c.Alias) && !mt.Match(c.Title) { // either script
 			continue
 		}
 		out = append(out, c)
@@ -2638,6 +2685,7 @@ const keyHelp = `Keys
   PgUp / PgDn            scroll a page (the wheel scrolls too)
   Home / End             oldest / newest
   Ctrl-R                 sync now
+  Ctrl-L                 redraw: drop notices and pictures (/redraw)
   F1                     the command list (/help); /keys prints this
   Esc                    close the list or pager; clear the input
   Ctrl-C                 quit

@@ -149,6 +149,8 @@ const HelpText = `Commands
   /open [msg]            fetch a photo and show it in the terminal
                          (a file: decrypt a copy and show where)
   /open out [msg]        the same, but in the system viewer
+  /open <link>           open an http(s) link in the browser; Tab
+                         offers the chat's recent links
                          /open is also /fetch, /download
   /theme [name]          list the colour themes, or switch to one;
                          also /colors, /colours

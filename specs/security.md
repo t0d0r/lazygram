@@ -49,13 +49,30 @@
   temporary path shown. Downloaded files are remote content. A monitoring
   agent with root can still read process memory and the screen;
   encryption protects data at rest only.
-- A link in a message is opened only when clicked, only `http`/`https`
-  with a host, through the system opener with the link as a single
-  argument (no shell). Links are remote content: a click opens whatever
+- A link in a message is opened only when clicked or typed after
+  `/open`, only `http`/`https` with a host (the same rule for both, and
+  for the links Tab offers after `/open`), through the system opener with
+  the link as a single argument (no shell). Links are remote content: a click opens whatever
   the sender chose, in the browser or preview app the system assigns.
 - `lazygram login` links by QR code, so no phone number or SMS code passes
   through lazygram; a two-step password is read without echo and never
   stored. The only login artifact is the session file.
+- One process per state directory: `lazygram` and `lazygram login` take
+  an advisory lock on `<state>/lock` (flock, released by the kernel when
+  the process ends, so a crash leaves nothing stale) and a second start on
+  the same directory exits with status 2 and a message naming the
+  directory and the way out (`-data <another directory>`). Reason: two
+  processes on one session file are two MTProto sessions on one
+  authorization key, which Telegram terminates (AUTH_KEY_DUPLICATED),
+  invalidating the login and, with it, the encrypted cache; they would
+  also write the same cache and session file. Where the lock cannot be
+  taken because the filesystem has no file locks (ENOLCK or ENOTSUP: NFS
+  without a lock daemon, some FUSE, CIFS and 9p mounts) or the system
+  has no flock (lazygram's own list: Linux, macOS and the BSDs have it),
+  lazygram starts anyway and prints a warning that a second instance
+  would not be refused, naming the directory and `-data <a directory on
+  a local disk>`. Any other lock failure stops the start with the lock
+  file's path in the message.
 - The session file grants account access: the state directory (default
   `~/.local/state/lazygram`, or `.state/` for make targets, git-ignored) is
   0700 and must be treated like a password store. `make clean` leaves it

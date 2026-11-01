@@ -24,6 +24,11 @@ in a searchable pager. Feature goals are inspired by nchat.
   `/mark-as-read` for one chat): Telegram is told a chat was read only
   when you focus its window with unread messages or mark it read in a
   list
+- Search, the chat list and chat names match Cyrillic by its Latin
+  transliteration and the other way round (`ivan` finds the name
+  written in Cyrillic); pasted text keeps its line breaks; Ctrl-L
+  redraws; `/open <link>` opens a link, Tab offers the chat's recent
+  ones; one process per state directory, a second start is refused
 - Who is typing: the status line says `ada is typing` or `ada and bob are
   recording` for the current chat (every chat in the server window), with
   a running light; nothing is ever reported back about you
@@ -201,7 +206,7 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/edit [text]`, `/delete`  | change or remove your last message in this chat |
 | `/names`                   | show chats by nick (`@alias`) or by name (`@Title`) |
 | `/press N`                 | press button N under the latest bot message; `/press <msg> N` for an older one |
-| `/open [msg]`              | fetch a `[photo]`/`[file]` into the encrypted vault; pictures are shown in the window (`/open out` for the system viewer) |
+| `/open [msg]`              | fetch a `[photo]`/`[file]` into the encrypted vault; pictures are shown in the window (`/open out` for the system viewer); `/open <link>` opens an http(s) link in the browser, Tab offers the chat's ten most recent links |
 | `/theme [name]`            | colour themes: default, solarized, gruvbox, dracula, nord, monokai, tokyonight, vim, emacs; for light terminals: light, solarized-light, gruvbox-light |
 | `/about`                   | version, author, build and libraries          |
 | `/fx`                      | running lights over links and buttons on/off  |
@@ -229,13 +234,14 @@ viewer instead.
 
 | key                 | action                                             |
 |---------------------|----------------------------------------------------|
-| Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash: commands, chats, themes, `/open out` and attachment message ids, `/win list`, paths after `/send` |
+| Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash: commands, chats, themes, `/open out`, attachment message ids and the chat's ten most recent links, `/win list`, paths after `/send` |
 | Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
 | Alt-0 .. Alt-9      | window 0 .. 9 (Esc then the digit works too)       |
 | Up / Down           | input history (commands and sent lines; a recalled line is input again: Ctrl-X sends it, Enter runs it when it starts with `/`) |
 | Left / Right        | move the cursor in the input (in `/list` or `/win`: pick the row's action button); Ctrl-A / Ctrl-E start / end; Delete removes under the cursor (as Backspace at the end), Ctrl-W the word before it, Ctrl-K to the end |
 | PgUp / PgDn         | scroll a page; Home / End oldest / newest          |
 | Ctrl-R              | sync now                                           |
+| Ctrl-L              | redraw this window (`/redraw`): notices and pictures go, messages stay |
 | F1                  | print the command list into the server window (`/keys` for this table) |
 | Esc                 | close the list or pager, else clear the input      |
 | Ctrl-X              | send the typed text to this window's chat, as typed (a line starting with `/` is sent, not run; Enter runs commands) |

@@ -29,6 +29,11 @@ again.
 // do. Nothing is read from flags, environment or files; nothing typed is
 // echoed back or logged.
 func runLogin(o options) error {
+	lock, err := lockState(o.dataDir, os.Stderr)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = lock.Release() }()
 	if !isTerminal(os.Stdin) {
 		return errors.New("login needs an interactive terminal")
 	}

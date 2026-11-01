@@ -104,7 +104,7 @@ titles and notices are stripped of control characters before rendering.
 - list (`/list [--show-deleted|-a] [text]`): one row per chat: its window
   number when open, name, title, unread count, `(deleted)`. Up/Down (or
   Tab/Shift-Tab) move, Enter opens or focuses that chat's window, typing
-  narrows the rows, Esc returns (it also arms the Esc-digit prefix, but never restores the
+  narrows the rows (in either script, see Search in either script), Esc returns (it also arms the Esc-digit prefix, but never restores the
   filter as a draft). Deleted accounts are hidden unless asked for. Tab completes the typed filter like anywhere else and never moves
   the cursor. `/win` (or `/win list`) shows the same kind of list for the
   open windows (number, name, title, unread, `(current)`); Enter focuses.
@@ -134,7 +134,9 @@ titles and notices are stripped of control characters before rendering.
   bottom only when the list ends; the same on the way up.
 - pager (`/search [text]`): the local history of the current window's chat
   (all chats in window 0) with the full date on every line; typed text is a
-  live case-insensitive search over text and sender with matches
+  live case-insensitive search over text and sender, in either script
+  (a Latin query finds Cyrillic text by its transliteration and a
+  Cyrillic one finds Latin text, see Search in either script), with matches
   highlighted; the status line shows `N of M messages`; Esc returns.
 `/help` and F1 focus the server window (window 0) and print the command
 reference there as plain lines (no time stamp or marker; command lines
@@ -177,6 +179,7 @@ names `/keys`, so the keys are one step away from either.
 | `/press N`, `/press <msg> N`  | press a bot button (see Buttons)                     |
 | `/open [msg]`                 | fetch an attachment; a picture is shown in the window |
 | `/open out [msg]`             | the same, but a picture goes to the system viewer    |
+| `/open <link>`                | hand one `http(s)` link with a host to the browser, as a click does (any window; a link with more words after it, or one without a host, is refused); Tab after `/open` offers the chat's ten most recent distinct links, newest first, beside `out` and the attachment ids |
 | `/theme [name]`               | list the colour themes or switch (see Themes)        |
 | `/about`, `/version`          | version, author, repository, license, build, libraries, uptime |
 | `/fx`                         | running lights over clickable text on or off (kept) |
@@ -287,8 +290,9 @@ right runs that action (see Modes); an `http(s)` link in a message or notice is 
 system opener (`open`, `xdg-open`, `rundll32`), which starts the default
 browser (links always go to the browser; only fetched attachments go to
 the image viewer). The wheel scrolls the window three
-lines (the cursor in a list). Opening happens only on a click, only for
-http and https links with a host; nothing is opened automatically.
+lines (the cursor in a list). Opening happens only on a click or an
+`/open <link>`, only for http and https links with a host (the opener's
+own rule, `opener.IsLink`, for both); nothing is opened automatically.
 
 ### Selection and clipboard
 
@@ -364,7 +368,10 @@ toggles "Enter sends". The status says "sending", and a sync is triggered
 so the line appears as `<me>` as soon as the service has it. By default
 Enter never sends: on plain text in a chat window it adds a line break to
 the message (shown as a return mark in the input line), so messages can
-have several lines; the whole text goes out with Ctrl-X. With "Enter
+have several lines; the whole text goes out with Ctrl-X. A pasted text
+keeps its line breaks (a CR LF pair is one break; other control
+characters are dropped as always); in a list or the pager a pasted line
+break is dropped, since the filter is one line. With "Enter
 sends" on, the roles swap: Enter sends and a single Ctrl-X adds a line
 break to plain text (a fast second Ctrl-X still toggles and removes that break). Two Ctrl-X within 600 ms toggle "Enter sends" for the current
 window (the prompt becomes `[@name]> `); with Enter sends on, Enter sends
@@ -455,11 +462,47 @@ is the only existing action that clears a window's unread count, and a
 message arriving while a window is shown is not reported because
 lazygram cannot tell whether anyone is looking.
 
+## Search in either script
+
+The `/search` pager and the `/list` filter compare a query with the text
+in two ways: as typed, lower-cased, and with both sides transliterated to
+Latin (`domain.Matcher`: the query is transliterated once per search and
+every text into a reused buffer, so the search allocates nothing per
+message; since the mapping is rune by rune, a plain match is always a
+transliterated match too, and comparing the transliterations is the
+whole rule). Combining marks are dropped from Latin text as well, so a
+decomposed accent does not hide a name. A query that transliterates to
+nothing (combining marks only) matches every text, like an empty one,
+but never resolves a chat name. Chat names given to
+`/whois`, `/win @name` and `/msg` resolve the same way in a last step of
+`domain.ResolveChat`: exact id or alias, alias prefix and plain substring
+first, as typed; the either-script substring only when those found
+nothing, so it never turns a unique match ambiguous.
+
+The transliteration is the Bulgarian streamlined system (zh, ts, ch, sh,
+sht, yu, ya, hard sign as a, soft sign as y, the stressed i as i)
+extended with the Russian and Ukrainian letters it lacks (yo, y, e, ye,
+i, yi, g); combining marks such as stress accents are dropped; Latin
+letters pass through, so `ivan` finds the name written in Cyrillic, the
+Cyrillic spelling finds `Ivan`, and `sreshta` finds the Cyrillic word for
+a meeting. The spelling is the system's, not every habit: the Cyrillic
+ya is `ya`, so the city of Sofia written in Cyrillic is found by
+`sofiya`, not by `sofia`. A Cyrillic query finds Latin text when its
+transliteration spells it (the Cyrillic letters for "smit" find
+`Smith`), but a phonetic Cyrillic spelling that does not (the letters
+for "elis" do not find `Alice`) is no match: Latin is never
+transliterated back. The pager highlights plain matches only; a line
+found through the transliteration is listed without a highlight. (The
+examples are kept in Latin here; the test files carry the Cyrillic.)
+Decision: this is the cheapest rule that lets a Latin keyboard find
+Cyrillic chats and messages without a dictionary, and it never hides a
+match the plain comparison would find.
+
 ## Keys
 
 | key                  | action                                            |
 |----------------------|---------------------------------------------------|
-| Tab / Shift-Tab      | empty prompt: next / previous window; else complete like bash (a second Tab lists) |
+| Tab / Shift-Tab      | empty prompt: next / previous window; else complete like bash (a second Tab lists): commands, chats, themes, `out`, attachment ids and the chat's recent links after `/open`, paths after `/send` |
 | Ctrl-X twice         | toggle "Enter sends" for this window (Ctrl-X then adds a line break to plain text) |
 | Ctrl-N / Ctrl-P      | next / previous window (Alt-Right / Alt-Left too) |
 | Alt-0 .. Alt-9       | window 0 .. 9; Esc followed by the digit does the same (the typed input survives) |
@@ -468,6 +511,7 @@ lazygram cannot tell whether anyone is looking.
 | mouse drag           | select text; copied to the clipboard on release (see Mouse) |
 | Home / End           | oldest / newest                                   |
 | Ctrl-R               | sync now                                          |
+| Ctrl-L               | redraw: drop this window's notices, help text and pictures, as `/redraw` |
 | F1                   | focus the server window and print the command reference there (as `/help`) |
 | Esc                  | close the list or pager, else clear the input     |
 | Ctrl-X               | send the typed text to this window's chat, as typed: a line starting with `/` is sent, not run (Enter runs commands); with "Enter sends" on it still sends such a line |
@@ -505,8 +549,14 @@ directory that start with the typed base name, `~` expanded, hidden files
 only when a dot is typed, directories filled in with a trailing `/` and no
 space so the next Tab descends; the caption after the path is free text
 and never completed. After `/open` (and `/fetch`, `/download`): `out` as
-the first word and the ids of the current window's messages that have an
-attachment, also after `/open out`; nothing in the server window.
+the first word, the chat's ten most recent distinct `http(s)` links
+(newest message first, taken from the same sanitised text a click uses,
+so no control character reaches the input and trailing punctuation is
+not included; matched case-insensitively and filled in with their own
+case, and when some match the typed case exactly only those are
+offered, so two links that differ in case stay apart) and the ids of the current window's messages that
+have an attachment; after `/open out` only the ids; nothing in the
+server window (an `/open <link>` typed there still works).
 Otherwise a command's fixed first words (`/win list`,
 `/list --show-deleted`) and chat names: every non-deleted
 chat whose `@name`/`#name` starts with the word, or whose bare alias

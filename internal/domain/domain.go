@@ -194,7 +194,7 @@ func LatestWithButtons(msgs []Message, chatID string) (Message, bool) {
 
 // Filter returns the messages matching q, preserving order.
 func Filter(msgs []Message, q Query) []Message {
-	needle := strings.ToLower(strings.TrimSpace(q.Text))
+	mt := NewMatcher(q.Text) // normalised once for every message
 	var out []Message
 	for _, m := range msgs {
 		if q.ChatID != "" && m.ChatID != q.ChatID {
@@ -203,9 +203,7 @@ func Filter(msgs []Message, q Query) []Message {
 		if !q.Since.IsZero() && m.Time.Before(q.Since) {
 			continue
 		}
-		if needle != "" &&
-			!strings.Contains(strings.ToLower(m.Text), needle) &&
-			!strings.Contains(strings.ToLower(m.Sender), needle) {
+		if !mt.Empty() && !mt.Match(m.Text) && !mt.Match(m.Sender) {
 			continue
 		}
 		out = append(out, m)
@@ -239,7 +237,10 @@ var (
 )
 
 // ResolveChat finds one chat by exact ID or alias, then by unique
-// case-insensitive prefix, then by unique substring of alias or title. A
+// case-insensitive prefix, then by unique substring of alias or title,
+// then by unique substring in either script (a Latin query finds a title
+// written in Cyrillic and the other way round; only when the plain
+// substring found nothing, so it never turns a unique match ambiguous). A
 // leading @ restricts the search to people, a leading # to groups and
 // channels.
 func ResolveChat(chats []Chat, query string) (Chat, error) {
@@ -255,14 +256,20 @@ func ResolveChat(chats []Chat, query string) (Chat, error) {
 	if q == "" {
 		return Chat{}, ErrNoChat
 	}
-	for _, match := range []func(Chat) bool{
+	tiers := []func(Chat) bool{
 		func(c Chat) bool { return strings.ToLower(c.ID) == q || strings.ToLower(c.Alias) == q },
 		func(c Chat) bool { return strings.HasPrefix(strings.ToLower(c.Alias), q) },
 		func(c Chat) bool {
 			return strings.Contains(strings.ToLower(c.Alias), q) ||
 				strings.Contains(strings.ToLower(c.Title), q)
 		},
-	} {
+	}
+	// A query that transliterates to nothing (only combining marks) would
+	// match every chat in either script; it gets no such tier.
+	if either := NewMatcher(q); !either.Empty() {
+		tiers = append(tiers, func(c Chat) bool { return either.Match(c.Alias) || either.Match(c.Title) })
+	}
+	for _, match := range tiers {
 		var hits []Chat
 		for _, c := range chats {
 			if match(c) {
