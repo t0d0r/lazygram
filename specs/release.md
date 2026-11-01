@@ -38,6 +38,29 @@ specs/providers.md).
    vX.Y.Z.tar.gz | shasum -a 256`), then `brew install --build-from-source
    t0d0r/tap/lazygram` and `brew test lazygram`.
 5. Push `main` and the tag.
+6. Bump `VERSION` in `install.sh` to the new tag and update the commit
+   the README's installer command points at.
+
+## Installer script
+
+`install.sh` at the repository root installs one release without Go,
+brew or root: it downloads `lazygram-<version>-<os>-<arch>.tar.gz` and
+`SHA256SUMS` of the pinned release over HTTPS only (`--proto '=https'
+--tlsv1.2`), checks the tarball against its line in `SHA256SUMS` with
+`sha256sum` or `shasum`, refuses on any mismatch, extracts only the
+`lazygram` file and puts it in `$LAZYGRAM_PREFIX/bin` (default
+`~/.local/bin`, mode 0755), then runs `lazygram -version` and says when
+that directory is not in `PATH`. The version is pinned in the script
+(`VERSION`, the newest release when the script was last changed) and
+overridable with `LAZYGRAM_VERSION=vX.Y.Z`; anything else is refused.
+Linux and macOS, amd64 and arm64; other systems stop with a message.
+Decision: the script pins a version instead of resolving "latest", so a
+given copy of the script always installs the same bytes, and the README
+points at the script by commit, never by branch, so the command a reader
+copies cannot change under them. A new release bumps `VERSION` here
+(release step 6). The script is validated by `bash -n`, `shellcheck`
+and a real run into a scratch prefix on macOS and in an Arch Linux ARM
+container.
 
 ## Self-update
 
