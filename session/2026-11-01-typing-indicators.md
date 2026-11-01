@@ -86,6 +86,21 @@ from `master` at `44c85f9`, not committed.
 `make check` in the worktree; `go test -race -run 'Typing|Names|Bounce'
 ./internal/domain/ ./internal/provider/telegram/ ./internal/tui/`.
 
+## Released
+
+- Commit `7260a56` on `feature/typing-indicators`, fast-forwarded into
+  `master` (`origin/master` had not moved from `44c85f9`); `make check`
+  and `make smoke` green; Linux and macOS CI green on that commit.
+- Tag `v0.4.18` at `7260a56`, pushed; `make dist` and `make release`
+  published the GitHub release (four tarballs and SHA256SUMS). Read back:
+  not a draft or prerelease, marked latest; every asset's digest on
+  GitHub equals the local build, the downloaded SHA256SUMS is identical
+  to `dist/SHA256SUMS`, `shasum -c` passes for all four, the downloaded
+  darwin-arm64 binary and the linux-arm64 one (run in an Arch Linux ARM
+  container) print `lazygram v0.4.18`.
+
 ## Next
 
-- Commit on `feature/typing-indicators` and merge it into `master`.
+- Bump the Homebrew formula and the Arch/Omarchy recipe to 0.4.18
+  (packaging/omarchy/README.md, step 0), then open the omarchy-pkgs PR.
+- The worktree `../lazygram-typing` and the merged branch can be removed.
