@@ -106,4 +106,5 @@ Branch `feature/queued-todos` in the worktree `../lazygram-todos`, from
 
 ## Next
 
-- Homebrew formula and the Arch/Omarchy recipe are still at 0.4.14.
+- The Homebrew formula builds v0.4.20; the Arch/Omarchy recipe is still
+  at 0.4.14.

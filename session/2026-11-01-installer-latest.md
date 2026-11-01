@@ -92,4 +92,9 @@ carries the script:
 
 - Optional: enable GitHub's immutable releases on the repository so a
   published `install.sh` cannot be replaced.
-- Homebrew formula and the Arch/Omarchy recipe are still at 0.4.14.
+- The Homebrew formula builds v0.4.20 (tap commit `5094fc2`; its head
+  build now follows `master`); `brew upgrade t0d0r/tap/lazygram` installs
+  0.4.20 and `brew test` passes. The Arch/Omarchy recipe is still at
+  0.4.14.
+- A tap branch `bump-lazygram-0.4.19` (one commit, the 0.4.19 bump)
+  was never merged and is superseded.
