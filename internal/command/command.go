@@ -40,6 +40,7 @@ const (
 	Keys          // print the keyboard shortcut reference into the server window
 	Receipts      // read receipts to the service: Arg is on or off; empty shows the setting
 	MarkRead      // one read receipt for the current window's chat, whatever the setting
+	AutoJoin      // open windows for unread chats at start: Arg is on or off; empty shows the setting
 )
 
 // Command is a parsed slash command.
@@ -76,6 +77,7 @@ var table = map[string]Kind{
 	"redraw": Redraw, "clear": Redraw,
 	"keys": Keys, "shortcuts": Keys, "bindings": Keys,
 	"read-receipts": Receipts, "receipts": Receipts,
+	"autojoin":     AutoJoin,
 	"mark-as-read": MarkRead,
 }
 
@@ -170,4 +172,6 @@ const HelpText = `Commands
                          kept; no argument shows; also /receipts
   /mark-as-read          one receipt for this window's chat, now,
                          whatever /read-receipts says
+  /autojoin [on|off]     at start open a window for every chat with
+                         unread messages; on by default, kept
 Keyboard shortcuts: type /keys.`

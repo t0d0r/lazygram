@@ -52,6 +52,7 @@ const (
 	mouseKey       = "mouse"               // store state key for mouse reporting
 	namesKey       = "names"               // store state key for showing chats by name
 	receiptsKey    = "read_receipts"       // store state key for read receipts; absent means off
+	autojoinKey    = "autojoin"            // store state key for opening unread chats at start; absent means on
 	fxTick         = 30 * time.Millisecond
 	maxHistory     = 200
 	doubleCtrlX    = 600 * time.Millisecond
@@ -178,11 +179,15 @@ type Model struct {
 	// history stay in the chat windows.
 	live map[string]bool
 	// Requested read reports in flight, and the next one waiting, per chat.
-	reporting  map[string]bool
-	reportNext map[string]pendingReport
-	status     string
-	isErr      bool
-	quitting   bool
+	reporting map[string]bool
+	// startChecked: the first chat list from the service ran the start
+	// check (startCheck); autojoin: that check opens windows (/autojoin).
+	startChecked bool
+	autojoin     bool
+	reportNext   map[string]pendingReport
+	status       string
+	isErr        bool
+	quitting     bool
 }
 
 type (
@@ -266,6 +271,9 @@ func New(opt Options) *Model {
 	}
 	_, _ = opt.Store.State(namesKey, &m.byName)
 	_, _ = opt.Store.State(receiptsKey, &m.receipts) // absent or unreadable: off
+	if found, err := opt.Store.State(autojoinKey, &m.autojoin); !found || err != nil {
+		m.autojoin = true
+	}
 	m.chats, _ = opt.Store.Chats()
 	m.msgs, _ = opt.Store.Messages("", opt.Backlog)
 	// The banner has the zero time so it stays above everything, however old
@@ -706,10 +714,10 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.fail("chats: " + errText(msg.err))
 			break
 		}
-		first := len(m.chats) == 0
 		m.chats = msg.chats
-		if first {
-			m.openUnread()
+		if !m.startChecked { // the first chat list from the service this session; a cached one does not count
+			m.startChecked = true
+			m.startCheck()
 		}
 	case syncedMsg:
 		m.syncing = false
@@ -1130,6 +1138,21 @@ func (m *Model) arrived(fresh []domain.Message) {
 	sort.Ints(order)
 	// The status says where the messages went: "3 new messages in 2:#dev,
 	// 4:@alice (2)"; a long list is cut after four windows.
+	where := m.whereList(order, count)
+	word := "messages"
+	if n == 1 {
+		word = "message"
+	}
+	if len(where) == 0 {
+		m.setInfo(fmt.Sprintf("%d new %s", n, word))
+		return
+	}
+	m.setInfo(fmt.Sprintf("%d new %s in %s", n, word, strings.Join(where, ", ")))
+}
+
+// whereList names windows for a status or notice, "2:#dev (3)", with the
+// count when it is more than one, cut after four as "+N more".
+func (m *Model) whereList(order []int, count map[int]int) []string {
 	var where []string
 	for n, i := range order {
 		if n == 4 {
@@ -1142,31 +1165,7 @@ func (m *Model) arrived(fresh []domain.Message) {
 		}
 		where = append(where, s)
 	}
-	word := "messages"
-	if n == 1 {
-		word = "message"
-	}
-	if len(where) == 0 {
-		m.setInfo(fmt.Sprintf("%d new %s", n, word))
-		return
-	}
-	m.setInfo(fmt.Sprintf("%d new %s in %s", n, word, strings.Join(where, ", ")))
-}
-
-// openUnread opens windows for chats the service reports as unread.
-func (m *Model) openUnread() {
-	n := 0
-	for _, c := range m.chats {
-		if c.Unread == 0 || c.Deleted {
-			continue
-		}
-		if _, w := m.winFor(c.ID); w == nil {
-			_, w = m.openWin(c.ID)
-			w.unread = c.Unread
-			n++
-		}
-	}
-	m.note(m.wins[0], fmt.Sprintf("%d chats, %d with unread messages", len(m.chats), n))
+	return where
 }
 
 func (m *Model) chat(chatID string) (domain.Chat, bool) {
@@ -1724,6 +1723,8 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.clip(c.Arg)
 	case command.Receipts:
 		m.readReceipts(c.Arg)
+	case command.AutoJoin:
+		m.setAutojoin(c.Arg)
 	case command.MarkRead:
 		return m.markAsRead()
 	case command.Fx:

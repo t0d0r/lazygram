@@ -88,6 +88,7 @@ in a group whose cached messages still lack their senders' usernames), and
 | `/clip [mode]`             | where a mouse selection is copied: `auto` (terminal and system tool), `osc52`, `tool`, `off`; no argument shows the mode (see [clipboard.md](clipboard.md)) |
 | `/read-receipts [on\|off]` | read receipts: off by default (kept); on tells Telegram a chat was read when you focus its window with unread messages; no argument shows the setting |
 | `/mark-as-read`            | one read receipt for this window's chat, now, whatever `/read-receipts` says; clears its "marked as unread" flag too |
+| `/autojoin [on\|off]`      | at start, open a window for every chat with unread messages (on by default, kept); no argument shows the setting |
 | `/redraw`, `/clear`        | drop notices, help text and pictures from this window; messages stay |
 | `/refresh`, `/help`, `/quit` | sync now; print the command list, with every short form, into the server window (it ends by naming `/keys`); leave |
 | `/keys`                    | print the keyboard shortcuts into the server window |

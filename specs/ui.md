@@ -52,9 +52,28 @@ completion, and an activity indicator.
   GitHub has a newer release (checked within 3 seconds, silently skipped
   offline). Not in smoke mode.
 - A window opens for a chat when a message arrives for it and no window
-  exists, and at start for every chat the service reports as unread
-  (deleted accounts never open windows). `/win @user`, `/win #chan` and
-  Enter in `/list` open one on demand.
+  exists, and at start for every chat the service reports as unread,
+  people, groups and channels alike (deleted accounts never open
+  windows): autojoin, as IRC clients join their channels on connect.
+  The start check runs once a session, on the first chat list from the
+  service (a chat list cached from an earlier run does not count); a
+  window restored from the last session takes its chat's unread count
+  instead of opening a second one, unless it is the window shown. The
+  server window says what came of it: `-!- 12 chats, 3 with unread
+  messages: 2:#news (4), 3:@alice, 4:#dev (2)` (cut after four windows
+  as `+N more`). `/autojoin off` (kept in the state store under
+  `autojoin`; absent or unreadable means on) stops the windows opening
+  at the next start, and the notice then ends with `(/autojoin is off:
+  no windows opened; /list shows them)`; restored windows still come
+  back and still take their counts, and windows still open when a
+  message arrives during the session. `/autojoin` with no argument shows
+  the setting; it never opens or closes windows in the running session.
+  A window opened this way fetches its messages when first shown, as any
+  window, so many unread chats cost no burst of requests. Decision: the
+  check used to run only when no chat list was cached, which is the
+  first run only, so unread chats silently stopped opening at start;
+  it now keys on the first answer from the service. `/win @user`,
+  `/win #chan` and Enter in `/list` open one on demand.
 - The server window is number 0, permanent: it cannot be closed or moved.
   Chat windows are numbered from 1 in opening order, renumbered on
   `/close`, and `/move N` puts the current window at position N (1..last),
@@ -343,6 +362,7 @@ names `/keys`, so the keys are one step away from either.
 | `/clip [mode]`                | where a mouse selection is copied: `auto`, `osc52`, `tool`, `off`; no argument shows the mode and the tool (kept) |
 | `/read-receipts [on\|off]`, `/receipts` | read receipts to the service: off by default (kept); on reports a chat read when its window with unread messages is focused; no argument shows the setting (see Read receipts) |
 | `/mark-as-read`               | one read receipt for this window's chat, now, whatever `/read-receipts` says; an error in the server window and for a chat without a known message |
+| `/autojoin [on\|off]`         | at start open a window for every chat with unread messages: on by default, kept; no argument shows the setting (see Windows) |
 | `/names`                      | show chats by nick (`@alias`) or by name (`@Title`), kept |
 
 Short forms: `/h` for `/help`; `/shortcuts`, `/bindings` for `/keys`;
