@@ -781,7 +781,7 @@ match the plain comparison would find.
 
 | key                  | action                                            |
 |----------------------|---------------------------------------------------|
-| Tab / Shift-Tab      | empty prompt: next / previous window; else complete like bash (a second Tab lists): commands, chats, themes, `out`, attachment ids and the chat's recent links after `/open`, paths after `/send`; in a group or channel window its `@nicks` after `/whois` and in message text |
+| Tab / Shift-Tab      | empty prompt: next / previous window; else complete like bash (a second Tab lists): commands, chats, themes, `out`, attachment ids and the chat's recent links after `/open`, paths after `/send`, a command's settings (`/autojoin off`, `/clip tool`); in a group or channel window its `@nicks` after `/whois` and in message text |
 | Ctrl-X twice         | toggle "Enter sends" for this window (Ctrl-X then adds a line break to plain text) |
 | Ctrl-N / Ctrl-P      | next / previous window (Alt-Right / Alt-Left too) |
 | Alt-0 .. Alt-9       | window 0 .. 9; Esc followed by the digit does the same (the typed input survives) |
@@ -840,11 +840,19 @@ have an attachment; after `/open out` only the ids; nothing in the
 server window (an `/open <link>` typed there still works).
 In a group or channel window the `/whois` argument and the words of
 message text complete that chat's `@nicks` instead (see Members).
-Otherwise a command's fixed first words (`/win list`,
-`/list --show-deleted`) and chat names: every non-deleted
-chat whose `@name`/`#name` starts with the word, or whose bare alias
-starts with it when the word has no sigil (then the sigil is added), in
-either script (see Search in either script). One
+Otherwise a command's own first-argument words, whatever its spelling
+(`/win list`, `/list --show-deleted`, `/autojoin on|off`,
+`/read-receipts on|off`, `/clip auto|osc52|tool|off`), and chat names
+where the command takes a chat: the first argument of `/win`, `/msg`,
+`/whois` and `/list`, every word of `/me` and `/edit` text, and every
+word of a line without a command (message text). After any other
+command (`/last`, `/search`, `/press`, the settings) Tab offers no chat
+names: those arguments are numbers, settings or free text. A chat name
+is every non-deleted chat whose `@name`/`#name` starts with the word,
+or whose bare alias starts with it when the word has no sigil (then the
+sigil is added), in either script (see Search in either script).
+Decision: chat names after every command filled settings like
+`/autojoin` with nicks. One
 candidate is filled in with a trailing space; several are extended to
 their longest common prefix, and a second Tab that cannot extend further
 prints the candidates into the window as a notice (base names for paths).

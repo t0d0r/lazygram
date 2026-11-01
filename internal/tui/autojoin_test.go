@@ -102,3 +102,37 @@ func TestAutojoinOffIsKept(t *testing.T) {
 		t.Error("on again: the next start opens it")
 	}
 }
+
+func TestTabCompletesEachCommandsOwnArguments(t *testing.T) {
+	m := setup(t, newFake())
+	for typed, want := range map[string]string{
+		"/autojoin of":   "/autojoin off ",
+		"/autojoin al":   "/autojoin al", // a setting, not a chat
+		"/receipts of":   "/receipts off ",
+		"/clip t":        "/clip tool ",
+		"/clipboard au":  "/clipboard auto ",
+		"/j li":          "/j list ", // every spelling of /win
+		"/win al":        "/win @alice ",
+		"/msg al":        "/msg @alice ",
+		"/msg @alice al": "/msg @alice al", // the message after the chat is free text
+		"/whois ne":      "/whois #news ",
+		"/last al":       "/last al", // numbers
+		"/search al":     "/search al",
+		"/press al":      "/press al",
+		"hi al":          "hi @alice ", // message text names chats, as before
+	} {
+		m.input = nil
+		typ(m, typed)
+		press(m, tea.KeyTab)
+		if got := string(m.input); got != want {
+			t.Errorf("%q: got %q, want %q", typed, got, want)
+		}
+	}
+	m.input = nil
+	typ(m, "/autojoin o")
+	press(m, tea.KeyTab)
+	press(m, tea.KeyTab)
+	if v := body(m); !strings.Contains(v, "off  on") && !strings.Contains(v, "on  off") {
+		t.Errorf("the second Tab lists on and off:\n%s", v)
+	}
+}

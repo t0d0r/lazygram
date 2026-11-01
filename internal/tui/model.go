@@ -2199,12 +2199,24 @@ type completion struct {
 	word string
 }
 
-// argWords are the fixed words a command takes as its first argument; the
-// chat names still complete after them (/win list, /open out 1234).
-var argWords = map[string][]string{
-	"/win": {"list"}, "/w": {"list"}, "/window": {"list"},
-	"/list": {"--show-deleted"}, "/l": {"--show-deleted"},
-	"/read-receipts": {"on", "off"}, "/receipts": {"on", "off"},
+// argWords are the fixed words a command takes as its first argument,
+// whatever its spelling (/win, /w, /j list; /clip, /clipboard tool).
+var argWords = map[command.Kind][]string{
+	command.Win:      {"list"},
+	command.List:     {"--show-deleted"},
+	command.Receipts: {"on", "off"},
+	command.AutoJoin: {"on", "off"},
+	command.Clip:     {"auto", "osc52", "tool", "off"},
+}
+
+// chatArgs says where a command's words complete chat names: its first
+// argument (a chat to open, describe, write to or filter by), or all of
+// its text (/me, /edit: the words of a message, like a line without a
+// command). After any other command Tab offers chat names nowhere: its
+// arguments are numbers, settings or free text.
+var chatArgs = map[command.Kind]string{
+	command.Win: "first", command.Msg: "first", command.Whois: "first", command.List: "first",
+	command.Me: "text", command.Edit: "text",
 }
 
 // openCmds are the spellings of /open; after them Tab completes "out", the
@@ -2335,14 +2347,26 @@ func (m *Model) complete() {
 			return
 		}
 	default:
-		for _, n := range argWords[strings.TrimSpace(line)] {
-			if strings.HasPrefix(n, word) {
-				cands = append(cands, n)
+		names := true // a line without a command is message text
+		if len(fields) > 0 && strings.HasPrefix(fields[0], "/") {
+			c, err := command.Parse(fields[0])
+			first := len(fields) == 1
+			if err == nil && first {
+				for _, n := range argWords[c.Kind] {
+					if strings.HasPrefix(n, word) {
+						cands = append(cands, n)
+					}
+				}
 			}
+			where := chatArgs[c.Kind]
+			names = err == nil && (where == "text" || where == "first" && first)
 		}
 		bare := strings.TrimLeft(word, "@#")
 		seen := map[string]bool{}
 		for _, c := range m.chats {
+			if !names {
+				break
+			}
 			if c.Deleted {
 				continue
 			}

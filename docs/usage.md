@@ -138,7 +138,7 @@ the candidates separated by commas.
 
 | key                 | action                                             |
 |---------------------|----------------------------------------------------|
-| Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash: commands, chats, themes, `/open out`, attachment message ids and the chat's ten most recent links, `/win list`, paths after `/send`; in a group or channel window, its `@nicks` after `/whois` and in message text (`@ad` -> `@ada`); names match in Cyrillic or Latin |
+| Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash: commands, chats, themes, `/open out`, attachment message ids and the chat's ten most recent links, `/win list`, a command's settings (`/autojoin off`, `/clip tool`), paths after `/send`; in a group or channel window, its `@nicks` after `/whois` and in message text (`@ad` -> `@ada`); names match in Cyrillic or Latin |
 | Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
 | Alt-0 .. Alt-9      | window 0 .. 9 (Esc then the digit works too)       |
 | Up / Down           | input history (commands and sent lines; a recalled line is input again: Ctrl-X sends it, Enter runs it when it starts with `/`) |
