@@ -102,12 +102,12 @@
 - [x] typing indicators: Telegram typing updates to domain.TypingState with expiry, status line with a running light (specs/ui.md, specs/providers.md); released in v0.4.18 (assets verified against SHA256SUMS); formula and the Arch recipe still at 0.4.14
 - [x] Ctrl-X sends a line starting with / as text, bypassing the command parser; Enter keeps running commands (specs/ui.md); released in v0.4.17 (assets verified against SHA256SUMS); formula and the Arch recipe still at 0.4.14
 - [x] release v0.4.15 with the mouse selection and the self-update refusal (v0.4.15 and v0.4.16 released 2026-10-31; formula still at 0.4.14)
-- [~] /read-receipts on|off (off by default, kept) and /mark-as-read: a read receipt when a window with unread messages is focused, or once on request (specs/ui.md, specs/security.md; branch feature/read-receipts)
+- [x] /read-receipts on|off (off by default, kept) and /mark-as-read: a read receipt when a window with unread messages is focused or marked read in a list, or once on request (specs/ui.md, specs/security.md); released in v0.4.19 (assets verified against SHA256SUMS)
 - [ ] Ctrl-L performs /redraw (specs/ui.md; attribution: Yanko Simeonov)
 - [ ] /open autocompletes the 10 most recent links in the current chat (specs/ui.md)
 - [ ] /open http://... opens an explicitly supplied URL (specs/ui.md)
 - [ ] one process per data/state folder: a second lazygram started on the same folder notifies the user and refuses to run (force-closes itself) instead of sharing the session, cache and settings; reason: two MTProto sessions on one auth key trigger AUTH_KEY_DUPLICATED, which invalidates the login and wipes the cache (specs/security.md)
-- [~] /win list actions: mark the selected window unread, mark it read, close it (specs/ui.md); implemented on branch feature/list-actions: a button strip on the selected row, Left/Right pick, Enter runs, clickable
-- [~] /list actions: mark the selected chat read or unread, as in the /win list (specs/ui.md); implemented on branch feature/list-actions
+- [x] /win list actions: mark the selected window unread, mark it read, close it (specs/ui.md): a button strip on the selected row, Left/Right pick, Enter runs, clickable; released in v0.4.19
+- [x] /list actions: mark the selected chat read or unread, as in the /win list (specs/ui.md); released in v0.4.19
 - [ ] pasted multi-line text keeps its newline characters in the input: a paste must not collapse or drop line breaks (specs/ui.md, Sending: a message may have several lines)
 - [ ] search matches Cyrillic by transliteration: a query in Cyrillic or in its Latin transliteration finds both the Cyrillic text and its transliterated equivalent in chats and messages (specs/ui.md, pager; attribution: Yanko Simeonov)
