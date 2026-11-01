@@ -65,27 +65,34 @@ with every chat interleaved, bot buttons and a `[photo]` token.
 brew install t0d0r/tap/lazygram
 ```
 
-Or the installer script, on Linux and macOS (amd64, arm64): it downloads
-the release it pins (v0.4.18), checks the tarball against the release's
-`SHA256SUMS` and puts `lazygram` in `~/.local/bin`, no root. The URL
-names a fixed commit of the script, so what you run cannot change under
-you:
+Or the installer script, on Linux and macOS (amd64, arm64). It installs
+the latest release: it asks GitHub which release is latest, downloads its
+tarball over HTTPS, checks it against the release's `SHA256SUMS`, and
+puts `lazygram` in `~/.local/bin`, no root and no sudo:
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/t0d0r/lazygram/88c7f621e74234ba80ece5c543038829de6881b7/install.sh | bash
+curl -fsSL https://github.com/t0d0r/lazygram/releases/latest/download/install.sh | sh
 ```
 
-Security warning: piping a download into `bash` runs whatever the server
-sends, before you have seen it. Prefer to read the script first (it is
-short) and run it from the file:
+Security warning: piping a download into `sh` runs whatever the server
+sends, before you have seen it. This URL always serves the installer of
+the newest release, so it stays current, but it also means you trust the
+repository's GitHub account and its latest release: if either were
+compromised, the script and the binary it installs would change for
+everyone at once. The checksum check catches a corrupted or truncated
+download, not a malicious release, since the checksums come from the
+same place. Prefer to read the script first (it is short), check it
+against the release, and run it from the file:
 
 ```sh
-curl -fsSLO https://raw.githubusercontent.com/t0d0r/lazygram/88c7f621e74234ba80ece5c543038829de6881b7/install.sh
-less install.sh && bash install.sh
+curl -fsSLO https://github.com/t0d0r/lazygram/releases/latest/download/install.sh
+curl -fsSLO https://github.com/t0d0r/lazygram/releases/latest/download/SHA256SUMS
+shasum -a 256 -c SHA256SUMS --ignore-missing   # sha256sum on Linux
+less install.sh && sh install.sh
 ```
 
-`LAZYGRAM_VERSION=vX.Y.Z` installs another release, `LAZYGRAM_PREFIX`
-another prefix (its `bin` must be in your `PATH`).
+`LAZYGRAM_VERSION=vX.Y.Z` installs a given release instead of the latest
+one, `LAZYGRAM_PREFIX` another prefix (its `bin` must be in your `PATH`).
 
 Arch Linux and Omarchy: an Arch package recipe lives in
 `packaging/omarchy/lazygram` (`makepkg -si` there builds and installs it;

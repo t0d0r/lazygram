@@ -96,14 +96,14 @@ Branch `feature/queued-todos` in the worktree `../lazygram-todos`, from
 ./internal/config/ ./internal/domain/ ./internal/tui/ ./cmd/lazygram/`;
 `go test -run 'CtrlL|OpenLink|OpenCompletes|Pasted|EitherScript|Translit|MatchText|Matcher|FilterSearches|ResolveChat|TryLock|SecondInstance|LockState' ./internal/config/ ./internal/domain/ ./internal/tui/ ./cmd/lazygram/`.
 
+## Released in v0.4.20
+
+- Replayed onto `origin/master` as `7491701` together with the stable
+  latest installer (`c13c04b`); CI green; tag `v0.4.20` at `c13c04b`;
+  assets verified against `SHA256SUMS`; the released binaries print
+  `lazygram v0.4.20`. The release record is in
+  session/2026-11-01-installer-latest.md.
+
 ## Next
 
-- Commit on `feature/queued-todos`, then merge into `master`.
-- The stable latest installer (todo, last item): the URL
-  `https://github.com/t0d0r/lazygram/releases/latest/download/install.sh`
-  serves the asset of whichever release is marked latest; today it
-  answers 404 because no release carries `install.sh` yet, while
-  `.../releases/latest/download/SHA256SUMS` already resolves to v0.4.19.
-  The work is install.sh (POSIX sh, latest from the redirect), the
-  Makefile (`dist` and `release` carry install.sh), specs/release.md and,
-  after the first release with the asset, the README command.
+- Homebrew formula and the Arch/Omarchy recipe are still at 0.4.14.

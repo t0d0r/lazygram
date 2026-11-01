@@ -59,15 +59,37 @@ committed; nothing pushed, tagged or released.
 `go test -run . ./internal/installer/`; `make dist` lists `install.sh`
 in `dist/SHA256SUMS`; `make -n release` shows it attached.
 
-## Next
+## Released in v0.4.20
 
-Order matters, because the README command only works once a release
+The order was kept because the README command only works once a release
 carries the script:
 
-1. Commit everything except README.md; merge to master; push.
-2. Tag the next patch version at the CI-verified head; `make dist`,
-   `make release`; check the assets against `SHA256SUMS`.
-3. Check that the stable URL answers 200 and that
-   `curl -fsSL .../releases/latest/download/install.sh | LAZYGRAM_PREFIX=<scratch> sh`
-   installs the new version, which must report itself.
-4. Then commit and push README.md.
+1. `feature/queued-todos` (`736f335`) and `feature/installer-latest`
+   (`95ca4ef`, README held back) replayed onto `origin/master` at
+   `e7044f8` as `7491701` and `c13c04b`; `make check` (with `sh -n` and
+   `shellcheck`), `go test -race` on the changed packages and
+   `make smoke` green; pushed as a fast-forward; Linux and macOS CI green
+   on `c13c04b`.
+2. Tag `v0.4.20` (annotated, `a2310cf` -> `c13c04b`), pushed;
+   `make dist` and `make release` published four tarballs, `install.sh`
+   and `SHA256SUMS`. Read back: remote master and tag at `c13c04b`, not a
+   draft or prerelease, marked latest; every asset's digest equals the
+   local build, the downloaded `SHA256SUMS` matches `dist/`, `shasum -c`
+   passes for all five files, the released `install.sh` is byte-identical
+   to `v0.4.20:install.sh`, and the darwin-arm64 and linux-arm64
+   binaries print `lazygram v0.4.20`.
+3. `https://github.com/t0d0r/lazygram/releases/latest/download/install.sh`
+   redirects to `releases/download/v0.4.20/install.sh` and serves the
+   released file. `curl -fsSL <that URL> | LAZYGRAM_PREFIX=<scratch> sh`
+   installed v0.4.20 on macOS arm64, and with `sh` and with `dash` in
+   Arch Linux ARM arm64 and Arch Linux amd64; each installed binary
+   reported `lazygram v0.4.20` and each checksum matched.
+4. README.md switched to the stable command, with the trust and update
+   trade-off and the read-and-verify-first steps, in the commit that
+   records this release.
+
+## Next
+
+- Optional: enable GitHub's immutable releases on the repository so a
+  published `install.sh` cannot be replaced.
+- Homebrew formula and the Arch/Omarchy recipe are still at 0.4.14.
