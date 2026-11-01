@@ -150,7 +150,7 @@ the candidates separated by commas.
 | Ctrl-X              | send the typed text to this window's chat, as typed (a line starting with `/` is sent, not run; Enter runs commands) |
 | Ctrl-X twice        | toggle "Enter sends" for this window (Ctrl-X then adds a line, but still sends a line starting with `/` unless it has a leading space) |
 | Ctrl-C              | quit                                               |
-| mouse               | click chat names, nicks, window tags, list rows, links and `[photo]` tokens (a running light shows what is under the pointer); wheel scrolls; drag selects text and copies it on release |
+| mouse               | click chat names, nicks, window tags, list rows, links and `[photo]` tokens (a running light shows what is under the pointer); wheel scrolls; drag selects text and copies it on release; double click copies the word under the pointer, triple click the row (on clickable text the first click acts, the next ones only select); Shift-click extends the selection where the terminal passes Shift through (see [clipboard.md](clipboard.md)) |
 
 ## Updating
 

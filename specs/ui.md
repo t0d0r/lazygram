@@ -437,7 +437,8 @@ needs a modifier: Shift in most Linux terminals, Option in macOS
 Terminal and iTerm2. `/mouse` turns mouse reporting off (drag selects as
 usual, clicks do nothing) and on again; the choice is kept and applied at
 start. Clicks act on release, on what was under the pointer when the
-button went down, as of the last render: a chat name
+button went down, as of the last render, and only once in a double or
+triple click (see Selection and clipboard): a chat name
 in the server window opens or focuses that chat's window; a nick opens the
 chat whose alias or title equals it exactly (otherwise "no chat named ..."); a
 `[N:name]` tag in the window bar focuses window N; a row in `/list` or
@@ -460,13 +461,86 @@ the last row up to and including the pointer's cell), over any screen
 row including the status rows and the input line. While the button is
 down the selected cells show in reverse video. On release the text is
 put on the clipboard and the status says `copied N characters` (one
-row) or `copied N lines`, naming the channels used; a press and release
+row; `copied 1 character` for one) or `copied N lines`, naming the
+channels used; a press and release
 on the same cell is a click, so a drag that starts on a link selects
 instead of opening it, and a drag that moved copies nothing else. The
-text is the plain characters of the rendered rows: a cell inside a
-wide character takes the whole character, trailing blanks are dropped
+text is the plain characters of the rendered rows: a character is a
+grapheme cluster as the screen lays it out (a base with its combining
+marks, a whole emoji sequence), a cell inside a wide character takes
+the whole character, trailing blanks are dropped
 from each row, rows are joined with newlines. Blank selections say
 `nothing to copy`.
+
+Double and triple clicks select like a terminal's. Left-button presses
+on the same cell, each at most 400 ms (`clickGap`) after the one
+before, form one multi-click: the first press is a click (or the start
+of a drag) as above, the second selects the word under the pointer,
+the third the whole screen row under it (the row as shown, from its
+first cell to its last character; not the whole wrapped message), and
+any further quick press on that cell keeps the row. A pause longer
+than 400 ms, a press on another cell, a drag or a Shift-click ends the
+multi-click, so the next press starts a new one. The word or row shows
+in reverse video while the button is down and is copied on release
+exactly as a drag's selection is (the same channels, `/clip` modes and
+status); moving the pointer before the release does not change it. A
+double click on a blank cell says `nothing to copy`.
+
+A word is taken from what the screen shows, cell by cell: the longest
+run of non-blank characters around the pointer's cell on that row
+(blank: a space, a no-break space or any other Unicode space; a wide
+CJK character or an emoji sequence is one character in two cells, and a
+pointer on either cell takes it). Then, from the ends of the run and
+repeated until nothing changes: trailing sentence punctuation (`.` `,`
+`;` `:` `!` `?`) is dropped; a quote (`"`, `'` or a backtick) at either
+end is dropped; an opening bracket (`(` `[` `{` `<`) at the start is
+dropped together with the bracket that closes it at the end, or alone
+when the run holds more of it than of its closing bracket; a closing
+bracket at the end is dropped when the run holds more of it than of its
+opening bracket. So a link, an `@nick` or a `#chan` is one word:
+`(https://example.org/a_(b)).` gives `https://example.org/a_(b)`,
+`Go_(game)` keeps its bracket, `<ada>` gives `ada`, `@alan,` gives
+`@alan`, `12:34` stays whole. When the pointer is on a dropped
+character (the `<` of `<ada>`), or nothing is left, the word is the
+whole run. Decision: these rules make the common things in a chat line
+(links in brackets or at the end of a sentence, quoted words, nicks in
+angle brackets) copy without editing, and a word never splits at
+anything but a blank.
+
+A Shift-click extends the current selection to the clicked cell and
+copies the result. It extends from the anchor of the last drag (the
+cell where its button went down) or of the last plain click (its cell);
+after a double or triple click, from the end of the word or row farther
+from the clicked cell, so the word or row stays whole. Every Shift-click
+extends that same selection, so a second one moves the end again, to
+either side; moving the pointer with the button still down after a
+Shift press drags the end. With nothing clicked or selected yet, a
+Shift-click is a plain click. The anchor is a screen cell, not a place
+in the text: after scrolling or switching windows it is the same cell.
+Many terminals keep Shift+click and Shift-drag for their own selection
+while the mouse is reported (most Linux terminals among them), so a
+Shift-click reaches lazygram only where the terminal passes Shift
+through to the application; elsewhere the terminal's own selection
+answers it.
+
+Clickable text (links, nicks, chat names, window tags, `[photo]`
+tokens, list rows and their buttons, bot button lines, the scrolled-up
+marker) never acts twice in one multi-click: the first click acts on
+release as a single click does, the second and third presses select
+instead of acting. A double click on a link opens it once and copies
+it; a triple click opens it once and copies the row. When the first
+click replaced the row under the pointer (it opened or focused a
+window, ran a list row, jumped to the newest line), the rest of that
+multi-click does nothing: it neither selects nor clicks on the new
+screen. Likewise, when the row under a word or row selection changed
+between its press and the release (a picture fetched by the first
+click landed, a message arrived), nothing is copied and the status
+says `nothing copied: the screen changed`. Decision: acting on the first click keeps single clicks
+immediate (no wait to see whether a second press follows), selecting
+on the second press is what a terminal's double click does, and
+ignoring the rest after the screen changed keeps the clipboard from
+being overwritten with text that was not under the pointer when the
+gesture began.
 
 Two channels carry the text, and `/clip` chooses (the choice is kept):
 
@@ -486,7 +560,9 @@ Two channels carry the text, and `/clip` chooses (the choice is kept):
   headless host. The tool runs in the background with a 5 s limit; a
   failure lands in the status as an error.
 - `auto` (default): both; whichever the environment honours wins.
-- `off`: dragging selects and copies nothing; clicks still work.
+- `off`: dragging, double, triple and Shift clicks copy nothing (the
+  highlight still shows while the button is down); single clicks still
+  work, and the later presses of a double click still do not act.
 
 Shift-drag (Option on macOS) still reaches the terminal's own
 selection, as does `/mouse` off. Reason for the in-app selection: the
@@ -692,6 +768,8 @@ match the plain comparison would find.
 | Up / Down            | walk the input history (commands and sent lines; in the pager they scroll) |
 | PgUp / PgDn          | scroll a page (the wheel scrolls three lines)     |
 | mouse drag           | select text; copied to the clipboard on release (see Mouse) |
+| double / triple click | select the word / the screen row under the pointer and copy it; on clickable text the first click acts, the next ones only select (see Mouse) |
+| Shift-click          | extend the last selection to the clicked cell and copy it (only where the terminal passes Shift through) |
 | Home / End           | oldest / newest                                   |
 | Ctrl-R               | sync now                                          |
 | Ctrl-L               | redraw: drop this window's notices, help text and pictures, as `/redraw` |
