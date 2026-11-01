@@ -186,12 +186,13 @@ click a word, triple click a row.
 
 ## State and next
 
-- Branch `feature/channel-nicks` (worktree `../lazygram-channel-nicks`)
-  holds three local commits on top of origin/master: the channel work,
-  the mouse selection (from `feature/mouse-word-select`) and their merge.
-  Nothing is merged into master or pushed.
+- master holds the channel work, the mouse selection (from
+  `feature/mouse-word-select`), their merge and this note, fast-forwarded
+  from `feature/channel-nicks`; `make check`, the race tests and the
+  smoke test pass on it. It is not pushed: master is ahead of
+  origin/master.
 - Open: a mention by name for members without a username (todo);
   whether the server window should mark where the session starts is
   moot now that it shows only this session.
-- Next: merge into master and push when approved; then a patch release
-  (v0.4.21) with the Homebrew formula and the Arch recipe, if wanted.
+- Next: push master when approved; then a patch release (v0.4.21) with
+  the Homebrew formula and the Arch recipe, if wanted.
