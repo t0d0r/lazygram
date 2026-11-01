@@ -25,7 +25,7 @@ with pacman. The package puts `lazygram` in `/usr/bin`, a launcher entry in
 
 ## Launch
 
-- Terminal: `lazygram login` once (QR code, see the README), then
+- Terminal: `lazygram login` once (QR code, see docs/usage.md), then
   `lazygram`. `lazygram demo` runs with invented data and no account.
 - Omarchy launcher: Super + Space, type `lazygram`. The entry opens the
   default terminal through `xdg-terminal-exec` with the window class

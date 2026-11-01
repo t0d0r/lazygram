@@ -4,85 +4,33 @@
 [![macOS](https://github.com/t0d0r/lazygram/actions/workflows/macos.yml/badge.svg)](https://github.com/t0d0r/lazygram/actions/workflows/macos.yml)
 [![Release](https://img.shields.io/github/v/release/t0d0r/lazygram)](https://github.com/t0d0r/lazygram/releases)
 
-A local terminal client for chat services, Telegram first. It shows messages
-from all your chats as one chronological scrollback, like a single IRC
-channel (BitchX / irssi style), and lets you open the full history of any chat
-in a searchable pager. Feature goals are inspired by nchat.
-
-## Features
-
-- Telegram over MTProto (gotd): QR login like the desktop apps, no phone
-  number typed, the two-step password asked once; a registration ships in
-  the source, your own wins when set
-- IRC-style windows: window 0 is the server window with every chat
-  interleaved, one window per chat, window bar, `Act:` list, `/list`,
-  `/win`, `/move`, `/close`; layout and settings remembered across runs
-- Sending: Ctrl-X sends, a double Ctrl-X makes Enter send per window,
-  `/me`, `/msg`, `/edit` and `/delete` of your last message, input
-  history, bash-style Tab completion (commands, chats, themes, paths)
-- Read receipts stay off unless you turn them on (`/read-receipts on`, or
-  `/mark-as-read` for one chat): Telegram is told a chat was read only
-  when you focus its window with unread messages or mark it read in a
-  list
-- Search, the chat list and chat names match Cyrillic by its Latin
-  transliteration and the other way round (`ivan` finds the name
-  written in Cyrillic); pasted text keeps its line breaks; Ctrl-L
-  redraws; `/open <link>` opens a link, Tab offers the chat's recent
-  ones; one process per state directory, a second start is refused
-- Who is typing: the status line says `ada is typing` or `ada and bob are
-  recording` for the current chat (every chat in the server window), with
-  a running light; nothing is ever reported back about you
-- Bots: `/press` answers inline and reply buttons, link buttons are printed
-- Attachments: nothing downloads until you click or `/open`; files land in
-  an encrypted vault, pictures are painted inside the terminal, `/open out`
-  for the system viewer; `/send <path>` uploads photos and files
-- History: `/last`, `/search` pager over the local history, `/whois`,
-  `/stats`, `/about`, `/names` (nicks or titles)
-- Encrypted SQLite cache (AES-256-GCM per row) keyed from the session, so
-  it is unreadable without `session.json`; see specs/security.md for the
-  full list of what is and is not stored
-- Mouse: clickable names, links, window tags, list rows and `[photo]`
-  tokens with running lights under the pointer; drag to select text and
-  copy it to the clipboard (OSC 52 through the terminal, so it works over
-  SSH, plus pbcopy / wl-copy / xclip when present; see
-  [docs/clipboard.md](docs/clipboard.md)); `/mouse`, `/clip` and `/fx`
-- Looks: nine colour themes, BitchX-style banners that roll in like a slow
-  serial line, a random parting face and session statistics at exit
-- `lazygram demo` with invented data, `lazygram update` (brew or binary,
-  checked against SHA256SUMS), static binaries for Linux and macOS, an
-  Arch Linux / Omarchy package recipe
-
-## Screenshots
-
-The demo (`lazygram demo`, invented data), `nord` theme: the server window
-with every chat interleaved, bot buttons and a `[photo]` token.
+Telegram in your terminal, IRC style (BitchX / irssi): every chat in one
+scrollback, a window per chat, QR login, an encrypted local cache.
 
 ![lazygram demo: server window](docs/screenshot.svg)
 
 ## Install
 
-```sh
-brew install t0d0r/tap/lazygram
-```
+1. Installer script, Linux and macOS (amd64, arm64): installs the latest
+   release into `~/.local/bin`, checked against its `SHA256SUMS`, no sudo.
 
-Or the installer script, on Linux and macOS (amd64, arm64). It installs
-the latest release: it asks GitHub which release is latest, downloads its
-tarball over HTTPS, checks it against the release's `SHA256SUMS`, and
-puts `lazygram` in `~/.local/bin`, no root and no sudo:
+   ```sh
+   curl -fsSL https://github.com/t0d0r/lazygram/releases/latest/download/install.sh | sh
+   ```
 
-```sh
-curl -fsSL https://github.com/t0d0r/lazygram/releases/latest/download/install.sh | sh
-```
+2. Homebrew:
 
-Security warning: piping a download into `sh` runs whatever the server
-sends, before you have seen it. This URL always serves the installer of
-the newest release, so it stays current, but it also means you trust the
-repository's GitHub account and its latest release: if either were
-compromised, the script and the binary it installs would change for
-everyone at once. The checksum check catches a corrupted or truncated
-download, not a malicious release, since the checksums come from the
-same place. Prefer to read the script first (it is short), check it
-against the release, and run it from the file:
+   ```sh
+   brew install t0d0r/tap/lazygram
+   ```
+
+3. Arch Linux / Omarchy: `makepkg -si` in `packaging/omarchy/lazygram`
+   ([docs/arch-omarchy.md](docs/arch-omarchy.md)).
+4. From source: `make install` (needs Go).
+
+Piping into `sh` runs the script unseen and trusts this repository's
+latest release; the checksum catches a broken download, not a malicious
+release. To read and check it first:
 
 ```sh
 curl -fsSLO https://github.com/t0d0r/lazygram/releases/latest/download/install.sh
@@ -91,182 +39,46 @@ shasum -a 256 -c SHA256SUMS --ignore-missing   # sha256sum on Linux
 less install.sh && sh install.sh
 ```
 
-`LAZYGRAM_VERSION=vX.Y.Z` installs a given release instead of the latest
-one, `LAZYGRAM_PREFIX` another prefix (its `bin` must be in your `PATH`).
-
-Arch Linux and Omarchy: an Arch package recipe lives in
-`packaging/omarchy/lazygram` (`makepkg -si` there builds and installs it;
-once it is in pkgs.omarchy.org, `omarchy pkg add lazygram`). See
-[docs/arch-omarchy.md](docs/arch-omarchy.md) for launching from the Omarchy
-menu, troubleshooting, upgrade and uninstall.
-
-State of the package (2026-11-01): the recipe builds and passes its
-checks on x86_64 and aarch64 and the omarchy-pkgs validators accept it;
-it is not in pkgs.omarchy.org yet. The pull request to omarchy-pkgs has
-not been opened; once it is, it needs a maintainer's `build-approved`
-label before it builds and merges. The recipe builds v0.4.20, the
-latest release. Until it is published, install with `makepkg -si` as
-above.
-
-Or download a static binary for Linux or macOS from the
-[releases](https://github.com/t0d0r/lazygram/releases) (`uname -m`:
-`x86_64` is amd64, `aarch64`/`arm64` is arm64):
-
-```sh
-V=v0.3.0 A=darwin-arm64
-curl -LO https://github.com/t0d0r/lazygram/releases/download/$V/lazygram-$V-$A.tar.gz
-curl -LO https://github.com/t0d0r/lazygram/releases/download/$V/SHA256SUMS
-shasum -a 256 -c SHA256SUMS --ignore-missing   # sha256sum on Linux
-tar -xzf lazygram-$V-$A.tar.gz
-install -m 0755 lazygram-$V-$A/lazygram ~/.local/bin/
-```
-
-Or build from source: `make build` (needs Go), `make install` copies it to
-`~/.local/bin`.
-
-Update later with `lazygram update`: it upgrades through brew when
-installed that way, otherwise replaces the binary with the latest release
-after checking it against the release's SHA256SUMS. `lazygram update -check`
-only reports; `-yes` skips the question. A build from source is never
-replaced, and neither is a binary installed by a package manager (pacman):
-those update through the package manager (from v0.4.15).
+`LAZYGRAM_VERSION=vX.Y.Z` pins a release, `LAZYGRAM_PREFIX` changes the
+prefix. Later: `lazygram update` (or `brew upgrade`, or `pacman -Syu`).
 
 ## Quick start
 
 ```sh
-lazygram login    # link your Telegram account: scan a QR code with the phone app
+lazygram login    # scan the QR code: Telegram > Settings > Devices > Link Desktop Device
 lazygram          # read your chats
-lazygram demo     # or try it with invented data, no account needed
+lazygram demo     # try it with invented data, no account needed
 ```
 
-Started without a linked account, lazygram exits and says how to link one or
-how to start the demo. No environment variables are required. Everything
-lazygram keeps lives in one state directory, `~/.local/state/lazygram` (or
-`-data DIR`), which is private to you and never committed. `make run`,
-`make demo`, `make login` and `make smoke` use `.state/` inside the project.
+- Type a message and press **Ctrl-X** to send; **Enter** runs `/commands`.
+- `/help` lists the commands, `/keys` the shortcuts; `/list` picks a chat,
+  `/win N` or Alt-N switches windows, Tab completes.
+- Window 0 shows every chat; a window opens for each chat with news.
 
-### Linking an account
+## Features
 
-`lazygram login` works like nchat and the official desktop apps: it shows a
-QR code in the terminal; on the phone open Telegram, Settings -> Devices ->
-Link Desktop Device, and scan it. No phone number or SMS code is typed. If the
-account has two-step verification, the password is asked once, hidden. Use
-`-ascii` if the block characters do not render in your terminal.
+- Windows per chat, `Act:` list, Tab completion, a remembered layout
+- `/send` files; `/open` pictures inside the terminal or links in the
+  browser; bot buttons with `/press`
+- Encrypted cache and attachment vault; read receipts off unless you ask
+- Search and names in Cyrillic or its Latin transliteration
+- Typing indicators, mouse clicks and drag-to-copy, 12 colour themes
+- One process per state directory, self-update checked against
+  `SHA256SUMS`
 
-Telegram's protocol requires every client to identify with an application
-id and hash. Like nchat, lazygram ships one in its source, so a brew or
-source build logs in with nothing to configure. If you prefer your own
-(forks must: a registration shared by many clients can be throttled or
-banned by Telegram), get it from https://my.telegram.org under "API
-development tools" and give it to lazygram in one of three ways; each wins
-over the built-in one:
+## More
 
-- `TG_API_ID` and `TG_API_HASH` in the environment, for example from a
-  direnv `.envrc` in the project directory (git-ignored). `lazygram login`
-  takes them from there, stores them in the state directory and never asks.
-  nchat's names `TG_APIID` / `TG_APIHASH` are accepted too.
-- Type them at the first `lazygram login`; they are stored the same way.
-- Bake them into the binary like nchat: `make embed` writes the git-ignored
-  `cmd/lazygram/app_local.go` from `TG_API_ID`/`TG_API_HASH` in the
-  environment (direnv), and every `make build` after that carries them. No
-  environment at run time, no prompt.
-
-A stored registration wins over the environment, which wins over a private
-embed, which wins over the one shipped in the source; delete `<state>/telegram/app.json` to switch. Never commit these values:
-`.envrc`, `*_local.go` and `.state/` are git-ignored for that reason.
-
-## Using it
-
-It works like BitchX/irssi, down to the banner at start and the parting
-one at exit (one of several faces, at random), both rolling in line by
-line like a terminal on a slow serial line.
-Window 0 is the server window: every chat
-interleaved by time as `HH:MM #chat <sender> text`, plus `-!-` notices. A
-window bar above the input lists every window as `[N:name]`. Open windows,
-the current one and each window's Enter-sends setting are remembered
-across restarts. On exit lazygram prints the session statistics (time
-wasted, messages, windows, commands) and, for a release build, a hint when
-a newer release exists; `/about` shows version, author and build.
-When a chat gets a message (or has unread messages at start) a window opens
-for it; the status line shows `[Act: 2,3]` for windows with unread. People
-are `@name`, groups and channels are `#name`. lazygram shows what arrives
-while it runs; opening a chat's window fetches its last 10 messages, and
-`/last N` fetches more.
-
-| command                    | action                                        |
-|----------------------------|-----------------------------------------------|
-| `/list [text]`             | selectable chat list; Enter opens the window; Left/Right pick `[read]` or `[unread]` for the row, Enter applies it; `--show-deleted` includes deleted accounts |
-| `/win N`                   | switch to window N (0 is the server window)   |
-| `/move N`                  | move this window to position N                |
-| `/win @user`, `/win #chan` | open or switch to that chat's window          |
-| `/win`, `/win list`        | selectable list of the open windows; Left/Right pick `[read]`, `[unread]` or `[close]` for the row, Enter applies it |
-| `/close [N]`               | close a window                                |
-| `/last [N]`                | fetch the last N messages of this chat        |
-| `/search [text]`           | page through this chat's local history        |
-| `/whois [name]`            | what is known about a chat                    |
-| `/stats`                   | client statistics                             |
-| `/me <text>`               | send an action line (`* you waves`)           |
-| `/msg <@user|#chan> <text>` | send to a chat, opening its window if needed |
-| `/send <path> [caption]`   | send a local file (Tab completes the path); pictures go as photos |
-| `/edit [text]`, `/delete`  | change or remove your last message in this chat |
-| `/names`                   | show chats by nick (`@alias`) or by name (`@Title`) |
-| `/press N`                 | press button N under the latest bot message; `/press <msg> N` for an older one |
-| `/open [msg]`              | fetch a `[photo]`/`[file]` into the encrypted vault; pictures are shown in the window (`/open out` for the system viewer); `/open <link>` opens an http(s) link in the browser, Tab offers the chat's ten most recent links |
-| `/theme [name]`            | colour themes: default, solarized, gruvbox, dracula, nord, monokai, tokyonight, vim, emacs; for light terminals: light, solarized-light, gruvbox-light |
-| `/about`                   | version, author, build and libraries          |
-| `/fx`                      | running lights over links and buttons on/off  |
-| `/mouse`                   | mouse reporting on/off (off: the terminal's own drag selects; or hold Shift/Option while dragging) |
-| `/clip [mode]`             | where a mouse selection is copied: `auto` (terminal and system tool), `osc52`, `tool`, `off`; no argument shows the mode (see [docs/clipboard.md](docs/clipboard.md)) |
-| `/read-receipts [on\|off]` | read receipts: off by default (kept); on tells Telegram a chat was read when you focus its window with unread messages; no argument shows the setting |
-| `/mark-as-read`            | one read receipt for this window's chat, now, whatever `/read-receipts` says |
-| `/redraw`, `/clear`        | drop notices, help text and pictures from this window; messages stay |
-| `/refresh`, `/help`, `/quit` | sync now; print the command list, with every short form, into the server window (it ends by naming `/keys`); leave |
-| `/keys`                    | print the keyboard shortcuts into the server window |
-
-In a chat window, type text and press **Ctrl-X** to send it to that chat,
-as typed: a line that starts with `/` goes out as a message too, Ctrl-X
-never runs commands. Enter is for commands (press Ctrl-X twice quickly to
-make Enter send in that window, and again to switch back; a fast double
-Ctrl-X never sends, it only switches; the status line ends with
-`ctrl-x: to send` or `enter: to send`). The sent line shows up as `<me>`
-once the service has it. Bot messages with buttons show them underneath as
-`[1] Yes  [2] Docs (link)  (msg 1234)`; `/press 1` answers the bot and the
-edited message replaces the old line, link buttons only print their URL,
-reply-keyboard buttons send their label. Photos show as `[photo]`: click
-the token or `/open` and the picture is painted inside the window from
-memory (nothing is written to disk); `/open out` opens it in the system
-viewer instead.
-
-| key                 | action                                             |
-|---------------------|----------------------------------------------------|
-| Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash: commands, chats, themes, `/open out`, attachment message ids and the chat's ten most recent links, `/win list`, paths after `/send` |
-| Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
-| Alt-0 .. Alt-9      | window 0 .. 9 (Esc then the digit works too)       |
-| Up / Down           | input history (commands and sent lines; a recalled line is input again: Ctrl-X sends it, Enter runs it when it starts with `/`) |
-| Left / Right        | move the cursor in the input (in `/list` or `/win`: pick the row's action button); Ctrl-A / Ctrl-E start / end; Delete removes under the cursor (as Backspace at the end), Ctrl-W the word before it, Ctrl-K to the end |
-| PgUp / PgDn         | scroll a page; Home / End oldest / newest          |
-| Ctrl-R              | sync now                                           |
-| Ctrl-L              | redraw this window (`/redraw`): notices and pictures go, messages stay |
-| F1                  | print the command list into the server window (`/keys` for this table) |
-| Esc                 | close the list or pager, else clear the input      |
-| Ctrl-X              | send the typed text to this window's chat, as typed (a line starting with `/` is sent, not run; Enter runs commands) |
-| Ctrl-X twice        | toggle "Enter sends" for this window (Ctrl-X then adds a line, but still sends a line starting with `/` unless it has a leading space) |
-| Ctrl-C              | quit                                               |
-| mouse               | click chat names, nicks, window tags, list rows, links and `[photo]` tokens (a running light shows what is under the pointer); wheel scrolls; drag selects text and copies it on release |
+- [docs/usage.md](docs/usage.md): every command and key, account linking,
+  your own Telegram API id, updating
+- [docs/arch-omarchy.md](docs/arch-omarchy.md),
+  [docs/clipboard.md](docs/clipboard.md), [specs/](specs/README.md)
 
 ## Development
 
 ```sh
-make check    # gofmt + go vet + golangci-lint + tests
-make smoke    # non-interactive: demo sync once, print one screen, exit
-make dist     # release tarballs + SHA256SUMS into dist/ (never with your registration)
-make help     # all targets
+make check    # gofmt, vet, golangci-lint, shellcheck, tests
+make smoke    # print one demo screen and exit
+make help     # every target
 ```
 
-Releases: tag `vX.Y.Z`, `make dist`, `make release` (uses `gh`), then bump
-the formula in [t0d0r/homebrew-tap](https://github.com/t0d0r/homebrew-tap).
-See specs/release.md.
-
-## License
-
-BSD 2-Clause (the FreeBSD license). See `LICENSE`.
+Releases: specs/release.md. License: BSD 2-Clause, see `LICENSE`.
