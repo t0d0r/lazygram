@@ -2,11 +2,11 @@
 #
 # Recipe for pkgs.omarchy.org (omacom/omarchy-pkgs, pkgbuilds/lazygram/); it
 # is a plain Arch PKGBUILD and builds with makepkg anywhere. The desktop entry
-# and icon are shipped next to the recipe until a release tarball carries
-# packaging/ itself.
+# and icon come from the release tarball (packaging/omarchy/lazygram/), so the
+# recipe needs no files beside it.
 
 pkgname=lazygram
-pkgver=0.4.14
+pkgver=0.4.20
 pkgrel=1
 pkgdesc='Terminal Telegram client with IRC-style windows, inspired by BitchX and irssi'
 arch=('x86_64' 'aarch64')
@@ -15,17 +15,14 @@ license=('BSD-2-Clause')
 depends=('glibc' 'hicolor-icon-theme')
 makedepends=('go')
 optdepends=('xdg-utils: open attachments and links with the system viewer'
-            'xdg-terminal-exec: start lazygram from the application launcher')
+            'xdg-terminal-exec: start lazygram from the application launcher'
+            'wl-clipboard: copy mouse selections on Wayland when the terminal lacks OSC 52')
 # !debug: built with -trimpath, the binary carries no $srcdir paths, so the
 # debug split makepkg would make is useless. !lto: the Go compiler has no
 # LTO; -flto=auto would only reach gcc for the final link, to no effect.
 options=('!debug' '!lto')
-source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
-        'lazygram.desktop'
-        'lazygram.svg')
-sha256sums=('12893d5522ea331ad19836f783e7215f028e13af6f63731b3d3e193f7c370869'
-            '58a7feee13de630a66e2781ac8ee171b8b4a92a3e00715bf286c535909e38593'
-            '032538bec3a2b621c0d43e995b8abbfc6b8450a893e89c4e83a36f3c5646cbda')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz")
+sha256sums=('2f62966b90127440a7dc55fde0b1c45d283ecabebdee43bb44ce3acdd8e16897')
 
 # GOTOOLCHAIN=local: build with the Go that Arch ships; a go.mod ahead of it
 # fails here instead of downloading a toolchain from go.dev.
@@ -60,6 +57,6 @@ package() {
   install -Dm755 lazygram "$pkgdir/usr/bin/lazygram"
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
   install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
-  install -Dm644 "$srcdir/lazygram.desktop" "$pkgdir/usr/share/applications/lazygram.desktop"
-  install -Dm644 "$srcdir/lazygram.svg" "$pkgdir/usr/share/icons/hicolor/scalable/apps/lazygram.svg"
+  install -Dm644 packaging/omarchy/lazygram/lazygram.desktop "$pkgdir/usr/share/applications/lazygram.desktop"
+  install -Dm644 packaging/omarchy/lazygram/lazygram.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/lazygram.svg"
 }

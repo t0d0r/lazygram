@@ -51,7 +51,9 @@ with pacman. The package puts `lazygram` in `/usr/bin`, a launcher entry in
 - Runtime: `glibc` and `hicolor-icon-theme` (the icon's directory). The
   binary is pure Go, built position-independent against the system libc.
   Optional: `xdg-utils` (`xdg-open` for `/open out` and clicked links),
-  `xdg-terminal-exec` (the launcher entry).
+  `xdg-terminal-exec` (the launcher entry), `wl-clipboard` (`wl-copy`,
+  the clipboard for mouse selections on Wayland when the terminal does
+  not take OSC 52).
 - Build: `go` (go.mod names 1.27.3; the package in `extra` matches on
   both architectures; the recipe builds with that Go only, it never
   downloads a toolchain).
@@ -93,13 +95,11 @@ New releases reach pkgs.omarchy.org on their own: the recipe's upstream
 watch follows the GitHub releases of this repository, one day after each
 release is published.
 
-`lazygram update` on a packaged install: from v0.4.15 it refuses with an
-error that names pacman, `lazygram update -check` still reports whether a
-newer release exists, and the exit banner points at the package manager.
-The 0.4.14 package still offers the command: it downloads the release and
-then stops with `cannot write /usr/bin (rerun with sudo, or install the
-release by hand)`. Do not rerun it with sudo; that would replace the file
-pacman owns. Use `sudo pacman -Syu`.
+`lazygram update` on a packaged install refuses with an error that names
+pacman (every package from 0.4.15 on; the recipe builds 0.4.20),
+`lazygram update -check` still reports whether a newer release exists,
+and the exit banner points at the package manager. Never run
+`sudo lazygram update`; use `sudo pacman -Syu`.
 
 ## Uninstall
 
@@ -123,6 +123,5 @@ The package carries no Telegram registration beyond the public one in the
 source and no account data; the build uses `-tags release` like the
 upstream tarballs. Everything private lives in `~/.local/state/lazygram`,
 which pacman never reads or removes. Keep updates to the package manager:
-a file replaced under `/usr/bin` by hand (or by `sudo lazygram update` on
-the 0.4.14 package) is overwritten by the next upgrade and fails
-`pacman -Qkk` until then.
+a file replaced under `/usr/bin` by hand is overwritten by the next
+upgrade and fails `pacman -Qkk` until then.

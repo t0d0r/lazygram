@@ -1,4 +1,4 @@
-Add lazygram 0.4.14: terminal Telegram client (TUI)
+Add lazygram 0.4.20: terminal Telegram client (TUI)
 
 ## What it is
 
@@ -17,23 +17,23 @@ terminal. Pure Go, BSD-2-Clause. Upstream: https://github.com/t0d0r/lazygram
   Telegram registration can be compiled in), `go test ./...` in
   `check()`. Runtime dependencies: glibc, hicolor-icon-theme (for the
   icon). Optional: xdg-utils (system viewer for attachments and links),
-  xdg-terminal-exec (the launcher entry).
+  xdg-terminal-exec (the launcher entry), wl-clipboard (the clipboard
+  for mouse selections on Wayland when the terminal lacks OSC 52).
 - `arch=('x86_64' 'aarch64')`.
 - `.omarchy/package.json`: a GitHub release watch on `t0d0r/lazygram`
   (`v(?P<version>[0-9]+(?:\.[0-9]+)*)`), `min_release_age` 24h (time to
   pull a bad release), and `release_ring: fast`: a Go binary that links
   libc only, like omarchy-speedtest and cliamp. Drop the fast ring if you
   would rather let it ride the normal promotions.
-- `lazygram.desktop` and `lazygram.svg`, installed by the recipe: a
+- The release tarball's `packaging/omarchy/lazygram/lazygram.desktop` and
+  `lazygram.svg`, installed by the recipe (nothing else sits beside it): a
   launcher entry in the form of Omarchy's own TUI entries
   (`Exec=xdg-terminal-exec --app-id=org.omarchy.lazygram -e sh -c "..."`,
   `Terminal=false`, `TryExec=xdg-terminal-exec`) with the window class
   `omarchy-launch-tui` would assign, so `omarchy-launch-or-focus-tui
   lazygram` finds it; the small wrapper keeps the window open on a
   non-zero exit (the "not linked yet" hint before `lazygram login`) and
-  closes it on a normal quit. Plus a scalable icon. Both move into the
-  upstream tarball with the next release; until then they sit next to
-  the recipe as local sources with checksums.
+  closes it on a normal quit. Plus a scalable icon.
 
 ## How I tested it
 
@@ -51,7 +51,7 @@ terminal. Pure Go, BSD-2-Clause. Upstream: https://github.com/t0d0r/lazygram
   `validate_package_metadata` passes, `tests/pinned-sources.sh` and
   `tests/package-metadata.sh` pass, `bin/build --package lazygram
   --dry-run` plans the build.
-- The watch pattern matches `v0.4.14` whole and ignores the stray tag
+- The watch pattern matches `v0.4.20` whole and ignores the stray tag
   `v0.4.11-1-gd0bdc3f` in the upstream repository (a release mishap, to
   be deleted).
 - Not tested by me on Omarchy itself: the launcher entry inside Hyprland
@@ -60,8 +60,5 @@ terminal. Pure Go, BSD-2-Clause. Upstream: https://github.com/t0d0r/lazygram
 ## Notes
 
 - No AUR or official Arch package of that name exists.
-- Self-update: from 0.4.15 `lazygram update` refuses to touch a
-  pacman-owned binary and points at pacman instead. On 0.4.14 the
-  command stops with "cannot write /usr/bin (rerun with sudo, or install
-  the release by hand)"; the upstream documentation tells users not to do
-  that and to use pacman.
+- Self-update: `lazygram update` refuses to touch a pacman-owned binary
+  and points at pacman instead (since upstream 0.4.15).

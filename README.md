@@ -104,10 +104,9 @@ State of the package (2026-11-01): the recipe builds and passes its
 checks on x86_64 and aarch64 and the omarchy-pkgs validators accept it;
 it is not in pkgs.omarchy.org yet. The pull request to omarchy-pkgs has
 not been opened; once it is, it needs a maintainer's `build-approved`
-label before it builds and merges. The recipe still names 0.4.14 while
-the latest release is v0.4.16, so it is pointed at that release first
-(packaging/omarchy/README.md, step 0). Until then install with
-`makepkg -si` as above.
+label before it builds and merges. The recipe builds v0.4.20, the
+latest release. Until it is published, install with `makepkg -si` as
+above.
 
 Or download a static binary for Linux or macOS from the
 [releases](https://github.com/t0d0r/lazygram/releases) (`uname -m`:
@@ -130,8 +129,7 @@ installed that way, otherwise replaces the binary with the latest release
 after checking it against the release's SHA256SUMS. `lazygram update -check`
 only reports; `-yes` skips the question. A build from source is never
 replaced, and neither is a binary installed by a package manager (pacman):
-those update through the package manager (from v0.4.15; on 0.4.14 the
-command stops with a permission error, do not rerun it with sudo).
+those update through the package manager (from v0.4.15).
 
 ## Quick start
 

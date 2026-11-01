@@ -143,8 +143,9 @@ the maintainer side (build and test evidence, submission steps).
   carries no `$srcdir` paths, so makepkg's debug split would be useless,
   and the Go compiler has no LTO (`-flto` would only reach gcc for the
   final link). Runtime dependencies `glibc` and `hicolor-icon-theme` (the
-  icon's theme directory; namcap requires it); `xdg-utils` and
-  `xdg-terminal-exec` are optional.
+  icon's theme directory; namcap requires it); `xdg-utils`,
+  `xdg-terminal-exec` and `wl-clipboard` (the clipboard fallback for
+  mouse selections on Wayland) are optional.
 - Installed: `/usr/bin/lazygram`, the license, the README, a launcher
   entry and an SVG icon. The entry runs `xdg-terminal-exec
   --app-id=org.omarchy.lazygram -e sh -c "lazygram || { ...; read -r _; }"`
@@ -157,9 +158,10 @@ the maintainer side (build and test evidence, submission steps).
   against a shared class such as `TUI.tile`: focus-or-launch and dock
   attribution need a class of its own. `TryExec=xdg-terminal-exec` lets
   launchers that honour it hide the entry where the helper is missing;
-  others show it and the launch fails. The entry and icon sit next to the
-  recipe (local sources with checksums) until a release tarball carries
-  `packaging/`; then the recipe installs them from the tarball instead.
+  others show it and the launch fails. The recipe installs the entry and
+  icon from the release tarball (`packaging/omarchy/lazygram/`), so the
+  package directory in omarchy-pkgs holds only `PKGBUILD` and
+  `.omarchy/`; the files here are their upstream source.
 - Omarchy metadata (`.omarchy/package.json`): `source` local; a GitHub
   release watch on `t0d0r/lazygram` with the pattern
   `v(?P<version>[0-9]+(?:\.[0-9]+)*)` (whole tags only, so the stray
@@ -180,13 +182,7 @@ the maintainer side (build and test evidence, submission steps).
   manager, `-check` still reports, and the exit banner's hint points at
   the package manager. Decision: a file pacman owns is never replaced by
   lazygram, so `pacman -Qkk` stays clean and the next upgrade cannot
-  silently undo an update. The 0.4.14 package predates this: its
-  `lazygram update` stops with `cannot write /usr/bin (rerun with sudo,
-  ...)`, and with sudo it would replace the file; the user documentation
-  says not to.
+  silently undo an update. The recipe builds v0.4.20, which refuses.
 - A new release needs: the tag, `make release`, then the watch does the
-  rest; a packaging change at the same version bumps `pkgrel`. The first
-  submission should carry the latest release (v0.4.16 at the time of
-  writing; v0.4.15 and later carry the refusal and `packaging/` in the
-  tarball, so the entry and icon are installed from it); until then the
-  recipe names 0.4.14 and the documentation states the boundary.
+  rest; a packaging change at the same version bumps `pkgrel`. The recipe
+  builds v0.4.20 for the first submission.

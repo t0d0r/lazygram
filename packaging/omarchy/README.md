@@ -3,8 +3,9 @@
 `lazygram/` is the package directory for omacom/omarchy-pkgs
 (`pkgbuilds/lazygram/` there) and a plain Arch recipe: `PKGBUILD`,
 `.omarchy/package.json` (required by that repository: every recipe has
-one), `lazygram.desktop` and `lazygram.svg`. `PR.md` is the pull request
-text. The user side is in docs/arch-omarchy.md, the decisions in
+one), plus `lazygram.desktop` and `lazygram.svg`, which the release
+tarball carries and the recipe installs from it (only `PKGBUILD` and
+`.omarchy/` go to omarchy-pkgs). `PR.md` is the pull request text. The user side is in docs/arch-omarchy.md, the decisions in
 specs/release.md.
 
 ## Audit: what packaging needed and what was missing
@@ -20,15 +21,15 @@ programs (omarchy-speedtest, cliamp).
 | toolchain | go.mod says 1.27.3; Arch `extra` and Arch Linux ARM both ship go 2:1.27.3-1 |
 | build | pure Go, no cgo of its own; builds PIE with external linking per the guidelines; `-tags release` as the upstream release tarballs |
 | tests | hermetic; `go test ./...` passes inside makepkg on both architectures |
-| runtime | `glibc` only; `xdg-utils` and `xdg-terminal-exec` optional; pictures use half-block characters, no terminal graphics protocol |
-| version | `-X main.version=0.4.14`; `lazygram -version` prints it; `update.Parse` accepts it |
+| runtime | `glibc` and `hicolor-icon-theme`; `xdg-utils`, `xdg-terminal-exec` and `wl-clipboard` optional; pictures use half-block characters, no terminal graphics protocol |
+| version | `-X main.version=0.4.20`; `lazygram -version` prints it; `update.Parse` accepts it |
 | state | `~/.local/state/lazygram`, created by lazygram, owner-only; nothing in `/etc` |
 | license | BSD-2-Clause, installed to `/usr/share/licenses/lazygram/` |
 | Omarchy metadata | required (`.omarchy/package.json`); GitHub release watch so releases are proposed by the repository bot |
-| gap, fixed in code | `lazygram update` would try to replace `/usr/bin/lazygram`; now `update.Detect` reports `Package` for a binary under `/usr` outside `/usr/local`, the update refuses with an error before asking anything, and the exit hint names the package manager. Shipped in v0.4.15 (released 2026-10-31); the 0.4.14 package stops with "cannot write /usr/bin (rerun with sudo, ...)" and with sudo would replace the file; the user documentation says not to |
+| gap, fixed in code | `lazygram update` would try to replace `/usr/bin/lazygram`; now `update.Detect` reports `Package` for a binary under `/usr` outside `/usr/local`, the update refuses with an error before asking anything, and the exit hint names the package manager. Shipped in v0.4.15; the recipe packages v0.4.20, so the packaged binary refuses |
 | gap, fixed | no launcher entry or icon; added in the form of Omarchy's own TUI entries (`xdg-terminal-exec --app-id=org.omarchy.lazygram -e sh -c "lazygram \|\| { ...; read -r _; }"`, `Terminal=false`, `TryExec=xdg-terminal-exec`): the class `omarchy-launch-tui` would assign, and the window stays open on the not-linked hint instead of flashing shut |
-| gap, open | the entry and icon live next to the recipe until a release tarball carries `packaging/`; then install them from the tarball and bump `pkgrel` |
-| gap, open | the recipe names 0.4.14; upstream is at v0.4.16, which refuses to self-update and carries `packaging/`: point the recipe at it before submitting (Submit, step 0) |
+| gap, fixed | the entry and icon came from beside the recipe; since v0.4.20 the recipe installs them from the release tarball, so omarchy-pkgs gets only `PKGBUILD` and `.omarchy/` |
+| gap, fixed | the recipe named 0.4.14; it builds v0.4.20, which refuses to self-update and offers `wl-clipboard` as the Wayland clipboard fallback |
 | gap, open | no man page, no shell completions (optional) |
 | gap, open | the stray upstream tag `v0.4.11-1-gd0bdc3f` (ignored by the watch pattern, which matches whole tags) should be deleted |
 
@@ -57,22 +58,25 @@ docker run --rm --platform linux/amd64 \
 # Arch Linux ARM aarch64: the same with --platform linux/arm64 menci/archlinuxarm:base-devel
 ```
 
-Evidence from the runs of 2026-10-31 with the final recipe (logs kept
-outside the tree):
+Evidence from the runs of 2026-11-01 with the v0.4.20 recipe, built from a
+directory that held only `PKGBUILD` and `.omarchy/package.json`, exactly
+what omarchy-pkgs gets (logs kept outside the tree):
 
 | check | aarch64 (Arch Linux ARM, native) | x86_64 (archlinux:base-devel, emulated) |
 |-------|----------------------------------|------------------------------------------|
-| `makepkg -sf` incl. `check()` | 108 s, every Go test green | 203 s, every Go test green |
-| package | `lazygram-0.4.14-1-aarch64.pkg.tar.xz`, 5.2 MiB, 20.8 MiB installed | `lazygram-0.4.14-1-x86_64.pkg.tar.zst`, 7.9 MiB, 22.0 MiB installed |
+| `makepkg -sf` incl. `check()` | 117 s, every Go test green, the installer tests included | 311 s, every Go test green |
+| package | `lazygram-0.4.20-1-aarch64.pkg.tar.xz`, 5.2 MiB, 20.9 MiB installed | `lazygram-0.4.20-1-x86_64.pkg.tar.zst`, 8.0 MiB, 22.1 MiB installed |
+| `.PKGINFO` | depends glibc, hicolor-icon-theme; optdepends xdg-utils, xdg-terminal-exec, wl-clipboard | same |
 | `namcap PKGBUILD` | clean | clean |
-| `namcap <package>` | two contradictory glibc warnings (that image's namcap cannot resolve the libc provider; glibc is the right dependency) | clean (an earlier run's `hicolor-icon-theme` error is what added that dependency) |
+| `namcap <package>` | two contradictory glibc warnings (that image's namcap cannot resolve the libc provider; glibc is the right dependency) | clean |
 | `pacman -U`, `pacman -Qkk` | 17 files, 0 altered | 17 files, 0 altered |
 | binary | ELF pie, `NOW PIE`, needs `libc.so.6` only | same |
-| `lazygram -version` | `lazygram 0.4.14` | same |
-| `desktop-file-validate` | valid | valid |
+| `lazygram -version` | `lazygram 0.4.20` | same |
+| `desktop-file-validate` on the entry from the tarball | valid | valid |
 | the entry's command line, run as the terminal would | prints the not-linked hint, then "Press Enter to close" and waits | same |
 | `lazygram -smoke demo` (offline) | prints the demo screen | same |
 | start without an account | exit status 2 with the login hint | same |
+| `lazygram update -check` / `-yes` | "up to date" (0.4.20 is the latest release, so the packaged-install refusal is not reached; `TestUpdateRefusesAPackagedInstall` covers it) | same |
 
 A first aarch64 run beside the emulated x86_64 build was killed by the
 8 GiB Docker VM while compiling `github.com/gotd/td/tg`; build one at a
@@ -92,7 +96,8 @@ tests/package-metadata.sh
 bin/build --package lazygram --dry-run  # the plan; without --dry-run the full build in its builder image
 ```
 
-Run on 2026-10-31 in an Arch Linux ARM container against omarchy-pkgs
+Last run on 2026-10-31, for the 0.4.14 recipe (the metadata has not
+changed since), in an Arch Linux ARM container against omarchy-pkgs
 master `dd63dc3` (before `min_release_age` was added to the metadata; the
 validator accepts a number with an `s`/`m`/`h`/`d` suffix): `validate`
 exit 0; `check` printed `{"status": "skipped", "current": "0.4.14",
@@ -103,7 +108,7 @@ exit 0; `check` printed `{"status": "skipped", "current": "0.4.14",
 version; none holds the package yet).
 
 The watch pattern itself was checked here too: `v(?P<version>[0-9]+(?:\.[0-9]+)*)`
-matches `v0.4.14` whole and does not match `v0.4.11-1-gd0bdc3f`.
+matches `v0.4.20` whole and does not match `v0.4.11-1-gd0bdc3f`.
 
 ## Manual validation still to do on an Omarchy machine
 
@@ -124,15 +129,8 @@ matches `v0.4.14` whole and does not match `v0.4.11-1-gd0bdc3f`.
 
 ## Submit it to omarchy-pkgs
 
-0. Point the recipe at the latest release first. v0.4.16 (released
-   2026-10-31) carries the self-update refusal and `packaging/` in its
-   tarball: set `pkgver=0.4.16`, install `lazygram.desktop` and
-   `lazygram.svg` from `packaging/omarchy/lazygram/` inside the tarball
-   instead of the two local sources, add `wl-clipboard` to `optdepends`
-   (the clipboard fallback for mouse selections on Wayland), run
-   `updpkgsums`, rebuild in the containers, and retitle PR.md. Submitting
-   0.4.14 as it is also works; PR.md says what 0.4.14 does and the docs
-   state the boundary.
+0. Done: the recipe builds v0.4.20, installs the entry and icon from the
+   tarball and lists `wl-clipboard`; PR.md names 0.4.20.
 1. Keep this repository's `packaging/omarchy/lazygram/` as the source of
    truth; the PR copies it.
 2. Fork and branch:
@@ -141,7 +139,8 @@ matches `v0.4.14` whole and does not match `v0.4.11-1-gd0bdc3f`.
    gh repo fork omacom/omarchy-pkgs --clone omarchy-pkgs && cd omarchy-pkgs
    git checkout -b lazygram
    mkdir -p pkgbuilds/lazygram
-   cp -r /path/to/lazygram/packaging/omarchy/lazygram/. pkgbuilds/lazygram/
+   cp /path/to/lazygram/packaging/omarchy/lazygram/PKGBUILD pkgbuilds/lazygram/
+   cp -r /path/to/lazygram/packaging/omarchy/lazygram/.omarchy pkgbuilds/lazygram/
    ```
 
 3. Check it with their tooling (previous section), or at least
@@ -151,9 +150,9 @@ matches `v0.4.14` whole and does not match `v0.4.11-1-gd0bdc3f`.
 
    ```sh
    git add pkgbuilds/lazygram
-   git commit -m "Add lazygram 0.4.14"
+   git commit -m "Add lazygram 0.4.20"
    git push -u origin lazygram
-   gh pr create -R omacom/omarchy-pkgs --title "Add lazygram 0.4.14: terminal Telegram client (TUI)" \
+   gh pr create -R omacom/omarchy-pkgs --title "Add lazygram 0.4.20: terminal Telegram client (TUI)" \
      --body-file /path/to/lazygram/packaging/omarchy/PR.md
    ```
 
