@@ -53,6 +53,7 @@ const (
 	spanRow                     // list row; target is its index
 	spanEnd                     // jump to the newest line
 	spanButtons                 // a message's button line; target is the message key
+	spanAct                     // a list row's action button; target is "row:action"
 )
 
 // span is a clickable range of columns on one rendered line.

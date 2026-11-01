@@ -108,6 +108,25 @@ titles and notices are stripped of control characters before rendering.
   filter as a draft). Deleted accounts are hidden unless asked for. Tab completes the typed filter like anywhere else and never moves
   the cursor. `/win` (or `/win list`) shows the same kind of list for the
   open windows (number, name, title, unread, `(current)`); Enter focuses.
+  The selected row ends in a strip of action buttons: `[open] [read]
+  [unread]` in `/list`, `[focus] [read] [unread] [close]` in `/win`.
+  Left/Right move the choice (clamped at the ends), Enter runs it, a
+  click runs the clicked button, and a click on the row itself runs the
+  default. The first button is the default, so with nothing chosen Enter
+  opens or focuses as before; a new list starts there. Read sets the
+  window's unread count to 0 (and, in `/list`, the chat's count in the
+  row); unread sets it to at least 1, opening a window for a chat that
+  has none without switching to it, so it shows in `Act`; close closes
+  that window (window 0 refuses as `/close` does). Read, unread and
+  close keep the list open on the same row with the same button, so
+  Down, Enter repeats them down the list; the filter stays and the
+  action applies to the filtered selection. The counts are local:
+  nothing is reported to the service (no read receipts), and the next
+  chats refresh (`/refresh`, a restart) brings the service's own count
+  back into the `/list` row. In a list Left/Right no longer move the
+  filter cursor; Backspace, Ctrl-U and typing still edit the filter.
+  Decision: buttons on the row rather than letter keys, because letters
+  type into the filter, and Left/Right are otherwise idle in a list.
   Scrolling: the cursor moves down the screen until it reaches the middle,
   then stays there while the list scrolls under it, and moves on to the
   bottom only when the list ends; the same on the way up.
@@ -259,7 +278,8 @@ button went down, as of the last render: a chat name
 in the server window opens or focuses that chat's window; a nick opens the
 chat whose alias or title equals it exactly (otherwise "no chat named ..."); a
 `[N:name]` tag in the window bar focuses window N; a row in `/list` or
-`/win` opens it; an `http(s)` link in a message or notice is handed to the
+`/win` opens it and one of the action buttons at the selected row's
+right runs that action (see Modes); an `http(s)` link in a message or notice is handed to the
 system opener (`open`, `xdg-open`, `rundll32`), which starts the default
 browser (links always go to the browser; only fetched attachments go to
 the image viewer). The wheel scrolls the window three
@@ -420,7 +440,7 @@ windows or the cache.
 | Esc                  | close the list or pager, else clear the input     |
 | Ctrl-X               | send the typed text to this window's chat, as typed: a line starting with `/` is sent, not run (Enter runs commands); with "Enter sends" on it still sends such a line |
 | Ctrl-U / Ctrl-W      | clear the input / delete the word before the cursor (and the spaces after it) |
-| Left / Right         | move the cursor one rune; never past the ends      |
+| Left / Right         | move the cursor one rune; never past the ends; in `/list` or `/win`: pick the row's action button (open or focus, read, unread, close), Enter runs it |
 | Ctrl-A / Ctrl-E      | cursor to the start / end of the input            |
 | Delete / Ctrl-K      | delete the rune under the cursor (at the end of the line Delete acts as Backspace, since some terminals send it for that key) / to the end |
 | Ctrl-C               | quit                                              |

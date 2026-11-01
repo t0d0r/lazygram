@@ -181,11 +181,11 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 
 | command                    | action                                        |
 |----------------------------|-----------------------------------------------|
-| `/list [text]`             | selectable chat list; Enter opens the window; `--show-deleted` includes deleted accounts |
+| `/list [text]`             | selectable chat list; Enter opens the window; Left/Right pick `[read]` or `[unread]` for the row, Enter applies it; `--show-deleted` includes deleted accounts |
 | `/win N`                   | switch to window N (0 is the server window)   |
 | `/move N`                  | move this window to position N                |
 | `/win @user`, `/win #chan` | open or switch to that chat's window          |
-| `/win`, `/win list`        | selectable list of the open windows           |
+| `/win`, `/win list`        | selectable list of the open windows; Left/Right pick `[read]`, `[unread]` or `[close]` for the row, Enter applies it |
 | `/close [N]`               | close a window                                |
 | `/last [N]`                | fetch the last N messages of this chat        |
 | `/search [text]`           | page through this chat's local history        |
@@ -227,7 +227,7 @@ viewer instead.
 | Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
 | Alt-0 .. Alt-9      | window 0 .. 9 (Esc then the digit works too)       |
 | Up / Down           | input history (commands and sent lines; a recalled line is input again: Ctrl-X sends it, Enter runs it when it starts with `/`) |
-| Left / Right        | move the cursor in the input; Ctrl-A / Ctrl-E start / end; Delete removes under the cursor (as Backspace at the end), Ctrl-W the word before it, Ctrl-K to the end |
+| Left / Right        | move the cursor in the input (in `/list` or `/win`: pick the row's action button); Ctrl-A / Ctrl-E start / end; Delete removes under the cursor (as Backspace at the end), Ctrl-W the word before it, Ctrl-K to the end |
 | PgUp / PgDn         | scroll a page; Home / End oldest / newest          |
 | Ctrl-R              | sync now                                           |
 | F1                  | print the command list into the server window (`/keys` for this table) |

@@ -146,6 +146,7 @@ type Model struct {
 
 	listCur     int     // selected row in the list view
 	listSrc     listSrc // what the list view shows
+	listAct     int     // the row's chosen action button; 0 is the default (open or focus)
 	showDeleted bool    // /list --show-deleted
 
 	width, height int
@@ -950,7 +951,13 @@ func (m *Model) click(s span) (tea.Model, tea.Cmd) {
 		return m, m.switchTo(i)
 	case spanRow:
 		m.listCur, _ = strconv.Atoi(s.target)
+		m.listAct = 0 // a click on the row itself is the default action
 		return m.enter()
+	case spanAct:
+		row, act, _ := strings.Cut(s.target, ":")
+		m.listCur, _ = strconv.Atoi(row)
+		m.listAct, _ = strconv.Atoi(act)
+		return m.runListAction()
 	}
 	return m, nil
 }
@@ -1287,8 +1294,16 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cut(m.pos(), m.pos()+1)
 		}
 	case tea.KeyLeft:
+		if m.mode == modeList { // in a list the keys pick the row's action button
+			m.listAct = max(m.listAct-1, 0)
+			break
+		}
 		m.curBack = min(m.curBack+1, len(m.input))
 	case tea.KeyRight:
+		if m.mode == modeList {
+			m.listAct = min(m.listAct+1, len(m.listActions())-1)
+			break
+		}
 		m.curBack = max(m.curBack-1, 0)
 	case tea.KeyCtrlA:
 		m.curBack = len(m.input)
@@ -1457,6 +1472,9 @@ func (m *Model) historyStep(d int) {
 func (m *Model) enter() (tea.Model, tea.Cmd) {
 	line := strings.TrimSpace(string(m.input))
 	if m.mode == modeList && !strings.HasPrefix(line, "/") {
+		if m.listAct > 0 { // a chosen action button: the list stays open
+			return m.runListAction()
+		}
 		if m.listSrc == listWindows {
 			m.input, m.curBack = nil, 0
 			return m, m.switchTo(m.listCur)
@@ -1527,7 +1545,7 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 				words = append(words, f)
 			}
 		}
-		m.mode, m.listSrc, m.listCur, m.input, m.curBack = modeList, listChats, 0, []rune(strings.Join(words, " ")), 0
+		m.mode, m.listSrc, m.listCur, m.listAct, m.input, m.curBack = modeList, listChats, 0, 0, []rune(strings.Join(words, " ")), 0
 	case command.Win:
 		return m.winCommand(c.Arg)
 	case command.Close:
@@ -1976,7 +1994,7 @@ func (m *Model) slowStep() {
 // window.
 func (m *Model) winCommand(arg string) (tea.Model, tea.Cmd) {
 	if arg == "" || strings.EqualFold(arg, "list") {
-		m.mode, m.listSrc, m.listCur, m.input, m.curBack = modeList, listWindows, m.cur, nil, 0
+		m.mode, m.listSrc, m.listCur, m.listAct, m.input, m.curBack = modeList, listWindows, m.cur, 0, nil, 0
 		return m, nil
 	}
 	if n, err := strconv.Atoi(arg); err == nil {
@@ -2287,23 +2305,40 @@ func (m *Model) View() string {
 	switch m.mode {
 	case modeList:
 		var rows []string
+		selectable := true
 		if m.listSrc == listWindows {
 			m.listCur = min(max(m.listCur, 0), len(m.wins)-1)
-			m.modeInfo = fmt.Sprintf("windows (%d): Up/Down, Enter focuses, Esc returns", len(m.wins))
+			m.modeInfo = fmt.Sprintf("windows (%d): Up/Down, Left/Right pick focus/read/unread/close, Enter does it, Esc returns", len(m.wins))
 			rows = m.winLines()
 			prompt = "windows > "
 		} else {
 			items := m.listItems()
+			selectable = len(items) > 0
 			m.listCur = min(max(m.listCur, 0), max(len(items)-1, 0))
-			m.modeInfo = fmt.Sprintf("chats (%d): Up/Down, Enter opens, Esc returns, type to narrow", len(items))
+			m.modeInfo = fmt.Sprintf("chats (%d): Up/Down, Left/Right pick open/read/unread, Enter does it, Esc returns, type to narrow", len(items))
 			rows = m.listLines(items)
 			prompt = "list > "
+		}
+		// The selected row is highlighted and carries the action buttons;
+		// each button is a click target of its own, and the row's own
+		// target stops where the buttons start, so nothing overlaps.
+		var actSpans []span
+		actX0 := m.width
+		if selectable && m.listCur < len(rows) {
+			plain := rows[m.listCur]
+			actX0 = lipgloss.Width(plain) + 2
+			strip, spans := m.listButtons(actX0)
+			rows[m.listCur] = hiStyle.Render(plain) + "  " + strip
+			actSpans = spans
 		}
 		body = topWindow(rows, h, m.listCur)
 		start := topWindowStart(len(rows), h, m.listCur)
 		for y := range body {
 			if i := start + y; i < len(rows) && body[y] != "" {
 				bodySpans[y] = []span{{0, m.width, spanRow, strconv.Itoa(i)}}
+				if i == m.listCur {
+					bodySpans[y] = append([]span{{0, actX0, spanRow, strconv.Itoa(i)}}, actSpans...)
+				}
 			}
 		}
 	case modePager:
@@ -2385,7 +2420,7 @@ func (m *Model) View() string {
 // listLines renders the /list rows: window number, name, title, unread.
 func (m *Model) listLines(items []domain.Chat) []string {
 	var out []string
-	for i, c := range items {
+	for _, c := range items {
 		mark := "   "
 		if wi, _ := m.winFor(c.ID); wi > 0 {
 			mark = fmt.Sprintf("%2d ", wi)
@@ -2397,10 +2432,7 @@ func (m *Model) listLines(items []domain.Chat) []string {
 		if c.Deleted {
 			row += "  (deleted)"
 		}
-		if i == m.listCur {
-			row = hiStyle.Render(row)
-		}
-		out = append(out, row)
+		out = append(out, row) // the selected row is highlighted by View, with its buttons
 	}
 	if len(out) == 0 {
 		out = append(out, dimStyle.Render("  no chat matches"))
@@ -2423,10 +2455,7 @@ func (m *Model) winLines() []string {
 		if i == m.cur {
 			row += "  (current)"
 		}
-		if i == m.listCur {
-			row = hiStyle.Render(row)
-		}
-		out = append(out, row)
+		out = append(out, row) // the selected row is highlighted by View, with its buttons
 	}
 	return out
 }
@@ -2581,7 +2610,9 @@ const keyHelp = `Keys
   Alt-0..9, Esc 0..9     window 0..9 (0 is the server window)
   Left / Right           move the cursor; Ctrl-A / Ctrl-E line start / end;
                          Backspace / Delete remove before / under the cursor;
-                         Ctrl-W the word before it, Ctrl-K to the end, Ctrl-U all
+                         Ctrl-W the word before it, Ctrl-K to the end, Ctrl-U all;
+                         in /list or /win: pick the row's action button
+                         (open or focus, read, unread, close), Enter does it
   Up / Down              walk the input history (commands and sent lines); a
                          recalled line is input again: Ctrl-X sends it, Enter
                          runs it when it starts with /
