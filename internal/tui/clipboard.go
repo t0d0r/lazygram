@@ -12,6 +12,7 @@ import (
 	"github.com/aymanbagabas/go-osc52/v2"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/rivo/uniseg"
 )
 
 // Mouse selection: a left-button drag over the screen selects text like
@@ -19,6 +20,8 @@ import (
 // The selection is a stream from the anchor cell to the cell under the
 // pointer, in reading order, like a terminal's. On release the text is
 // put on the clipboard; a press and release without motion is a click.
+// A double click selects a word, a triple click a row, and a Shift-click
+// extends the last selection (selection.go).
 
 // Clipboard modes for /clip. The choice is kept in the store.
 const (
@@ -44,12 +47,31 @@ func validClipMode(s string) bool {
 }
 
 // selection is a drag in progress, in screen cells of the last View. The
-// anchor is where the button went down; the end follows the pointer.
+// anchor is where the button went down; the end follows the pointer. A
+// word, a row or a Shift extension is a selection too, made by the press
+// itself rather than by motion.
 type selection struct {
 	x0, y0 int // anchor
 	x1, y1 int // end
 	moved  bool
+	unit   selUnit
+	row    string // a word's or row's plain screen row at the press; the copy is dropped if it changed
 }
+
+// selUnit says how a selection was made.
+type selUnit int
+
+const (
+	byCell  selUnit = iota // a press: a click, or a drag once the pointer moves
+	byWord                 // a double click: the word under the pointer
+	byRow                  // a triple click: the screen row under the pointer
+	byShift                // a Shift-click: the last selection extended to the pointer
+)
+
+// shown reports whether the selection is highlighted and copied on
+// release: a drag once it has moved, a word, a row or an extension at
+// once. A press that has not moved is a click.
+func (s selection) shown() bool { return s.moved || s.unit != byCell }
 
 func (s *selection) extend(x, y int) {
 	s.x1, s.y1 = x, y
@@ -104,24 +126,20 @@ func selectedText(rows []string, s selection) string {
 	return strings.Join(out, "\n")
 }
 
-// cells returns the runes of plain s whose columns touch [from, to]. A
-// zero-width rune (a combining mark) stays with the rune before it.
+// cells returns the characters of plain s whose columns touch [from, to].
+// A character is a grapheme cluster, as the terminal draws it: a base
+// with its combining marks, or a whole emoji sequence. A zero-width one
+// standing alone stays with the character before it.
 func cells(s string, from, to int) string {
 	var b strings.Builder
-	col, took := 0, false
-	for _, r := range s {
-		w := ansi.StringWidth(string(r))
-		if w == 0 {
-			if took {
-				b.WriteRune(r)
-			}
-			continue
+	took := false
+	for _, g := range glyphs(s) {
+		if g.w > 0 {
+			took = g.col+g.w-1 >= from && g.col <= to
 		}
-		took = col+w-1 >= from && col <= to
 		if took {
-			b.WriteRune(r)
+			b.WriteString(g.text)
 		}
-		col += w
 	}
 	return b.String()
 }
@@ -223,8 +241,9 @@ func copyToolCmd(name string, args []string, text string) tea.Cmd {
 	}
 }
 
-// copySelection puts the dragged text on the clipboard through the
-// channels the clipboard mode allows and says so in the status.
+// copySelection puts the selected text (a drag, a word, a row or a Shift
+// extension) on the clipboard through the channels the clipboard mode
+// allows and says so in the status.
 func (m *Model) copySelection(s selection) (tea.Model, tea.Cmd) {
 	text := selectedText(plainRows(m.screen), s)
 	if strings.TrimSpace(text) == "" {
@@ -249,7 +268,12 @@ func (m *Model) copySelection(s selection) (tea.Model, tea.Cmd) {
 	}
 	what := fmt.Sprintf("%d lines", strings.Count(text, "\n")+1)
 	if !strings.Contains(text, "\n") {
-		what = fmt.Sprintf("%d characters", len([]rune(text)))
+		// Characters as the screen shows them: an emoji sequence is one.
+		n := uniseg.GraphemeClusterCount(text)
+		what = fmt.Sprintf("%d characters", n)
+		if n == 1 {
+			what = "1 character"
+		}
 	}
 	m.setInfo(fmt.Sprintf("copied %s via %s", what, strings.Join(via, " and ")))
 	return m, tea.Batch(cmds...)

@@ -113,7 +113,9 @@ type Model struct {
 
 	hover string // the clickable thing under the pointer, as a hover key
 
-	sel      *selection // a left-button drag in progress
+	sel      *selection // the left button is down: a click, drag, word, row or extension until the release
+	lastSel  *selection // the last click, drag, word or row; a Shift-click extends it
+	multi    clickRun   // the double or triple click in progress
 	screen   []string   // the rows of the last View, styled; the selection reads them
 	clipMode string     // /clip: auto, osc52, tool or off (kept)
 	clipSeq  string     // OSC 52 sequence riding on the next frames until clipFlushMsg
@@ -133,7 +135,7 @@ type Model struct {
 	animOn   bool         // the last View showed something animated
 	rcache   *renderCache // rendered messages, reused across ticks
 
-	now          func() time.Time     // the clock the typing state runs on; tests replace it
+	now          func() time.Time     // the clock the typing state and double clicks run on; tests replace it
 	typing       *domain.TypingState  // who is typing where, from the service's reports
 	typingCh     <-chan domain.Typing // the service's feed; nil when it has none or closed it
 	typingExpiry bool                 // a typingExpireMsg is scheduled
@@ -865,14 +867,18 @@ func (m *Model) exactChat(name string) (domain.Chat, bool) {
 func hoverKey(s span) string { return fmt.Sprintf("%d:%s", s.kind, s.target) }
 
 // mouse handles wheel scrolling, hovering, left-button drags (a text
-// selection, copied on release) and clicks on the spans of the last View.
-// A click acts on release, so that a drag that starts on a link selects
-// instead of opening it.
+// selection, copied on release), double and triple clicks (a word, a
+// row), Shift-clicks (the last selection extended) and clicks on the
+// spans of the last View. A click acts on release, so that a drag that
+// starts on a link selects instead of opening it; the later presses of a
+// double or triple click select and never act again.
 func (m *Model) mouse(e tea.MouseMsg) (tea.Model, tea.Cmd) {
 	w := m.wins[m.cur]
 	if e.Action == tea.MouseActionMotion {
 		if m.sel != nil && e.Button == tea.MouseButtonLeft { // dragging
-			m.sel.extend(e.X, e.Y)
+			if u := m.sel.unit; u == byCell || u == byShift { // a word or a row stays as picked
+				m.sel.extend(e.X, e.Y)
+			}
 			return m, nil
 		}
 		was := m.hover
@@ -903,15 +909,28 @@ func (m *Model) mouse(e tea.MouseMsg) (tea.Model, tea.Cmd) {
 			w.scroll = max(w.scroll-3, 0)
 		}
 	case e.Action == tea.MouseActionPress && e.Button == tea.MouseButtonLeft:
-		m.sel = &selection{x0: e.X, y0: e.Y, x1: e.X, y1: e.Y}
+		m.leftPress(e)
 	case e.Action == tea.MouseActionRelease:
 		if m.sel == nil {
 			return m, nil
 		}
 		s := *m.sel
 		m.sel = nil
-		if s.moved {
+		if s.unit != byShift { // every Shift-click extends the same base
+			m.lastSel = &s
+		}
+		if s.shown() {
+			if s.unit == byCell { // a drag is no part of a double click
+				m.multi = clickRun{}
+			}
 			if m.clipMode == clipOff {
+				return m, nil
+			}
+			if (s.unit == byWord || s.unit == byRow) && m.plainRow(s.y0) != s.row {
+				// The screen changed between the press and the release (a
+				// picture landed, a message arrived): what is there now was
+				// never under the pointer.
+				m.setInfo("nothing copied: the screen changed")
 				return m, nil
 			}
 			return m.copySelection(s)
@@ -921,6 +940,7 @@ func (m *Model) mouse(e tea.MouseMsg) (tea.Model, tea.Cmd) {
 		}
 		for _, sp := range m.clicks[s.y0] {
 			if sp.hit(s.x0) {
+				m.multi.acted = true
 				return m.click(sp)
 			}
 		}
@@ -2463,7 +2483,7 @@ func (m *Model) View() string {
 	m.screen = rows
 	var b strings.Builder
 	for y, l := range rows {
-		if m.sel != nil && m.sel.moved {
+		if m.sel != nil && m.sel.shown() {
 			if from, to, ok := m.sel.cols(y, m.width); ok {
 				l = markCells(l, from, to)
 			}
@@ -2695,8 +2715,11 @@ one under the mouse pointer. /fx turns the light on or off (kept).
 Drag with the left button to select text; on release it is copied to
 the clipboard: through the terminal (OSC 52) and the system tool when
 there is one (pbcopy, wl-copy, xclip, xsel, clip); /clip picks (kept).
-Shift-drag (Option on macOS) still uses the terminal's own selection,
-as does /mouse off.
+Double click copies the word under the pointer, triple click the row;
+on a link or a name the first click acts and the next ones only select.
+Shift-click extends the selection where the terminal passes Shift on;
+most Linux terminals keep Shift-drag (Option on macOS) for their own
+selection, as does /mouse off.
 Mouse: click a chat name or nick in window 0 to open its window, a tag in
 the window bar to focus it, a row in a list to open it, a link or a
 [photo] / [file] token to open it with the system; the wheel scrolls.

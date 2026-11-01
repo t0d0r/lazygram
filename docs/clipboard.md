@@ -3,7 +3,9 @@
 lazygram reports the mouse so clicks work (chat names, links, window
 tags, `[photo]` tokens). The price is that the terminal's own drag
 selection is gone while that is on. So lazygram selects for you: drag
-with the left button, release, and the text is on the clipboard.
+with the left button, release, and the text is on the clipboard. Double
+and triple clicks pick a word or a row, and Shift-click extends, as in
+a terminal.
 
 ## Usage
 
@@ -17,6 +19,28 @@ with the left button, release, and the text is on the clipboard.
   blanks are dropped from each row; rows are joined with newlines.
 - A press and release on the same cell is a click, as before. A drag
   that starts on a link selects the link text instead of opening it.
+- Double click copies the word under the pointer, triple click the
+  whole screen row (as shown, not the whole wrapped message). The
+  presses must land on the same cell, each within 400 ms of the one
+  before. A word is a run of non-blank characters with surrounding
+  brackets, quotes and trailing `.,;:!?` trimmed, so a link, an
+  `@nick` or a `#chan` comes out whole: `(https://example.org/a).`
+  copies as `https://example.org/a`, `<ada>` as `ada`. Wide characters
+  and emoji count as one character each, whichever of their two cells
+  you click.
+- On clickable text the first click acts as usual and the later ones
+  only select: a double click on a link opens it once and copies it.
+  If the first click opened a window, the rest of the double click
+  does nothing, so nothing from the new screen lands on the clipboard;
+  and if the screen moves while the button is down (a picture lands, a
+  message arrives), nothing is copied ("nothing copied: the screen
+  changed").
+- Shift-click extends the selection to the clicked cell and copies it:
+  from where the last drag started, from the last click, or around the
+  last double- or triple-clicked word or row. Many terminals (most on
+  Linux) keep Shift-click for their own selection while the mouse is
+  reported; there it never reaches lazygram, and the terminal selects
+  instead.
 - Blank space gives `nothing to copy`.
 
 Pictures painted into a window copy as block characters, which is what
@@ -36,7 +60,7 @@ encrypted state, like `/mouse`, `/fx` and the theme.
 | `auto`  | both channels below (the default)                               |
 | `osc52` | the terminal, by the OSC 52 escape sequence                     |
 | `tool`  | a system clipboard command: `pbcopy`, `wl-copy`, `xclip`, `xsel`, `clip` |
-| `off`   | dragging selects and copies nothing; clicks still work          |
+| `off`   | dragging, double, triple and Shift clicks copy nothing; single clicks still work |
 
 OSC 52 is the escape sequence terminals accept to set the clipboard.
 lazygram writes it into its own frame, so it reaches the terminal in
@@ -96,6 +120,14 @@ a sandboxed terminal). Switch to `/clip osc52` or fix the display.
 Dragging does nothing and clicks still work: `/clip` is `off`. Dragging
 selects with the terminal's own highlight instead: `/mouse` is off, or
 you are holding Shift or Option.
+
+Shift-click does not extend the selection but starts the terminal's own
+selection: the terminal keeps Shift for itself. Drag again from the
+start, or double-click a word, instead.
+
+A double click opened a link and also copied it: that is intended. The
+first click of a double click acts like any click; the second only
+selects. Drag across a link to copy it without opening it.
 
 The highlight looks wrong on wide characters: a cell inside a
 two-column character selects the whole character; the copied text is
