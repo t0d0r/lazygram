@@ -56,6 +56,28 @@ with every chat interleaved, bot buttons and a `[photo]` token.
 brew install t0d0r/tap/lazygram
 ```
 
+Or the installer script, on Linux and macOS (amd64, arm64): it downloads
+the release it pins (v0.4.18), checks the tarball against the release's
+`SHA256SUMS` and puts `lazygram` in `~/.local/bin`, no root. The URL
+names a fixed commit of the script, so what you run cannot change under
+you:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/t0d0r/lazygram/88c7f621e74234ba80ece5c543038829de6881b7/install.sh | bash
+```
+
+Security warning: piping a download into `bash` runs whatever the server
+sends, before you have seen it. Prefer to read the script first (it is
+short) and run it from the file:
+
+```sh
+curl -fsSLO https://raw.githubusercontent.com/t0d0r/lazygram/88c7f621e74234ba80ece5c543038829de6881b7/install.sh
+less install.sh && bash install.sh
+```
+
+`LAZYGRAM_VERSION=vX.Y.Z` installs another release, `LAZYGRAM_PREFIX`
+another prefix (its `bin` must be in your `PATH`).
+
 Arch Linux and Omarchy: an Arch package recipe lives in
 `packaging/omarchy/lazygram` (`makepkg -si` there builds and installs it;
 once it is in pkgs.omarchy.org, `omarchy pkg add lazygram`). See

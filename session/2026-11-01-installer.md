@@ -33,7 +33,15 @@
 `bash -n install.sh && shellcheck install.sh`; `LAZYGRAM_PREFIX=/tmp/p
 bash install.sh` installs and prints the version.
 
+- `install.sh` reached `origin/master` in `88c7f62`; the raw URL at that
+  commit serves the same bytes as the file (sha256 compared), and the
+  README's one-line command was run end to end into a scratch prefix.
+- README (Install): the `curl ... | bash` command pointing at
+  `raw.githubusercontent.com/t0d0r/lazygram/88c7f621e7.../install.sh`,
+  a security warning, the read-first alternative, and the
+  `LAZYGRAM_VERSION` / `LAZYGRAM_PREFIX` knobs.
+
 ## Next
 
-- README: the `curl ... | bash` command with the commit-pinned URL and
-  its warning, once the script is on `origin/master`.
+- With the next release: bump `VERSION` in `install.sh` and the commit in
+  the README's command (specs/release.md, step 6).
