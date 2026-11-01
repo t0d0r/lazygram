@@ -30,6 +30,10 @@ type Chat struct {
 	Kind    ChatKind `json:"kind"`
 	Unread  int      `json:"unread,omitempty"`  // unread count reported by the service
 	Deleted bool     `json:"deleted,omitempty"` // the account behind the chat no longer exists
+	// Username is a group's or channel's own public username, without @;
+	// empty for people and for chats without one. Unlike Alias it is
+	// exact: posts that sign with it mention the chat itself.
+	Username string `json:"username,omitempty"`
 }
 
 // Name is the IRC-style name: @alias for people, #alias otherwise.
@@ -86,13 +90,18 @@ func (m *Media) Image() bool { return m != nil && (m.Kind == "photo" || m.Kind =
 
 // Message is one message in a chat.
 type Message struct {
-	ID      string    `json:"id"` // unique within the chat
-	ChatID  string    `json:"chat_id"`
-	Sender  string    `json:"sender"`
-	Text    string    `json:"text"` // the caption, for a message with Media
-	Time    time.Time `json:"time"`
-	Buttons []Button  `json:"buttons,omitempty"` // numbered from 1 in this order
-	Media   *Media    `json:"media,omitempty"`
+	ID     string `json:"id"` // unique within the chat
+	ChatID string `json:"chat_id"`
+	Sender string `json:"sender"`
+	// SenderID is the sender's own chat id (a person), SenderNick their
+	// username without @; both empty when unknown, for own messages and
+	// for posts signed by a channel. They tell group members apart.
+	SenderID   string    `json:"sender_id,omitempty"`
+	SenderNick string    `json:"sender_nick,omitempty"`
+	Text       string    `json:"text"` // the caption, for a message with Media
+	Time       time.Time `json:"time"`
+	Buttons    []Button  `json:"buttons,omitempty"` // numbered from 1 in this order
+	Media      *Media    `json:"media,omitempty"`
 }
 
 // PressAnswer is what a provider reports after a button was pressed.

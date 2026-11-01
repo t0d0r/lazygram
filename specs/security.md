@@ -33,12 +33,19 @@
   pressed only by /press; link buttons are printed, never opened.
 - Read receipts are off by default: lazygram never calls
   messages.readHistory or channels.readHistory unless `/read-receipts on`
-  was given (kept across runs, shown by `/read-receipts`) or
-  `/mark-as-read` is typed for one chat. With receipts on, a report goes
+  was given (kept across runs, shown by `/read-receipts`), or
+  `/mark-as-read` is typed or the `[read]` button of `/list` or `/win`
+  pressed for one chat (with messages.markDialogUnread clearing the
+  chat's unread mark). `[unread]` calls messages.markDialogUnread to set
+  the mark, once per press. With receipts on, a report goes
   out only when a window with unread messages is focused, for the newest
   message lazygram holds; a report is visible to the other side of a
   private chat and marks the chat read on every device of the account
   (specs/ui.md, Read receipts).
+- A group's member list (specs/ui.md, Members) is asked once a session,
+  when its window is first shown, with the account's own rights, and is
+  kept in memory only: it is never written to the cache, a log or a
+  file. Broadcast channels are never asked.
 - Attachments are downloaded only on /open or a click, never on arrival,
   and stored encrypted in the vault (hashed names, same keys as the
   cache). Pictures are shown inside the terminal from memory by default, so

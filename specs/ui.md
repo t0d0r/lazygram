@@ -15,7 +15,9 @@ completion, and an activity indicator.
 
 ## Windows
 
-- Window 0 is the server window: every chat interleaved by time, plus
+- Window 0 is the server window: the messages of every chat that arrive
+  during this session (everything a sync brings, and what a window's
+  fetch brings that is dated after the start), interleaved by time, plus
   client notices (`-!-`): start-up, chat counts, windows opened or closed,
   and every error (sync, history, send, press, fetch, open), whatever
   window was current; errors also show in the status line. It opens with a figlet banner (font banner3
@@ -31,6 +33,12 @@ completion, and an activity indicator.
   shows them at once, and smoke mode shows everything. A window whose
   chat had no cached messages rolls in the same way once its first
   history fetch lands (when it is shown).
+  The cached backlog loaded at start and older fetched history show only
+  in the chat windows and in `/search`, not in window 0. Decision: the
+  cached history in window 0 filled the start screen with old messages
+  from every chat; it was a side effect of all windows reading one
+  in-memory list, never a choice, and an IRC server window shows what
+  arrives while connected.
   After the program ends a banner is printed to the terminal the same
   way (one line per 56 ms), BitchX style, in one of several faces picked
   at random among those that fit the terminal width: the figlet block
@@ -55,6 +63,11 @@ completion, and an activity indicator.
   window is shown, the last 10 messages of the chat are fetched from the
   service (`-!- fetching the last 10 messages`, then
   `-!- fetched N older message(s)`); `/last N` fetches more, up to 100.
+  In a group whose newest 100 known messages include one from a sender
+  without an id (cached by a lazygram that kept no ids; own messages and
+  unsigned posts need none), the first show fetches the last 100, so
+  `Store.Identify` learns those senders' usernames (see Members).
+  Channels keep 10: their posts never carry a sender id.
 - The status line shows `[Act: 2,3]`: the windows with unread messages.
   When a sync brings messages from others the status message (on the
   rule) says where they went: `3 new messages in 2:#dev (2), 3:@alice`,
@@ -75,6 +88,144 @@ People are `@alias`, groups and channels are `#alias`. The provider decides
 the alias (Telegram: username, else a slug of the title). `/win`, `/last`
 and completion accept names with or without the sigil; a sigil restricts
 the kind.
+
+## Members
+
+The members of a group or channel are what the messages lazygram holds
+for it show (this session's and the cached backlog loaded at start, the
+newest 2000 cached messages across all chats) and, for a group, its
+member list from the service. Three things make a member:
+
+- **The member list.** The first time a group's window is shown in a
+  session, lazygram asks the service for the group's member list
+  (`provider.MemberLister`; Telegram: the whole list of a basic group,
+  the 1000 most recently active of a supergroup), once a session, kept in
+  memory only. Any member of a group may read it, unless its admins hid
+  the members (possible in groups of 100 and more) and the account is no
+  admin; then the service refuses (`provider.ErrMembersHidden`), the
+  window says `member list hidden here: the members are the people seen
+  writing or mentioned`, and the two sources below remain. A broadcast
+  channel, whose subscribers only admins see, is not asked and counts as
+  hidden without a notice. Another error is said in the window as
+  `member list: <error>` and the list is asked again on the next first
+  show. A list that came is said as `member list: N members`. When the
+  window was closed before the answer, the notice goes to the server
+  window and names the group (`member list of #dev: N members`,
+  `member list hidden in #dev: ...`).
+  A listed person is the member with their id, else the one known only by
+  the username they hold (a nick only mentioned, a sender cached without
+  an id), else the one sender known by their display name alone; else
+  they join with no messages, after those with some. The list is current:
+  its name and username win, an empty username included, and anyone else
+  who had that username loses it. The account itself and deleted
+  accounts are not listed.
+
+- **Writing.** A message carries the sender's own chat id and username
+  when the service gives them (`domain.Message.SenderID`, `SenderNick`).
+  One id is one member however their name changed: the newest of their
+  messages gives the name and the username, an empty username included (a
+  dropped username is not offered any more). A message without an id is an
+  own message (sender `me`), an unsigned channel post (sender `channel`),
+  both left out, or one whose sender the service did not identify (cached
+  before ids were kept, a signed channel post), which counts for the one
+  member with that display name, else for a member known by the name
+  alone. A person whose name is `me` or `channel` is still a member when
+  their messages carry an id. A username moves between people: when two
+  members wrote with the same one (ignoring case), the one who wrote with
+  it last keeps it and the other has none.
+- **Being mentioned.** An `@username` in the text of any of the chat's
+  messages, own ones and channel posts included (`domain.MentionsIn`: an
+  `@` at the start or after a character that is no letter or digit in
+  any script, no underscore and none of `/ . @ = &`, then a letter and 3
+  to 31 more letters, digits or underscores, then the end or a character
+  that is no letter, digit or `/`; an `@` in a space-separated word that
+  holds `://` or starts with `www.` is part of a link, which Telegram
+  reads as one: so `mail@example.com`, `имейл@example.com`,
+  `youtube.com/@name` and `@ab` are none). A mention counts for the
+  member with that username, ignoring case; otherwise it makes a member
+  known by the username alone, with no name, the newest spelling kept.
+  People are greeted, thanked and asked by `@username` without writing
+  themselves.
+
+The chat's own username is no member: channels sign their posts with it.
+A mention of the group's or channel's `Username` (`domain.Chat.Username`,
+from the service), or of its alias, is left out in its own window, and a
+sender with that username keeps no nick there; in other chats it is a
+nick like any.
+
+A cached message learns its sender's id and username when the service
+sends it again (a window's first fetch of its last messages, `/last N`, a
+sync): `Store.Identify` writes those two fields into the cached copy,
+nothing else, and the copy in memory follows. Until then a sender known
+only from older cached messages has no username here. Names and usernames
+are stripped of control characters before they reach the input line or a
+notice.
+
+The nicks of a chat are its members' usernames. Completion always fills
+in `@username`, the mention Telegram notifies, as people write it. A
+member without a username is not offered: a message cannot mention them
+by `@`, and `@name` would mention whoever holds the username `name` (a
+mention by name needs a message entity, which lazygram does not send).
+`/whois` still finds them by name.
+
+In a group or channel window's own input (the list filters of `/list` and
+`/win list` and the `/search` query complete as before):
+
+- Tab after `/whois ` (and `/wi`, `/info`) completes the whole argument,
+  spaces included, to the chat's members: those whose username or display
+  name starts with it, ignoring case and a leading `@`, in either script
+  (`domain.PrefixMatch`: `iv` completes the username of `Иван Петров`,
+  `али` completes `@alice_s`, see Search in either script), as `@nick`,
+  and members without a username by display name: `/whois` only looks
+  them up and sends nothing. An argument starting with `#` completes chat
+  names as before.
+- Tab in message text (a line that does not start with `/`, wherever the
+  cursor is, and the text of `/me`) completes to the nicks only, the
+  members with a username, the same way, with an `@` whether one was typed
+  or not. The name being typed may span
+  words: it starts at the earliest of the last four word starts whose
+  rest of the line (up to the cursor) some member's name or username
+  begins with, members without a username included (`hi Grace K` ->
+  `hi @gkelly`; `hi Ada L` stays as typed when Ada Lovelace has no
+  username, rather than completing `L` to someone else), else at the last
+  word. Chat names are not offered there.
+- The second Tab lists the candidates separated by commas, with the
+  display name after each username when it is known:
+  `@alice_s (Alice Smith), @grace_h` in text, and after `/whois` also the
+  members without a username: `@alice_s (Alice Smith), @grace_h, ada`.
+- `/whois <name>` looks the name up among all the members first, those
+  without a username too, in tiers, the first tier with any match
+  deciding: exact display name, then exact username (with a leading `@`
+  these two swap, so `@alan` is the member with that username and `alan`
+  the one shown as alan), then a unique prefix of either, then a unique
+  substring of the name, then the same in either script (Cyrillic or
+  Latin): a unique prefix of either (what Tab completes), then a unique
+  substring of the name. The either-script tiers come last, so they never
+  make a plain match ambiguous, and a query of combining marks only gets
+  none. It prints `whois @nick in #chat: Display Name`, `whois Name in
+  #chat: no username, so no @mention`, or for a nick only mentioned
+  `whois @nick in #chat: mentioned, not seen writing`; then how many of
+  the known messages here are theirs and when the last was, with how many
+  mention them (with none of theirs: how many mention them and when the
+  last did, or `no known messages of theirs here`), followed by
+  `; in the member list` for a listed member; and their private chat with
+  its window. The group and
+  the private chat are named as `/names` shows chats. A member with an id
+  has the private chat with that id or none (another chat with the same
+  name or username is someone else); one without an id has the person
+  chat whose alias is the username, else the one person chat titled with
+  the name. Several members matching in a tier is an error that asks to
+  type more of the name; none falls back to the chats, as everywhere
+  else, and `#name` always means a chat.
+- `/whois` without a name describes the chat and adds how many members
+  are known and from where (the member list and the known messages, or
+  the known messages alone, saying when the list is hidden) and how many
+  of them have an `@username` (those are what Tab offers in message
+  text); `/whois #chat` with a name does not.
+
+Everywhere else nothing changes: `/win`, `/msg`, `/list` and the other
+commands complete and resolve every chat, in every window, and so do
+`/whois` and message text in the server window and in a person's window.
 
 ## Names: nick or title
 
@@ -120,12 +271,17 @@ titles and notices are stripped of control characters before rendering.
   that window (window 0 refuses as `/close` does). Read, unread and
   close keep the list open on the same row with the same button, so
   Down, Enter repeats them down the list; the filter stays and the
-  action applies to the filtered selection. The counts are local: nothing
-  is reported to the service unless read receipts are on, in which case
-  `[read]` on a window with unread messages reports it like a focus
-  would (Read receipts); the next
-  chats refresh (`/refresh`, a restart) brings the service's own count
-  back into the `/list` row. In a list Left/Right no longer move the
+  action applies to the filtered selection. Read and unread also tell the
+  service once per press, whatever `/read-receipts` says and without
+  changing it, as an explicit request like `/mark-as-read`: `[read]`
+  sends a read receipt for the chat and clears its unread mark, `[unread]`
+  sets the unread mark (`Provider.MarkUnread`, Telegram's "mark as
+  unread"), so the official apps show the same. The server window tells
+  nobody. The status line says `marked #chat read, telling the
+  service...`, then `reported #chat read` (or `unread`) or the error
+  (Read receipts). The next chats refresh (`/refresh`, a restart) brings
+  the service's own count back into the `/list` row, which after a
+  report agrees. In a list Left/Right no longer move the
   filter cursor; Backspace, Ctrl-U and typing still edit the filter.
   Decision: buttons on the row rather than letter keys, because letters
   type into the filter, and Left/Right are otherwise idle in a list.
@@ -169,7 +325,7 @@ names `/keys`, so the keys are one step away from either.
 | `/close [N]`                  | close window N or the current one                    |
 | `/last [N]`                   | fetch the last N messages (default 10, max 100)      |
 | `/search [text]`              | pager over the current window's local history        |
-| `/whois [name]`               | print what is known about a chat (default: this window's) |
+| `/whois [name]`               | print what is known about a chat (default: this window's); in a group or channel window a name is one of its members first (see Members) |
 | `/stats`                      | print client statistics                              |
 | `/me <text>`                  | send `* text` to this window's chat (shown as `* you text`) |
 | `/msg <@user|#chan> <text>`   | send to that chat, opening and focusing its window if missing |
@@ -186,7 +342,7 @@ names `/keys`, so the keys are one step away from either.
 | `/mouse`                      | mouse reporting on or off; off lets the terminal select text (kept) |
 | `/clip [mode]`                | where a mouse selection is copied: `auto`, `osc52`, `tool`, `off`; no argument shows the mode and the tool (kept) |
 | `/read-receipts [on\|off]`, `/receipts` | read receipts to the service: off by default (kept); on reports a chat read when its window with unread messages is focused; no argument shows the setting (see Read receipts) |
-| `/mark-as-read`, `/markread`  | one read receipt for this window's chat, now, whatever `/read-receipts` says; an error in the server window and for a chat without a known message |
+| `/mark-as-read`               | one read receipt for this window's chat, now, whatever `/read-receipts` says; an error in the server window and for a chat without a known message |
 | `/names`                      | show chats by nick (`@alias`) or by name (`@Title`), kept |
 
 Short forms: `/h` for `/help`; `/shortcuts`, `/bindings` for `/keys`;
@@ -436,13 +592,14 @@ windows or the cache.
 
 ## Read receipts
 
-Off by default: lazygram reports nothing read to the service, whatever
-it shows. `/read-receipts on` (kept in the state store under
+Off by default: lazygram reports nothing read to the service on its
+own, whatever it shows; only an explicit request (`/mark-as-read`, the
+`[read]` and `[unread]` buttons) reports, once. `/read-receipts` with no
+argument says so. `/read-receipts on` (kept in the state store under
 `read_receipts`; absent or unreadable means off) makes lazygram report a
 chat read at the moments it marks the chat read itself: when a window
 with unread messages is focused (`/win N`, `/win @name`, Alt-N, Ctrl-N,
-Tab, a click on the window bar or a list row), or marked read with the
-`[read]` button of `/win` or `/list` (Modes). The report covers the
+Tab, a click on the window bar or a list row). The report covers the
 newest message lazygram holds for the chat (`Provider.MarkRead` with that
 message id), so what lazygram has not shown stays unread at the service;
 with no message of the chat known yet nothing is sent. Nothing is sent
@@ -455,7 +612,22 @@ chat on request, clears its unread count, and leaves the setting alone:
 it works with receipts off and never turns them on. It is an error in
 the server window ("/win to a chat first") and for a chat without a
 known message ("nothing to report"); the service's answer is shown
-("reported @name read" or the error). Decision: a receipt is visible to
+("reported @name read" or the error). The `[read]` button of `/win` and
+`/list` is a one-time request for its row's chat too, with the setting
+off or on, and covers the service's newest message, not the newest
+lazygram holds (`Provider.MarkRead` with an empty id, the dialog's top
+message on Telegram): a row's chat often holds only old cached messages
+while newer ones are unread at the service, and the button means "this
+chat is read". Both requests also clear the chat's unread mark
+(`Provider.MarkUnread(false)`), even when the receipt fails, so a chat
+marked unread from lazygram or the phone ends up read everywhere.
+`[unread]` is the opposite one-time request: it sets the unread mark,
+which the chat list then shows as one unread (a chat the service reports
+marked and without unread messages counts 1). Requests for one chat go
+out one at a time in the order pressed; a press while one is on its way
+waits, a later press replaces a waiting one, so the service ends where
+the last press said. A failed receipt shows as `read receipt for #chat:
+...`, a failed mark as `unread mark for #chat: ...`. Decision: a receipt is visible to
 the other side of a private chat and marks the chat read on every device
 of the account, so it is opt-in; the focus moment is chosen because it
 is the only existing action that clears a window's unread count, and a
@@ -477,7 +649,18 @@ but never resolves a chat name. Chat names given to
 `/whois`, `/win @name` and `/msg` resolve the same way in a last step of
 `domain.ResolveChat`: exact id or alias, alias prefix and plain substring
 first, as typed; the either-script substring only when those found
-nothing, so it never turns a unique match ambiguous.
+nothing, so it never turns a unique match ambiguous. Tab completion
+matches prefixes in either script (`domain.PrefixMatch`, the
+transliteration of the word a prefix of the transliteration of the name):
+chat names (`/win iv` completes `@иван-петров`, `/win нов` completes
+`#novini`) and the members of a group (see Members). The candidate is
+filled in as the name is written. A common prefix of several candidates
+extends the word only when it says more than the word (compared in
+transliteration, so `zhiv` is extended to `Живк`) and still starts with
+it, sigils aside and in either script; otherwise the word stays and the
+second Tab lists the candidates. So members matched by their names are
+never replaced by an unrelated prefix of their usernames (`ив` does not
+become `@van`).
 
 The transliteration is the Bulgarian streamlined system (zh, ts, ch, sh,
 sht, yu, ya, hard sign as a, soft sign as y, the stressed i as i)
@@ -502,7 +685,7 @@ match the plain comparison would find.
 
 | key                  | action                                            |
 |----------------------|---------------------------------------------------|
-| Tab / Shift-Tab      | empty prompt: next / previous window; else complete like bash (a second Tab lists): commands, chats, themes, `out`, attachment ids and the chat's recent links after `/open`, paths after `/send` |
+| Tab / Shift-Tab      | empty prompt: next / previous window; else complete like bash (a second Tab lists): commands, chats, themes, `out`, attachment ids and the chat's recent links after `/open`, paths after `/send`; in a group or channel window its `@nicks` after `/whois` and in message text |
 | Ctrl-X twice         | toggle "Enter sends" for this window (Ctrl-X then adds a line break to plain text) |
 | Ctrl-N / Ctrl-P      | next / previous window (Alt-Right / Alt-Left too) |
 | Alt-0 .. Alt-9       | window 0 .. 9; Esc followed by the digit does the same (the typed input survives) |
@@ -557,10 +740,13 @@ case, and when some match the typed case exactly only those are
 offered, so two links that differ in case stay apart) and the ids of the current window's messages that
 have an attachment; after `/open out` only the ids; nothing in the
 server window (an `/open <link>` typed there still works).
+In a group or channel window the `/whois` argument and the words of
+message text complete that chat's `@nicks` instead (see Members).
 Otherwise a command's fixed first words (`/win list`,
 `/list --show-deleted`) and chat names: every non-deleted
 chat whose `@name`/`#name` starts with the word, or whose bare alias
-starts with it when the word has no sigil (then the sigil is added). One
+starts with it when the word has no sigil (then the sigil is added), in
+either script (see Search in either script). One
 candidate is filled in with a trailing space; several are extended to
 their longest common prefix, and a second Tab that cannot extend further
 prints the candidates into the window as a notice (base names for paths).

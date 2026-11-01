@@ -15,6 +15,7 @@ import (
 	"github.com/gotd/td/tgerr"
 
 	"lazygram/internal/domain"
+	"lazygram/internal/provider"
 )
 
 const (
@@ -39,6 +40,10 @@ type api interface {
 	ChannelsDeleteMessages(ctx context.Context, req *tg.ChannelsDeleteMessagesRequest) (*tg.MessagesAffectedMessages, error)
 	MessagesReadHistory(ctx context.Context, req *tg.MessagesReadHistoryRequest) (*tg.MessagesAffectedMessages, error)
 	ChannelsReadHistory(ctx context.Context, req *tg.ChannelsReadHistoryRequest) (bool, error)
+	MessagesGetFullChat(ctx context.Context, chatID int64) (*tg.MessagesChatFull, error)
+	ChannelsGetFullChannel(ctx context.Context, channel tg.InputChannelClass) (*tg.MessagesChatFull, error)
+	MessagesMarkDialogUnread(ctx context.Context, req *tg.MessagesMarkDialogUnreadRequest) (bool, error)
+	ChannelsGetParticipants(ctx context.Context, req *tg.ChannelsGetParticipantsRequest) (tg.ChannelsChannelParticipantsClass, error)
 }
 
 // service implements Client on top of api. It is read-only. Every History
@@ -97,11 +102,18 @@ func (s *service) dialogs(ctx context.Context) ([]dialog, error) {
 		if !ok {
 			continue // forbidden or unknown peer
 		}
+		unread := d.UnreadCount
+		if d.UnreadMark && unread == 0 { // marked unread by hand, here or in another app
+			unread = 1
+		}
 		out = append(out, dialog{
 			chat: domain.Chat{ID: chatID(ent), Service: "telegram", Title: ent.title,
-				Kind: ent.chatKind(), Unread: d.UnreadCount, Deleted: ent.deleted},
+				Kind: ent.chatKind(), Unread: unread, Deleted: ent.deleted},
 			ent: ent, top: d.TopMessage,
 		})
+		if ent.kind != kindUser { // a person's username is in Alias; Self and deleted ones are made up
+			out[len(out)-1].chat.Username = ent.username
+		}
 	}
 	// Usernames are unique on Telegram and claim their names first, so a
 	// chat whose title merely slugs to someone's username can never take it.
@@ -259,7 +271,8 @@ func (s *service) Delete(ctx context.Context, chatID, msgID string) error {
 	return nil
 }
 
-// MarkRead sends a read receipt for the chat up to message msgID:
+// MarkRead sends a read receipt for the chat up to message msgID, or up
+// to the chat's top message from the dialog list when msgID is empty:
 // channels.readHistory for channels and supergroups, messages.readHistory
 // for users and basic groups. The service marks every message up to that
 // id read on every device of the account, and the other side of a private
@@ -269,9 +282,14 @@ func (s *service) MarkRead(ctx context.Context, chatID, msgID string) error {
 	if err != nil {
 		return err
 	}
-	id, err := strconv.Atoi(msgID)
-	if err != nil || id <= 0 {
-		return fmt.Errorf("telegram: bad message id %q", msgID)
+	id := s.top[chatID]
+	if msgID != "" {
+		if id, err = strconv.Atoi(msgID); err != nil || id <= 0 {
+			return fmt.Errorf("telegram: bad message id %q", msgID)
+		}
+	}
+	if id <= 0 {
+		return fmt.Errorf("telegram: no message of %s known to report read", chatID)
 	}
 	if ent.channel != nil {
 		_, err = s.api.ChannelsReadHistory(ctx, &tg.ChannelsReadHistoryRequest{Channel: ent.channel, MaxID: id})
@@ -282,6 +300,179 @@ func (s *service) MarkRead(ctx context.Context, chatID, msgID string) error {
 		return fmt.Errorf("telegram: read receipt: %w", err)
 	}
 	return nil
+}
+
+// MarkUnread sets or clears the dialog's unread mark,
+// messages.markDialogUnread: the official apps show a chat with the mark
+// as unread until it is read or cleared.
+func (s *service) MarkUnread(ctx context.Context, chatID string, unread bool) error {
+	ent, err := s.entity(ctx, chatID)
+	if err != nil {
+		return err
+	}
+	if _, err := s.api.MessagesMarkDialogUnread(ctx, &tg.MessagesMarkDialogUnreadRequest{
+		Unread: unread, Peer: &tg.InputDialogPeer{Peer: ent.peer},
+	}); err != nil {
+		return fmt.Errorf("telegram: unread mark: %w", err)
+	}
+	return nil
+}
+
+// Member list limits: a page of channels.getParticipants, and how many
+// members one call gathers at most (enough for completion; five pages).
+const (
+	membersPage = 200
+	maxMembers  = 1000
+)
+
+// Members lists a group's members: messages.getFullChat for a basic group,
+// whose list comes whole, and channels.getParticipants for a supergroup,
+// the recently active first, membersPage at a time up to maxMembers. A
+// supergroup is checked first with channels.getFullChannel: when its
+// admins hid the members (participants_hidden) and the account is no
+// admin or creator, or it cannot view participants at all, Telegram would
+// answer with the admins and bots only, so that is
+// provider.ErrMembersHidden, not a short list. A broadcast channel shows
+// its subscribers to admins only, so it is not asked; a forbidden list
+// (CHAT_ADMIN_REQUIRED, a hidden basic-group list) is ErrMembersHidden too.
+// The account itself and deleted accounts are left out; an inviter
+// mentioned beside a participant is no member.
+func (s *service) Members(ctx context.Context, chat string) ([]domain.Participant, error) {
+	ent, err := s.entity(ctx, chat)
+	if err != nil {
+		return nil, err
+	}
+	var ids []int64
+	users := map[int64]*tg.User{}
+	keep := func(us []tg.UserClass) {
+		for _, uc := range us {
+			if u, ok := uc.(*tg.User); ok {
+				users[u.ID] = u
+			}
+		}
+	}
+	switch {
+	case ent.kind == kindChannel:
+		return nil, provider.ErrMembersHidden
+	case ent.kind != kindGroup:
+		return nil, fmt.Errorf("telegram: %s is not a group", chat)
+	case ent.channel == nil:
+		res, err := s.api.MessagesGetFullChat(ctx, -ent.id)
+		if err != nil {
+			return nil, membersErr(err)
+		}
+		keep(res.Users)
+		full, ok := res.FullChat.(*tg.ChatFull)
+		if !ok {
+			return nil, provider.ErrMembersHidden
+		}
+		list, ok := full.Participants.(*tg.ChatParticipants)
+		if !ok {
+			return nil, provider.ErrMembersHidden
+		}
+		for _, p := range list.Participants {
+			ids = append(ids, p.GetUserID())
+		}
+	default:
+		full, err := s.api.ChannelsGetFullChannel(ctx, ent.channel)
+		if err != nil {
+			return nil, membersErr(err)
+		}
+		if hiddenMembers(full, ent.id) {
+			return nil, provider.ErrMembersHidden
+		}
+		for offset := 0; len(ids) < maxMembers; {
+			res, err := s.api.ChannelsGetParticipants(ctx, &tg.ChannelsGetParticipantsRequest{
+				Channel: ent.channel, Filter: &tg.ChannelParticipantsRecent{},
+				Offset: offset, Limit: membersPage,
+			})
+			if err != nil {
+				return nil, membersErr(err)
+			}
+			page, ok := res.(*tg.ChannelsChannelParticipants)
+			if !ok {
+				break
+			}
+			keep(page.Users)
+			for _, p := range page.Participants {
+				if id, ok := participantID(p); ok {
+					ids = append(ids, id)
+				}
+			}
+			if len(page.Participants) < membersPage {
+				break
+			}
+			offset += len(page.Participants)
+		}
+		if len(ids) > maxMembers {
+			ids = ids[:maxMembers]
+		}
+	}
+	var out []domain.Participant
+	seen := map[int64]bool{}
+	for _, id := range ids {
+		u := users[id]
+		if u == nil || u.Self || u.Deleted || seen[id] {
+			continue
+		}
+		seen[id] = true
+		out = append(out, domain.Participant{ID: chatID(entity{id: id}), Name: userName(u), Nick: u.Username})
+	}
+	return out, nil
+}
+
+// hiddenMembers reports whether a supergroup's full info says this account
+// cannot read its member list: it cannot view participants, or the admins
+// hid them and the account is neither creator nor admin (the channel entry
+// in the response says which). id is the Bot-API style chat id.
+func hiddenMembers(full *tg.MessagesChatFull, id int64) bool {
+	cf, ok := full.FullChat.(*tg.ChannelFull)
+	if !ok {
+		return false
+	}
+	if !cf.CanViewParticipants {
+		return true
+	}
+	if !cf.ParticipantsHidden {
+		return false
+	}
+	for _, cc := range full.Chats {
+		if c, ok := cc.(*tg.Channel); ok && channelBase-c.ID == id {
+			_, admin := c.GetAdminRights()
+			return !c.Creator && !admin
+		}
+	}
+	return true
+}
+
+// participantID is the user a supergroup participant entry is about. A
+// restricted member (muted, say: channelParticipantBanned that has not
+// left) is still a member; one who left or was removed, and entries about
+// chats rather than users, are none.
+func participantID(p tg.ChannelParticipantClass) (int64, bool) {
+	switch p := p.(type) {
+	case *tg.ChannelParticipant:
+		return p.UserID, true
+	case *tg.ChannelParticipantSelf:
+		return p.UserID, true
+	case *tg.ChannelParticipantCreator:
+		return p.UserID, true
+	case *tg.ChannelParticipantAdmin:
+		return p.UserID, true
+	case *tg.ChannelParticipantBanned:
+		if u, ok := p.Peer.(*tg.PeerUser); ok && !p.Left {
+			return u.UserID, true
+		}
+	}
+	return 0, false
+}
+
+// membersErr maps a refused member list to provider.ErrMembersHidden.
+func membersErr(err error) error {
+	if tgerr.Is(err, "CHAT_ADMIN_REQUIRED", "CHANNEL_PRIVATE", "CHAT_FORBIDDEN") {
+		return provider.ErrMembersHidden
+	}
+	return fmt.Errorf("telegram: member list: %w", err)
 }
 
 // Press presses a callback button: messages.getBotCallbackAnswer, then the
@@ -464,6 +655,7 @@ func convert(chatID string, chat entity, m *tg.Message, ents entities) domain.Me
 		Text:   text,
 		Time:   time.Unix(int64(m.Date), 0).UTC(),
 	}
+	out.SenderID, out.SenderNick = senderUser(m, ents)
 	if mk, ok := m.GetReplyMarkup(); ok {
 		out.Buttons = buttons(mk)
 	}
@@ -488,6 +680,21 @@ func sender(chat entity, m *tg.Message, ents entities) string {
 		return chat.title
 	}
 	return "channel"
+}
+
+// senderUser names the person who sent m: their own chat id (the id their
+// private chat has) and their username, when they have one. Both are empty
+// for own messages and posts sent as a channel; the username is empty when
+// the user is not among the entities that came with the message.
+func senderUser(m *tg.Message, ents entities) (id, nick string) {
+	p, ok := m.FromID.(*tg.PeerUser)
+	if m.Out || !ok {
+		return "", ""
+	}
+	if u, ok := ents.users[p.UserID]; ok && !u.Deleted && !u.Self {
+		nick = u.Username
+	}
+	return chatID(entity{id: p.UserID}), nick
 }
 
 // floodAPI retries a request once after a short FLOOD_WAIT.
@@ -534,6 +741,22 @@ func (f floodAPI) MessagesReadHistory(ctx context.Context, req *tg.MessagesReadH
 
 func (f floodAPI) ChannelsReadHistory(ctx context.Context, req *tg.ChannelsReadHistoryRequest) (bool, error) {
 	return retryFlood(ctx, f.sleep, func() (bool, error) { return f.api.ChannelsReadHistory(ctx, req) })
+}
+
+func (f floodAPI) MessagesMarkDialogUnread(ctx context.Context, req *tg.MessagesMarkDialogUnreadRequest) (bool, error) {
+	return retryFlood(ctx, f.sleep, func() (bool, error) { return f.api.MessagesMarkDialogUnread(ctx, req) })
+}
+
+func (f floodAPI) ChannelsGetFullChannel(ctx context.Context, channel tg.InputChannelClass) (*tg.MessagesChatFull, error) {
+	return retryFlood(ctx, f.sleep, func() (*tg.MessagesChatFull, error) { return f.api.ChannelsGetFullChannel(ctx, channel) })
+}
+
+func (f floodAPI) MessagesGetFullChat(ctx context.Context, chatID int64) (*tg.MessagesChatFull, error) {
+	return retryFlood(ctx, f.sleep, func() (*tg.MessagesChatFull, error) { return f.api.MessagesGetFullChat(ctx, chatID) })
+}
+
+func (f floodAPI) ChannelsGetParticipants(ctx context.Context, req *tg.ChannelsGetParticipantsRequest) (tg.ChannelsChannelParticipantsClass, error) {
+	return retryFlood(ctx, f.sleep, func() (tg.ChannelsChannelParticipantsClass, error) { return f.api.ChannelsGetParticipants(ctx, req) })
 }
 
 func (f floodAPI) ChannelsDeleteMessages(ctx context.Context, req *tg.ChannelsDeleteMessagesRequest) (*tg.MessagesAffectedMessages, error) {

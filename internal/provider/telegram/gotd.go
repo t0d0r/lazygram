@@ -241,6 +241,26 @@ func (c *MTProto) MarkRead(ctx context.Context, chatID, msgID string) error {
 	return c.svc.MarkRead(ctx, chatID, msgID)
 }
 
+// MarkUnread implements Client.
+func (c *MTProto) MarkUnread(ctx context.Context, chatID string, unread bool) error {
+	if err := c.wait(ctx); err != nil {
+		return err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.svc.MarkUnread(ctx, chatID, unread)
+}
+
+// Members implements Client.
+func (c *MTProto) Members(ctx context.Context, chatID string) ([]domain.Participant, error) {
+	if err := c.wait(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.svc.Members(ctx, chatID)
+}
+
 // Recent implements Client.
 func (c *MTProto) Recent(ctx context.Context, chatID string, limit int) ([]domain.Message, error) {
 	if err := c.wait(ctx); err != nil {

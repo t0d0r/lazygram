@@ -53,7 +53,8 @@ lazygram demo     # try it with invented data, no account needed
 - Type a message and press **Ctrl-X** to send; **Enter** runs `/commands`.
 - `/help` lists the commands, `/keys` the shortcuts; `/list` picks a chat,
   `/win N` or Alt-N switches windows, Tab completes.
-- Window 0 shows every chat; a window opens for each chat with news.
+- Window 0 shows what arrives from every chat; a window opens for each
+  chat with news.
 
 ## Features
 

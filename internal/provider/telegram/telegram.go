@@ -31,6 +31,8 @@ type Client interface {
 	Edit(ctx context.Context, chatID, msgID, text string) error
 	Delete(ctx context.Context, chatID, msgID string) error
 	MarkRead(ctx context.Context, chatID, msgID string) error
+	MarkUnread(ctx context.Context, chatID string, unread bool) error
+	Members(ctx context.Context, chatID string) ([]domain.Participant, error)
 }
 
 // Provider adapts a Client to provider.Provider.
@@ -138,6 +140,22 @@ func (p *Provider) MarkRead(ctx context.Context, chatID, msgID string) error {
 		return fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
 	}
 	return p.client.MarkRead(ctx, chatID, msgID)
+}
+
+// MarkUnread implements provider.Provider: the chat's unread mark.
+func (p *Provider) MarkUnread(ctx context.Context, chatID string, unread bool) error {
+	if p.client == nil {
+		return fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
+	}
+	return p.client.MarkUnread(ctx, chatID, unread)
+}
+
+// Members implements provider.MemberLister: a group's member list.
+func (p *Provider) Members(ctx context.Context, chatID string) ([]domain.Participant, error) {
+	if p.client == nil {
+		return nil, fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
+	}
+	return p.client.Members(ctx, chatID)
 }
 
 // Recent implements provider.Provider.

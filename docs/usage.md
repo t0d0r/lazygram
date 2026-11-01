@@ -46,8 +46,9 @@ embed, which wins over the one shipped in the source; delete
 It works like BitchX/irssi, down to the banner at start and the parting
 one at exit (one of several faces, at random), both rolling in line by
 line like a terminal on a slow serial line. Window 0 is the server window:
-every chat interleaved by time as `HH:MM #chat <sender> text`, plus `-!-`
-notices. A window bar above the input lists every window as `[N:name]`.
+what every chat brings while lazygram runs, interleaved by time as
+`HH:MM #chat <sender> text`, plus `-!-` notices; older messages from the
+cache show in each chat's own window. A window bar above the input lists every window as `[N:name]`.
 Open windows, the current one and each window's Enter-sends setting are
 remembered across restarts. On exit lazygram prints the session statistics
 (time wasted, messages, windows, commands) and, for a release build, a hint
@@ -55,22 +56,23 @@ when a newer release exists; `/about` shows version, author and build.
 When a chat gets a message (or has unread messages at start) a window opens
 for it; the status line shows `[Act: 2,3]` for windows with unread. People
 are `@name`, groups and channels are `#name`. lazygram shows what arrives
-while it runs; opening a chat's window fetches its last 10 messages, and
+while it runs; opening a chat's window fetches its last 10 messages (100
+in a group whose cached messages still lack their senders' usernames), and
 `/last N` fetches more.
 
 ## Commands
 
 | command                    | action                                        |
 |----------------------------|-----------------------------------------------|
-| `/list [text]`             | selectable chat list; Enter opens the window; Left/Right pick `[read]` or `[unread]` for the row, Enter applies it; `--show-deleted` includes deleted accounts |
+| `/list [text]`             | selectable chat list; Enter opens the window; Left/Right pick `[read]` or `[unread]` for the row, Enter applies it and tells Telegram once (a read receipt, or the "marked as unread" flag), whatever `/read-receipts` says; `--show-deleted` includes deleted accounts |
 | `/win N`                   | switch to window N (0 is the server window)   |
 | `/move N`                  | move this window to position N                |
 | `/win @user`, `/win #chan` | open or switch to that chat's window          |
-| `/win`, `/win list`        | selectable list of the open windows; Left/Right pick `[read]`, `[unread]` or `[close]` for the row, Enter applies it |
+| `/win`, `/win list`        | selectable list of the open windows; Left/Right pick `[read]`, `[unread]` or `[close]` for the row, Enter applies it (`[read]` and `[unread]` tell Telegram once, as in `/list`) |
 | `/close [N]`               | close a window                                |
 | `/last [N]`                | fetch the last N messages of this chat        |
 | `/search [text]`           | page through this chat's local history        |
-| `/whois [name]`            | what is known about a chat                    |
+| `/whois [name]`            | what is known about a chat; in a group or channel window, about one of its members (Tab offers only its `@nicks`) |
 | `/stats`                   | client statistics                             |
 | `/me <text>`               | send an action line (`* you waves`)           |
 | `/msg <@user|#chan> <text>` | send to a chat, opening its window if needed |
@@ -85,7 +87,7 @@ while it runs; opening a chat's window fetches its last 10 messages, and
 | `/mouse`                   | mouse reporting on/off (off: the terminal's own drag selects; or hold Shift/Option while dragging) |
 | `/clip [mode]`             | where a mouse selection is copied: `auto` (terminal and system tool), `osc52`, `tool`, `off`; no argument shows the mode (see [clipboard.md](clipboard.md)) |
 | `/read-receipts [on\|off]` | read receipts: off by default (kept); on tells Telegram a chat was read when you focus its window with unread messages; no argument shows the setting |
-| `/mark-as-read`            | one read receipt for this window's chat, now, whatever `/read-receipts` says |
+| `/mark-as-read`            | one read receipt for this window's chat, now, whatever `/read-receipts` says; clears its "marked as unread" flag too |
 | `/redraw`, `/clear`        | drop notices, help text and pictures from this window; messages stay |
 | `/refresh`, `/help`, `/quit` | sync now; print the command list, with every short form, into the server window (it ends by naming `/keys`); leave |
 | `/keys`                    | print the keyboard shortcuts into the server window |
@@ -106,11 +108,36 @@ the token or `/open` and the picture is painted inside the window from
 memory (nothing is written to disk); `/open out` opens it in the system
 viewer instead.
 
+## Members of groups and channels
+
+In a group or channel window, Tab completes its nicks: after `/whois` and
+in the text you type (`thanks @al` Tab -> `thanks @alan`). It always fills
+in `@username`, so Telegram notifies them, and part of a display name
+finds the username too, in Cyrillic or Latin (`hi iv` -> `hi @ivan_p` for
+Иван Петров). `/win`, `/msg` and the other commands keep completing every
+chat. People without a Telegram username are not offered in text, because
+a message cannot @-mention them; after `/whois` Tab offers them by name.
+`/whois alan` there describes the member: their username, how many of the
+known messages are theirs and mention them, and their private chat if you
+have one.
+
+The members are the group's member list, which lazygram asks Telegram
+for when the window first opens (`-!- member list: N members`), plus the
+people seen writing and the `@usernames` mentioned, this session or in
+the cached messages loaded at start. When the admins hid the member list,
+and in broadcast channels, whose subscribers only admins see, only the
+people seen writing or mentioned are known; `/last 50` fetches more
+history and with it more names. Messages cached by an older
+lazygram have no usernames; they learn them when Telegram sends them
+again: opening a group window fetches its last 100 messages while some
+lack them, and `/last 100` does the same at any time. A second Tab lists
+the candidates separated by commas.
+
 ## Keys
 
 | key                 | action                                             |
 |---------------------|----------------------------------------------------|
-| Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash: commands, chats, themes, `/open out`, attachment message ids and the chat's ten most recent links, `/win list`, paths after `/send` |
+| Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash: commands, chats, themes, `/open out`, attachment message ids and the chat's ten most recent links, `/win list`, paths after `/send`; in a group or channel window, its `@nicks` after `/whois` and in message text (`@ad` -> `@ada`); names match in Cyrillic or Latin |
 | Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
 | Alt-0 .. Alt-9      | window 0 .. 9 (Esc then the digit works too)       |
 | Up / Down           | input history (commands and sent lines; a recalled line is input again: Ctrl-X sends it, Enter runs it when it starts with `/`) |

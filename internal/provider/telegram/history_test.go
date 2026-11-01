@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"github.com/gotd/td/tgerr"
 
 	"lazygram/internal/domain"
+	"lazygram/internal/provider"
 )
 
 // fakeAPI serves invented dialogs and a descending message list per peer.
@@ -34,6 +36,51 @@ type fakeAPI struct {
 
 	file      []byte // served by UploadGetFile
 	downloads int
+
+	fullChat    *tg.MessagesChatFull                  // served by MessagesGetFullChat
+	fullChannel *tg.MessagesChatFull                  // served by ChannelsGetFullChannel; nil: a visible list
+	pages       []tg.ChannelsChannelParticipantsClass // served by ChannelsGetParticipants, one per call
+	listErr     error                                 // returned by both member list calls
+	listCalls   []string                              // "full:<chat id>" or "participants:<offset>"
+	marks       []string                              // markDialogUnread calls as "<peer type>:<unread>"
+}
+
+func (f *fakeAPI) MessagesMarkDialogUnread(_ context.Context, r *tg.MessagesMarkDialogUnreadRequest) (bool, error) {
+	peer, _ := r.Peer.(*tg.InputDialogPeer)
+	f.marks = append(f.marks, fmt.Sprintf("%T:%v", peer.Peer, r.Unread))
+	return true, f.listErr
+}
+
+func (f *fakeAPI) ChannelsGetFullChannel(_ context.Context, ch tg.InputChannelClass) (*tg.MessagesChatFull, error) {
+	f.listCalls = append(f.listCalls, "fullchannel")
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	if f.fullChannel != nil {
+		return f.fullChannel, nil
+	}
+	return &tg.MessagesChatFull{FullChat: &tg.ChannelFull{CanViewParticipants: true}}, nil
+}
+
+func (f *fakeAPI) MessagesGetFullChat(_ context.Context, chatID int64) (*tg.MessagesChatFull, error) {
+	f.listCalls = append(f.listCalls, "full:"+strconv.FormatInt(chatID, 10))
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	return f.fullChat, nil
+}
+
+func (f *fakeAPI) ChannelsGetParticipants(_ context.Context, r *tg.ChannelsGetParticipantsRequest) (tg.ChannelsChannelParticipantsClass, error) {
+	f.listCalls = append(f.listCalls, "participants:"+strconv.Itoa(r.Offset))
+	if f.listErr != nil {
+		return nil, f.listErr
+	}
+	if len(f.pages) == 0 {
+		return &tg.ChannelsChannelParticipants{}, nil
+	}
+	page := f.pages[0]
+	f.pages = f.pages[1:]
+	return page, nil
 }
 
 func (f *fakeAPI) UploadGetFile(_ context.Context, r *tg.UploadGetFileRequest) (tg.UploadFileClass, error) {
@@ -683,5 +730,216 @@ func TestSendFileUsesTheUploader(t *testing.T) {
 	c.svc.upload = nil
 	if err := c.SendFile(context.Background(), "telegram:7", "a.png", []byte("x"), ""); err == nil {
 		t.Fatal("no uploader")
+	}
+}
+
+func TestConvertNamesTheSendingUser(t *testing.T) {
+	ents := collect([]tg.UserClass{
+		&tg.User{ID: 7, FirstName: "Test", LastName: "Person", Username: "tester"},
+		&tg.User{ID: 8, FirstName: "Gone", Deleted: true, Username: "gone"},
+	}, nil)
+	group := entity{id: -5, kind: kindGroup, title: "Group"}
+	m := convert("telegram:-5", group, tmsg(1, 0, "hi"), ents)
+	if m.Sender != "Test Person" || m.SenderID != "telegram:7" || m.SenderNick != "tester" {
+		t.Fatalf("group member: %+v", m)
+	}
+	unknown := tmsg(2, 0, "who")
+	unknown.FromID = &tg.PeerUser{UserID: 9} // not among the entities
+	if m := convert("telegram:-5", group, unknown, ents); m.SenderID != "telegram:9" || m.SenderNick != "" {
+		t.Fatalf("unknown user keeps the id only: %+v", m)
+	}
+	deleted := tmsg(3, 0, "bye")
+	deleted.FromID = &tg.PeerUser{UserID: 8}
+	if m := convert("telegram:-5", group, deleted, ents); m.SenderNick != "" {
+		t.Fatalf("a deleted account has no nick: %+v", m)
+	}
+	own := tmsg(4, 0, "mine")
+	own.Out = true
+	post := &tg.Message{ID: 5, Message: "news", PostAuthor: "editor", FromID: &tg.PeerChannel{ChannelID: 3}}
+	for _, x := range []*tg.Message{own, post} {
+		if m := convert("telegram:-5", group, x, ents); m.SenderID != "" || m.SenderNick != "" {
+			t.Fatalf("own message or channel post: %+v", m)
+		}
+	}
+}
+
+func TestDialogsCarryAChannelsOwnUsername(t *testing.T) {
+	chats, err := newService(newFakeAPI()).Dialogs(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	byTitle := map[string]domain.Chat{}
+	for _, c := range chats {
+		byTitle[c.Title] = c
+	}
+	if c := byTitle["Test Channel"]; c.Username != "testchan" {
+		t.Errorf("a channel's username: %+v", c)
+	}
+	if c := byTitle["Super Group"]; c.Username != "" {
+		t.Errorf("a group without one: %+v", c)
+	}
+	if c := byTitle["Test Person"]; c.Username != "" || c.Alias != "testperson" {
+		t.Errorf("a person's username stays in the alias: %+v", c)
+	}
+}
+
+func TestMembersOfABasicGroup(t *testing.T) {
+	f := newFakeAPI()
+	f.fullChat = &tg.MessagesChatFull{
+		FullChat: &tg.ChatFull{ID: 5, Participants: &tg.ChatParticipants{ChatID: 5, Participants: []tg.ChatParticipantClass{
+			&tg.ChatParticipantCreator{UserID: 7}, &tg.ChatParticipant{UserID: 8, InviterID: 7},
+			&tg.ChatParticipant{UserID: 1}, &tg.ChatParticipant{UserID: 13}, // self and a deleted account
+		}}},
+		Users: []tg.UserClass{
+			&tg.User{ID: 7, FirstName: "Test", LastName: "Person", Username: "testperson"},
+			&tg.User{ID: 8, FirstName: "Quiet"},
+			&tg.User{ID: 1, Self: true, FirstName: "Me"},
+			&tg.User{ID: 13, Deleted: true},
+		},
+	}
+	got, err := newService(f).Members(context.Background(), "telegram:-5")
+	if err != nil || len(got) != 2 || f.listCalls[0] != "full:5" {
+		t.Fatalf("%+v %v %v", got, err, f.listCalls)
+	}
+	if got[0] != (domain.Participant{ID: "telegram:7", Name: "Test Person", Nick: "testperson"}) ||
+		got[1] != (domain.Participant{ID: "telegram:8", Name: "Quiet"}) {
+		t.Fatalf("%+v", got)
+	}
+}
+
+func TestMembersOfASupergroupPageByPage(t *testing.T) {
+	f := newFakeAPI()
+	page := func(from, n int) *tg.ChannelsChannelParticipants {
+		p := &tg.ChannelsChannelParticipants{Count: 1500}
+		for i := from; i < from+n; i++ {
+			p.Participants = append(p.Participants, &tg.ChannelParticipant{UserID: int64(100 + i)})
+			p.Users = append(p.Users, &tg.User{ID: int64(100 + i), FirstName: "M" + strconv.Itoa(i)})
+		}
+		p.Users = append(p.Users, &tg.User{ID: 99, FirstName: "Inviter"}) // mentioned, not a member
+		p.Participants = append(p.Participants, &tg.ChannelParticipantLeft{Peer: &tg.PeerUser{UserID: 98}})
+		for len(p.Participants) < membersPage && n >= membersPage-30 { // a full page: the rest removed
+			p.Participants = append(p.Participants, &tg.ChannelParticipantBanned{Peer: &tg.PeerUser{UserID: 97}, Left: true})
+		}
+		return p
+	}
+	for i := 0; i < 6; i++ {
+		f.pages = append(f.pages, page(i*membersPage, membersPage-30))
+	}
+	got, err := newService(f).Members(context.Background(), "telegram:-1000000000012")
+	if err != nil || len(got) != maxMembers {
+		t.Fatalf("up to the cap: %d %v", len(got), err)
+	}
+	if len(f.listCalls) != 7 || f.listCalls[0] != "fullchannel" || f.listCalls[2] != "participants:200" {
+		t.Fatalf("six pages, each offset by the entries before it: %v", f.listCalls)
+	}
+	for _, p := range got {
+		if p.Name == "Inviter" {
+			t.Fatal("an inviter is no member")
+		}
+	}
+	short := newFakeAPI()
+	short.pages = []tg.ChannelsChannelParticipantsClass{page(0, 3)}
+	if got, err := newService(short).Members(context.Background(), "telegram:-1000000000012"); err != nil || len(got) != 3 || len(short.listCalls) != 2 {
+		t.Fatalf("a short page is the last: %d %v %v", len(got), err, short.listCalls)
+	}
+}
+
+func TestMembersHiddenOrRefused(t *testing.T) {
+	f := newFakeAPI()
+	s := newService(f)
+	if _, err := s.Members(context.Background(), "telegram:-1000000000009"); !errors.Is(err, provider.ErrMembersHidden) || len(f.listCalls) != 0 {
+		t.Fatalf("a broadcast channel is not asked: %v %v", err, f.listCalls)
+	}
+	f.listErr = tgerr.New(403, "CHAT_ADMIN_REQUIRED")
+	if _, err := s.Members(context.Background(), "telegram:-1000000000012"); !errors.Is(err, provider.ErrMembersHidden) {
+		t.Fatalf("admins only: %v", err)
+	}
+	f.listErr = errors.New("network down")
+	if _, err := s.Members(context.Background(), "telegram:-5"); err == nil || errors.Is(err, provider.ErrMembersHidden) || !strings.Contains(err.Error(), "network down") {
+		t.Fatalf("other errors pass: %v", err)
+	}
+	if _, err := s.Members(context.Background(), "telegram:7"); err == nil {
+		t.Fatal("a person has no member list")
+	}
+}
+
+func TestMarkReadWithoutAnIDUsesTheTopMessage(t *testing.T) {
+	f := newFakeAPI()
+	s := newService(f)
+	ctx := context.Background()
+	if err := s.MarkRead(ctx, "telegram:7", ""); err == nil {
+		t.Fatal("no top message known yet: an error, nothing sent")
+	}
+	f.fill(10)
+	if _, err := s.History(ctx, time.Time{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkRead(ctx, "telegram:7", ""); err != nil || len(f.read) != 1 || f.read[0] != "messages:10" {
+		t.Fatalf("up to the dialog's top message: %v %v", err, f.read)
+	}
+}
+
+func TestMarkUnreadSetsAndClearsTheMark(t *testing.T) {
+	f := newFakeAPI()
+	s := newService(f)
+	ctx := context.Background()
+	if err := s.MarkUnread(ctx, "telegram:7", true); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.MarkUnread(ctx, "telegram:-1000000000012", false); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(f.marks, ",") != "*tg.InputPeerUser:true,*tg.InputPeerChannel:false" {
+		t.Fatalf("marks: %v", f.marks)
+	}
+	if err := s.MarkUnread(ctx, "telegram:404", true); err == nil {
+		t.Fatal("an unknown chat is an error")
+	}
+}
+
+func TestMembersOfAHiddenSupergroup(t *testing.T) {
+	hidden := func(chats ...tg.ChatClass) *tg.MessagesChatFull {
+		return &tg.MessagesChatFull{FullChat: &tg.ChannelFull{CanViewParticipants: true, ParticipantsHidden: true}, Chats: chats}
+	}
+	f := newFakeAPI()
+	f.fullChannel = hidden(&tg.Channel{ID: 12, Megagroup: true})
+	if _, err := newService(f).Members(context.Background(), "telegram:-1000000000012"); !errors.Is(err, provider.ErrMembersHidden) || len(f.listCalls) != 1 {
+		t.Fatalf("hidden from a member: %v %v", err, f.listCalls)
+	}
+	admin := &tg.Channel{ID: 12, Megagroup: true}
+	admin.SetAdminRights(tg.ChatAdminRights{BanUsers: true})
+	f = newFakeAPI()
+	f.fullChannel = hidden(admin)
+	f.pages = []tg.ChannelsChannelParticipantsClass{&tg.ChannelsChannelParticipants{
+		Participants: []tg.ChannelParticipantClass{
+			&tg.ChannelParticipant{UserID: 7},
+			&tg.ChannelParticipantBanned{Peer: &tg.PeerUser{UserID: 8}},              // muted: still a member
+			&tg.ChannelParticipantBanned{Peer: &tg.PeerUser{UserID: 13}, Left: true}, // removed
+		},
+		Users: []tg.UserClass{&tg.User{ID: 7, FirstName: "A"}, &tg.User{ID: 8, FirstName: "B"}, &tg.User{ID: 13, FirstName: "C"}},
+	}}
+	got, err := newService(f).Members(context.Background(), "telegram:-1000000000012")
+	if err != nil || len(got) != 2 || got[1].ID != "telegram:8" {
+		t.Fatalf("an admin reads a hidden list, muted members included: %+v %v", got, err)
+	}
+	f = newFakeAPI()
+	f.fullChannel = &tg.MessagesChatFull{FullChat: &tg.ChannelFull{}}
+	if _, err := newService(f).Members(context.Background(), "telegram:-1000000000012"); !errors.Is(err, provider.ErrMembersHidden) {
+		t.Fatalf("cannot view participants: %v", err)
+	}
+}
+
+func TestDialogsCountAChatMarkedUnread(t *testing.T) {
+	f := newFakeAPI()
+	f.extraChats = []tg.ChatClass{&tg.Chat{ID: 77, Title: "Marked Group"}}
+	f.extraDialogs = []tg.DialogClass{&tg.Dialog{Peer: &tg.PeerChat{ChatID: 77}, UnreadMark: true}}
+	chats, err := newService(f).Dialogs(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range chats {
+		if c.Title == "Marked Group" && c.Unread != 1 {
+			t.Fatalf("a chat marked unread counts one unread: %+v", c)
+		}
 	}
 }

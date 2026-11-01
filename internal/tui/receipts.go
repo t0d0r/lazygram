@@ -15,15 +15,25 @@ import (
 // read itself: when a window with unread messages is focused (switchTo).
 // Nothing is sent for opening a list, filtering, searching, a message
 // arriving in the window already shown, or a window without unread
-// messages. /mark-as-read sends one receipt for the current window's chat
-// on request, whatever the setting says, and changes nothing about it.
-// A receipt covers the newest message lazygram holds for the chat, so
-// messages it has not shown stay unread at the service.
+// messages. /mark-as-read and the [read] button of /list and /win send one
+// receipt for that chat on request, whatever the setting says, and change
+// nothing about it; they also clear the chat's unread mark, and [unread]
+// sets it. A receipt covers the newest message lazygram holds for the
+// chat, so messages it has not shown stay unread at the service; a [read]
+// for a chat with no message held covers the service's newest.
 
-// readMsg is the outcome of one receipt; manual says /mark-as-read asked.
+// readMsg is the outcome of one receipt; manual says the user asked for
+// it, markErr is the outcome of clearing the unread mark with it.
 type readMsg struct {
+	chatID  string
+	manual  bool
+	err     error
+	markErr error
+}
+
+// unreadMsg is the outcome of setting a chat's unread mark.
+type unreadMsg struct {
 	chatID string
-	manual bool
 	err    error
 }
 
@@ -32,7 +42,7 @@ type readMsg struct {
 func (m *Model) readReceipts(arg string) {
 	switch strings.ToLower(strings.TrimSpace(arg)) {
 	case "":
-		state := "off: nothing is reported to the service"
+		state := "off: focusing a window reports nothing (/mark-as-read and the list buttons still report on request)"
 		if m.receipts {
 			state = "on: focusing a window with unread messages reports it read"
 		}
@@ -44,7 +54,7 @@ func (m *Model) readReceipts(arg string) {
 	case "off":
 		m.receipts = false
 		_ = m.opt.Store.SetState(receiptsKey, false)
-		m.setInfo("read receipts off: nothing is reported")
+		m.setInfo("read receipts off: focusing a window reports nothing")
 	default:
 		m.setErr("/read-receipts takes on or off")
 	}
@@ -71,14 +81,57 @@ func (m *Model) markAsRead() (tea.Model, tea.Cmd) {
 		m.setErr("the server window has no chat; /win to a chat first")
 		return m, nil
 	}
-	cmd := m.receiptCmd(w.chatID, true)
-	if cmd == nil {
+	id, ok := m.newestID(w.chatID)
+	if !ok {
 		m.setErr("no message of " + m.nameOf(w.chatID) + " is known yet, nothing to report; /last fetches some")
 		return m, nil
 	}
 	w.unread = 0
 	m.setInfo("reporting " + m.nameOf(w.chatID) + " read...")
-	return m, cmd
+	return m, m.report(w.chatID, "read", id)
+}
+
+// Requested reports (/mark-as-read, [read], [unread]) for one chat go to
+// the service one at a time, in the order asked: while one is on its way
+// the latest further request for that chat waits, and earlier waiting ones
+// are dropped, so the last press decides what the service ends with.
+type pendingReport struct{ act, id string }
+
+// report sends act ("read" or "unread") for chatID now, or queues it when a
+// report for that chat is on its way. id is the read limit: a message id,
+// or "" for the service's newest. Nil for the server window.
+func (m *Model) report(chatID, act, id string) tea.Cmd {
+	if chatID == "" {
+		return nil
+	}
+	if m.reporting[chatID] {
+		m.reportNext[chatID] = pendingReport{act, id}
+		return nil
+	}
+	m.reporting[chatID] = true
+	p := m.opt.Provider
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if act == "unread" {
+			return unreadMsg{chatID: chatID, err: p.MarkUnread(ctx, chatID, true)}
+		}
+		// Both even when one fails: the mark needs no message.
+		err := p.MarkRead(ctx, chatID, id)
+		return readMsg{chatID: chatID, manual: true, err: err, markErr: p.MarkUnread(ctx, chatID, false)}
+	}
+}
+
+// reported is called when a requested report came back: the next waiting
+// request for the chat, if any, goes now.
+func (m *Model) reported(chatID string) tea.Cmd {
+	delete(m.reporting, chatID)
+	next, ok := m.reportNext[chatID]
+	if !ok {
+		return nil
+	}
+	delete(m.reportNext, chatID)
+	return m.report(chatID, next.act, next.id)
 }
 
 // receiptCmd reports chatID read up to the newest message lazygram holds

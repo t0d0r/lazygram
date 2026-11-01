@@ -166,9 +166,21 @@ type Model struct {
 	syncing  bool
 	loading  map[string]bool // chat ids with a Recent fetch in flight
 	lastSync time.Time
-	status   string
-	isErr    bool
-	quitting bool
+	// The member lists of groups, asked once a session when the window is
+	// first shown; kept in memory only.
+	listed     map[string][]domain.Participant
+	listAsked  map[string]bool
+	listHidden map[string]bool
+	// live holds the keys of the messages that arrived during this
+	// session; the server window shows only those, the cache and fetched
+	// history stay in the chat windows.
+	live map[string]bool
+	// Requested read reports in flight, and the next one waiting, per chat.
+	reporting  map[string]bool
+	reportNext map[string]pendingReport
+	status     string
+	isErr      bool
+	quitting   bool
 }
 
 type (
@@ -177,13 +189,18 @@ type (
 		err   error
 	}
 	syncedMsg struct {
-		fresh []domain.Message
-		err   error
-		at    time.Time
+		fresh, known []domain.Message // known: cached messages that learned their sender
+		err          error
+		at           time.Time
 	}
 	recentMsg struct {
+		chatID       string
+		fresh, known []domain.Message
+		err          error
+	}
+	memberListMsg struct {
 		chatID string
-		fresh  []domain.Message
+		list   []domain.Participant
 		err    error
 	}
 	sentMsg struct {
@@ -232,6 +249,8 @@ func New(opt Options) *Model {
 		opt.Open = opener.Open
 	}
 	m := &Model{opt: opt, width: 100, height: 30, loading: map[string]bool{}, visited: map[string]bool{},
+		listed: map[string][]domain.Participant{}, listAsked: map[string]bool{}, listHidden: map[string]bool{},
+		live: map[string]bool{}, reporting: map[string]bool{}, reportNext: map[string]pendingReport{},
 		wins: []*win{{}}, status: "type /help for commands", started: time.Now(), fx: true, rcache: &renderCache{},
 		now: time.Now, typing: domain.NewTypingState(domain.DefaultTypingTTL)}
 	if found, err := opt.Store.State(fxKey, &m.fx); !found || err != nil {
@@ -437,10 +456,11 @@ func (m *Model) syncCmd() tea.Cmd {
 		// A provider may return what it fetched before failing part-way, and
 		// its cursors already cover those messages: store them regardless.
 		fresh, addErr := st.Add(msgs)
+		known, idErr := st.Identify(msgs)
 		if err == nil {
-			err = addErr
+			err = errors.Join(addErr, idErr)
 		}
-		return syncedMsg{fresh: fresh, err: err, at: time.Now()}
+		return syncedMsg{fresh: fresh, known: known, err: err, at: time.Now()}
 	}
 }
 
@@ -455,7 +475,8 @@ func (m *Model) recentCmd(chatID string, n int) tea.Cmd {
 			return recentMsg{chatID: chatID, err: err}
 		}
 		fresh, err := st.Add(msgs)
-		return recentMsg{chatID: chatID, fresh: fresh, err: err}
+		known, idErr := st.Identify(msgs)
+		return recentMsg{chatID: chatID, fresh: fresh, known: known, err: errors.Join(err, idErr)}
 	}
 }
 
@@ -691,6 +712,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case syncedMsg:
 		m.syncing = false
 		m.lastSync = msg.at
+		m.identify(msg.known)
 		if len(msg.fresh) > 0 {
 			m.arrived(msg.fresh)
 		}
@@ -700,19 +722,29 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case len(msg.fresh) == 0:
 			// Nothing to say: a status that pops up every poll only flickers.
 		}
+	case memberListMsg:
+		m.gotMemberList(msg)
 	case recentMsg:
 		delete(m.loading, msg.chatID)
 		_, w := m.winFor(msg.chatID)
 		if w == nil {
 			w = m.wins[0]
 		}
+		// What the cache took is shown even when part of the work failed,
+		// as for a sync: a stored message is never fresh again.
+		empty := w.chatID != "" && len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})) == 0
+		m.identify(msg.known)
+		for _, x := range msg.fresh { // what a fetch brings first of this session's messages is live too
+			if !x.Time.Before(m.started) {
+				m.live[x.Key()] = true
+			}
+		}
+		m.absorb(msg.fresh)
 		if msg.err != nil {
 			m.fail("history for " + m.nameOf(msg.chatID) + ": " + errText(msg.err))
 			break
 		}
 		w.loaded = true
-		empty := w.chatID != "" && len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})) == 0
-		m.absorb(msg.fresh)
 		m.note(w, fmt.Sprintf("fetched %d older message(s)", len(msg.fresh)))
 		if empty && len(msg.fresh) > 0 { // a window's first content prints like at start-up
 			w.revealing, w.revealed = true, 0
@@ -818,9 +850,21 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		switch {
 		case msg.err != nil:
 			m.fail("read receipt for " + m.nameOf(msg.chatID) + ": " + errText(msg.err))
+		case msg.markErr != nil:
+			m.fail("unread mark for " + m.nameOf(msg.chatID) + ": " + errText(msg.markErr))
 		case msg.manual:
 			m.setInfo("reported " + m.nameOf(msg.chatID) + " read")
 		}
+		if msg.manual {
+			return m, m.reported(msg.chatID)
+		}
+	case unreadMsg:
+		if msg.err != nil {
+			m.fail("unread mark for " + m.nameOf(msg.chatID) + ": " + errText(msg.err))
+		} else {
+			m.setInfo("reported " + m.nameOf(msg.chatID) + " unread")
+		}
+		return m, m.reported(msg.chatID)
 	case sendLaterMsg:
 		if p := m.pending; p != nil && p.seq == msg.seq {
 			m.pending = nil
@@ -1011,9 +1055,29 @@ func (m *Model) absorb(fresh []domain.Message) {
 	}
 }
 
+// identify puts the sender ids and usernames that cached messages just
+// learned (Store.Identify) into the same messages in memory.
+func (m *Model) identify(known []domain.Message) {
+	if len(known) == 0 {
+		return
+	}
+	byKey := make(map[string]domain.Message, len(known))
+	for _, k := range known {
+		byKey[k.Key()] = k
+	}
+	for i := range m.msgs {
+		if k, ok := byKey[m.msgs[i].Key()]; ok {
+			m.msgs[i].SenderID, m.msgs[i].SenderNick = k.SenderID, k.SenderNick
+		}
+	}
+}
+
 // arrived handles messages that just came in: windows open for their chats
 // and activity is counted.
 func (m *Model) arrived(fresh []domain.Message) {
+	for _, msg := range fresh {
+		m.live[msg.Key()] = true
+	}
 	m.absorb(fresh)
 	m.typingSettled(fresh)
 	var order []int // windows that got something, in order of appearance
@@ -1153,8 +1217,12 @@ func (m *Model) switchTo(i int) tea.Cmd {
 		cmds = append(cmds, receipt)
 	}
 	if w.chatID != "" && !w.loaded && !m.loading[w.chatID] {
-		m.note(w, fmt.Sprintf("fetching the last %d messages", recentOnOpen))
-		cmds = append(cmds, m.recentCmd(w.chatID, recentOnOpen))
+		n := m.firstFetch(w.chatID)
+		m.note(w, fmt.Sprintf("fetching the last %d messages", n))
+		cmds = append(cmds, m.recentCmd(w.chatID, n))
+	}
+	if cmd := m.memberListCmd(w.chatID); cmd != nil {
+		cmds = append(cmds, cmd)
 	}
 	return tea.Batch(cmds...)
 }
@@ -1937,6 +2005,9 @@ func (m *Model) whois(arg string) {
 			return
 		}
 	} else {
+		if m.whoisMember(w, arg) {
+			return
+		}
 		var err error
 		if c, err = domain.ResolveChat(m.chats, arg); err != nil {
 			m.setErr(err.Error())
@@ -1964,6 +2035,23 @@ func (m *Model) whois(arg string) {
 		win = fmt.Sprintf("window %d", i)
 	}
 	m.note(w, fmt.Sprintf("  %s, %d messages this session, %d cached, %s", win, len(msgs), cached, last))
+	if arg == "" && c.Kind != domain.ChatUser {
+		ms, nicks := m.members(c.ID), 0
+		for _, mb := range ms {
+			if mb.Nick != "" {
+				nicks++
+			}
+		}
+		from := "the known messages"
+		switch {
+		case len(m.listed[c.ID]) > 0:
+			from = "the member list and the known messages"
+		case m.listHidden[c.ID]:
+			from = "the known messages; the member list is hidden"
+		}
+		m.note(w, fmt.Sprintf("  %d members known from %s, %d with an @username (in its window Tab offers those in text)",
+			len(ms), from, nicks))
+	}
 }
 
 // redraw implements /redraw: the window keeps its messages and loses
@@ -2123,12 +2211,40 @@ func (m *Model) complete() {
 			break
 		}
 	}
-	word := strings.ToLower(string(m.input[start:]))
 	var cands []string
 	shown := func(s string) string { return s } // how a listed candidate prints
+	sep := "  "                                 // between listed candidates
 	line := strings.ToLower(string(m.input[:start]))
 	fields := strings.Fields(line) // the words before the current one; may be empty
+	// In a group or channel window's own input (not a list filter or the
+	// pager's query) the argument of /whois (all of it: a display name may
+	// have spaces) and message text, /me's too, complete the chat's members
+	// instead of chat names; a # in front of the /whois argument still asks
+	// for a chat. The whole line, not just the part before the cursor,
+	// decides whether it is message text.
+	group, inGroup := m.groupChat()
+	inGroup = inGroup && m.mode == modeWin
+	whoisAt, whoisArg := commandArg(m.input, command.Whois)
+	whoisArg = whoisArg && inGroup && !strings.HasPrefix(string(m.input[whoisAt:]), "#")
+	meAt, meText := commandArg(m.input, command.Me)
+	text := inGroup && (meText || !strings.HasPrefix(string(m.input)+string(tail), "/"))
+	var members []domain.Member
+	if whoisArg || text {
+		members = m.members(group.ID) // once per Tab: it reads every message
+	}
 	switch {
+	case whoisArg:
+		start = whoisAt
+	case text && meText:
+		start = memberStart(members, m.input, meAt, start)
+	case text:
+		start = memberStart(members, m.input, 0, start)
+	}
+	word := strings.ToLower(string(m.input[start:]))
+	switch {
+	case whoisArg || text:
+		cands, shown = memberCandidates(members, string(m.input[start:]), whoisArg)
+		sep = ", " // display names have spaces
 	case start == 0 && strings.HasPrefix(word, "/"):
 		for _, n := range command.Names() {
 			if strings.HasPrefix(n, word) {
@@ -2209,9 +2325,9 @@ func (m *Model) complete() {
 			if c.Deleted {
 				continue
 			}
-			n := c.Name()
-			ok := strings.HasPrefix(strings.ToLower(n), word) ||
-				(word == bare && bare != "" && strings.HasPrefix(strings.ToLower(c.Alias), bare))
+			n := c.Name() // matched in either script: "iv" finds @иван-петров
+			ok := domain.PrefixMatch(n, word) ||
+				(word == bare && bare != "" && domain.PrefixMatch(c.Alias, bare))
 			if ok && !seen[n] {
 				seen[n] = true
 				cands = append(cands, n)
@@ -2228,7 +2344,7 @@ func (m *Model) complete() {
 		return
 	}
 	prefix := commonPrefix(cands)
-	if len([]rune(prefix)) > len(m.input)-start {
+	if extends(prefix, string(m.input[start:])) {
 		m.input = append(m.input[:start], []rune(prefix)...)
 		m.comp = &completion{word: prefix}
 		return
@@ -2238,11 +2354,23 @@ func (m *Model) complete() {
 		for i, c := range cands {
 			names[i] = shown(c)
 		}
-		m.note(m.wins[m.cur], strings.Join(names, "  "))
+		m.note(m.wins[m.cur], strings.Join(names, sep))
 		m.comp = nil
 		return
 	}
 	m.comp = &completion{word: prefix}
+}
+
+// extends reports whether the candidates' common prefix says more than
+// the typed word and still begins with it, sigils aside and in either
+// script: "Живк" extends "zhiv" and "#ne" extends "ne", but "@van" does not
+// extend "ив" when the members matched by their names, not their usernames.
+// Lengths compare in transliteration, so a Latin digraph (zh, sh) does not
+// make the typed word look longer than the Cyrillic prefix.
+func extends(prefix, typed string) bool {
+	bare := func(s string) string { return strings.TrimLeft(s, "@#") }
+	return len(domain.Translit(prefix)) > len(domain.Translit(typed)) &&
+		domain.PrefixMatch(bare(prefix), bare(typed))
 }
 
 // pathCandidates lists the local files and directories that start with
@@ -2338,11 +2466,25 @@ func (m *Model) phaseOpt() int {
 func (m *Model) richLines() ([]string, [][]span) {
 	w := m.wins[m.cur]
 	o := lineOpts{width: m.width, nameOf: m.nameOf, nameW: m.nameWidth(), showChat: w.chatID == "", phase: m.phaseOpt(), hover: m.hover, cache: m.rcache}
-	msgs := m.msgs
+	var msgs []domain.Message
 	if w.chatID != "" {
 		msgs = domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})
+	} else {
+		msgs = m.liveMsgs()
 	}
 	return renderRich(msgs, w.notes, o)
+}
+
+// liveMsgs are the messages that arrived during this session, every chat,
+// in order: what the server window shows.
+func (m *Model) liveMsgs() []domain.Message {
+	out := make([]domain.Message, 0, len(m.live))
+	for _, x := range m.msgs {
+		if m.live[x.Key()] {
+			out = append(out, x)
+		}
+	}
+	return out
 }
 
 // revealAll shows every window's content at once: snapshots and tests
@@ -2663,7 +2805,9 @@ func (m *Model) inputLine(prompt string) string {
 const keyHelp = `Keys
   Tab                    on an empty prompt: next window (Shift-Tab previous);
                          otherwise complete like bash: a command, a @user /
-                         #chan or a theme; Tab again lists the possibilities
+                         #chan or a theme (in a group or channel window its
+                         @nicks, in the text and after /whois); Tab again
+                         lists the possibilities
   Ctrl-X                 send the typed text to this chat (after a short pause),
                          as typed: a line starting with / goes out as a message,
                          never as a command (Enter runs commands); Enter then

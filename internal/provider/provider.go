@@ -22,6 +22,18 @@ type TypingSource interface {
 	Typing() <-chan domain.Typing
 }
 
+// ErrMembersHidden says a chat does not show its member list to this
+// account: a broadcast channel, whose subscribers only admins see, or a
+// group whose admins hid its members.
+var ErrMembersHidden = errors.New("member list not visible")
+
+// MemberLister is implemented by a service that can list a group's
+// members. Members returns them, without this account and deleted
+// accounts, or ErrMembersHidden. It may stop at a cap on large groups.
+type MemberLister interface {
+	Members(ctx context.Context, chatID string) ([]domain.Participant, error)
+}
+
 // Provider is a source of chats and messages.
 type Provider interface {
 	// Name is the service name, e.g. "demo" or "telegram".
@@ -51,7 +63,12 @@ type Provider interface {
 	// Delete removes one of this account's messages for everyone.
 	Delete(ctx context.Context, chatID, msgID string) error
 	// MarkRead tells the service that the chat was read up to and
-	// including message msgID: a read receipt. It is called only when
-	// the user turned read receipts on; off is the default.
+	// including message msgID, or up to its newest message at the service
+	// when msgID is empty: a read receipt. It is called only when the user
+	// turned read receipts on (off is the default) or asked for one.
 	MarkRead(ctx context.Context, chatID, msgID string) error
+	// MarkUnread sets (unread) or clears the chat's unread mark at the
+	// service, the "mark as unread" of the official apps. Called only when
+	// the user asks, once per request.
+	MarkUnread(ctx context.Context, chatID string, unread bool) error
 }

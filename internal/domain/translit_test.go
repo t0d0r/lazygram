@@ -119,3 +119,24 @@ func TestFilterSearchesBothScripts(t *testing.T) {
 		t.Fatalf("plain match still works: %v", got)
 	}
 }
+
+func TestPrefixMatch(t *testing.T) {
+	for _, c := range []struct {
+		s, prefix string
+		want      bool
+	}{
+		{"Иван Петров", "iv", true},
+		{"Иван Петров", "ИВ", true},
+		{"Ivan", "ив", true},
+		{"#новини", "#nov", true},
+		{"Жельо", "zh", true},
+		{"Иван Петров", "pet", false}, // a prefix, not a substring
+		{"Gracelyn", "grace ", false},
+		{"Grace Kelly", "grace ", true},
+		{"anything", "", true},
+	} {
+		if got := PrefixMatch(c.s, c.prefix); got != c.want {
+			t.Errorf("PrefixMatch(%q, %q) = %v", c.s, c.prefix, got)
+		}
+	}
+}

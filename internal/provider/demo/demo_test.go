@@ -3,12 +3,14 @@ package demo
 import (
 	"bytes"
 	"context"
+	"errors"
 	"image/png"
 	"strings"
 	"testing"
 	"time"
 
 	"lazygram/internal/domain"
+	"lazygram/internal/provider"
 )
 
 func TestSyncRevealsScriptOverTime(t *testing.T) {
@@ -173,5 +175,30 @@ func TestSendFileShowsUpAndFetchesBack(t *testing.T) {
 	}
 	if err := p.SendFile(context.Background(), "nope", "a.txt", nil, ""); err == nil {
 		t.Fatal("unknown chat")
+	}
+}
+
+func TestGroupMembersHaveNicks(t *testing.T) {
+	p := newAt(func() time.Time { return time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC) })
+	nicks := map[string]bool{}
+	for _, mb := range domain.Members(p.msgs, "demo-1") {
+		nicks[mb.Nick] = true
+	}
+	if !nicks["ada"] || !nicks["alan"] || !nicks["grace"] || len(nicks) != 3 {
+		t.Fatalf("#dev members: %v", nicks)
+	}
+	if ms := domain.Members(p.msgs, "demo-4"); len(ms) != 1 || ms[0].Nick != "" || ms[0].Name != "wire" {
+		t.Fatalf("#news has a signed author without a nick: %+v", ms)
+	}
+}
+
+func TestMembersList(t *testing.T) {
+	p := New()
+	dev, err := p.Members(context.Background(), "demo-1")
+	if err != nil || len(dev) != 5 || dev[3].Nick != "margaret_h" || dev[4].Nick != "" {
+		t.Fatalf("#dev: %+v %v", dev, err)
+	}
+	if _, err := p.Members(context.Background(), "demo-4"); !errors.Is(err, provider.ErrMembersHidden) {
+		t.Fatalf("the channel hides its subscribers: %v", err)
 	}
 }

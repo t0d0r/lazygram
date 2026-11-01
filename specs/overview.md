@@ -5,9 +5,9 @@ Telegram first, feature goals inspired by nchat.
 
 ## Window model
 
-The UI follows BitchX/irssi. Window 1 is the server window: every chat
-merged into ONE chronological timeline, each line with time, chat name,
-sender and text, plus client notices. A window opens for a chat when a
+The UI follows BitchX/irssi. Window 0 is the server window: what every
+chat brings during the session merged into ONE chronological timeline,
+each line with time, chat name, sender and text, plus client notices. A window opens for a chat when a
 message arrives for it or it has unread messages, and `/win` switches
 between windows; people are `@name`, groups and channels `#name`; Tab
 completes names and commands. Like an IRC client, lazygram shows what

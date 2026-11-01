@@ -263,3 +263,43 @@ func TestDelete(t *testing.T) {
 		t.Fatal("deleting an unknown message is fine")
 	}
 }
+
+func TestIdentifyAddsTheSenderOnly(t *testing.T) {
+	s := mustOpen(t, Memory, secret)
+	mustAdd(t, s, m("c", "1", 0, "cached text"), m("c", "2", 1, "other"))
+	fetched := m("c", "1", 0, "text as fetched")
+	fetched.SenderID, fetched.SenderNick = "u1", "nick"
+	unknown := m("c", "9", 2, "not cached")
+	unknown.SenderID = "u2"
+	plain := m("c", "2", 1, "no sender id") // nothing to learn
+	got, err := s.Identify([]domain.Message{fetched, unknown, plain})
+	if err != nil || len(got) != 1 || got[0].ID != "1" || got[0].Text != "cached text" || got[0].SenderNick != "nick" {
+		t.Fatalf("identified %+v, %v", got, err)
+	}
+	if again, err := s.Identify([]domain.Message{fetched}); err != nil || len(again) != 0 {
+		t.Fatalf("already known: %+v, %v", again, err)
+	}
+	renamed := fetched
+	renamed.SenderNick = ""
+	if again, err := s.Identify([]domain.Message{renamed}); err != nil || len(again) != 1 || again[0].SenderNick != "" {
+		t.Fatalf("a dropped username replaces the old one: %+v, %v", again, err)
+	}
+	all, err := s.Messages("c", 0)
+	if err != nil || len(all) != 2 || all[0].SenderID != "u1" || all[0].Text != "cached text" || all[1].SenderID != "" {
+		t.Fatalf("stored: %+v, %v", all, err)
+	}
+}
+
+func TestIdentifySkipsARowThatDoesNotOpen(t *testing.T) {
+	s := mustOpen(t, Memory, secret)
+	mustAdd(t, s, m("a", "1", 1, "x"), m("a", "2", 2, "y"))
+	if _, err := s.db.Exec(`UPDATE messages SET data = (SELECT data FROM messages WHERE id = '2') WHERE id = '1'`); err != nil {
+		t.Fatal(err)
+	}
+	one, two := m("a", "1", 1, "x"), m("a", "2", 2, "y")
+	one.SenderID, two.SenderID = "u1", "u2"
+	got, err := s.Identify([]domain.Message{one, two})
+	if err != nil || len(got) != 1 || got[0].ID != "2" || got[0].SenderID != "u2" {
+		t.Fatalf("the bad row is skipped, the good one learns its sender: %+v, %v", got, err)
+	}
+}

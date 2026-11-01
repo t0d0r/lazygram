@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"lazygram/internal/domain"
+	"lazygram/internal/provider"
 )
 
 // Provider serves a scripted conversation. Early lines are already in the
@@ -96,6 +97,9 @@ func newAt(now func() time.Time) *Provider {
 			Sender: l.sender,
 			Text:   l.text,
 			Time:   start.Add(l.offset),
+		}
+		if chats[l.chat].Kind == domain.ChatGroup { // group members have ids and usernames, like most on Telegram
+			m.SenderID, m.SenderNick = "demo-user-"+l.sender, l.sender
 		}
 		if l.sender == "demobot" {
 			m.Buttons = append([]domain.Button(nil), botButtons...)
@@ -233,9 +237,32 @@ func (p *Provider) Edit(_ context.Context, chatID, msgID, text string) error {
 	return fmt.Errorf("demo: no message %s in %s", msgID, chatID)
 }
 
+// Members implements provider.MemberLister: who is in the demo groups,
+// with margaret, who never writes, and barbara, who has no username, in
+// #dev; the channel hides its subscribers like any broadcast channel.
+func (p *Provider) Members(_ context.Context, chatID string) ([]domain.Participant, error) {
+	person := func(nick string) domain.Participant {
+		return domain.Participant{ID: "demo-user-" + nick, Name: nick, Nick: nick}
+	}
+	switch chatID {
+	case "demo-1":
+		return []domain.Participant{person("ada"), person("alan"), person("grace"),
+			{ID: "demo-user-margaret", Name: "margaret", Nick: "margaret_h"},
+			{ID: "demo-user-barbara", Name: "barbara"}}, nil
+	case "demo-2":
+		return []domain.Participant{person("grace"), person("ken"), person("dennis")}, nil
+	case "demo-4":
+		return nil, provider.ErrMembersHidden
+	}
+	return nil, fmt.Errorf("demo: %s is not a group", chatID)
+}
+
 // Delete implements provider.Provider for the account's own lines.
 // MarkRead implements provider.Provider: the demo has nobody to tell.
 func (p *Provider) MarkRead(context.Context, string, string) error { return nil }
+
+// MarkUnread implements provider.Provider: the demo keeps no marks.
+func (p *Provider) MarkUnread(context.Context, string, bool) error { return nil }
 
 func (p *Provider) Delete(_ context.Context, chatID, msgID string) error {
 	p.mu.Lock()

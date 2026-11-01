@@ -105,3 +105,12 @@ func (mt Matcher) Match(hay string) bool {
 // either script. An empty needle matches everything. Prefer a Matcher
 // when one query meets many texts.
 func MatchText(hay, needle string) bool { return NewMatcher(needle).Match(hay) }
+
+// PrefixMatch reports whether s starts with prefix, case-insensitively, as
+// typed or with both transliterated to Latin, for Tab completion: "iv"
+// completes a name written "Иван" and "сто" one written "Stoyan".
+// Spaces count ("grace " is no prefix of "Gracelyn"). As the mapping goes
+// rune by rune, a plain prefix is a transliterated one too.
+func PrefixMatch(s, prefix string) bool {
+	return strings.HasPrefix(Translit(s), Translit(prefix))
+}

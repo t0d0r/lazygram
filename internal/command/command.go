@@ -76,7 +76,7 @@ var table = map[string]Kind{
 	"redraw": Redraw, "clear": Redraw,
 	"keys": Keys, "shortcuts": Keys, "bindings": Keys,
 	"read-receipts": Receipts, "receipts": Receipts,
-	"mark-as-read": MarkRead, "markread": MarkRead,
+	"mark-as-read": MarkRead,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -131,7 +131,8 @@ const HelpText = `Commands
                          also /history, /hist
   /search [text]         page through this chat's local history;
                          also /find, /log
-  /whois [name]          what is known about a chat; also /wi, /info
+  /whois [name]          what is known about a chat, or in a group
+                         about one of its members; also /wi, /info
   /stats                 client statistics; also /uptime
   /me <text>             send an action line; also /action
   /msg <@user|#chan> <text>  send to that chat, opening its window;
@@ -168,5 +169,5 @@ const HelpText = `Commands
                          window with unread messages; off by default,
                          kept; no argument shows; also /receipts
   /mark-as-read          one receipt for this window's chat, now,
-                         whatever /read-receipts says; also /markread
+                         whatever /read-receipts says
 Keyboard shortcuts: type /keys.`

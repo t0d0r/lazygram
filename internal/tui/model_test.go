@@ -36,10 +36,20 @@ type fake struct {
 	picture   []byte   // what Fetch returns when set
 	sentFiles []string // SendFile calls as "chat:name:bytes:caption"
 	read      []string // MarkRead calls as "chat:msg"
+	marks     []string // MarkUnread calls as "chat:unread"
+	markErr   error    // returned by MarkUnread when set, instead of err
 }
 
 func (f *fake) MarkRead(_ context.Context, chatID, msgID string) error {
 	f.read = append(f.read, chatID+":"+msgID)
+	return f.err
+}
+
+func (f *fake) MarkUnread(_ context.Context, chatID string, unread bool) error {
+	f.marks = append(f.marks, fmt.Sprintf("%s:%v", chatID, unread))
+	if f.markErr != nil {
+		return f.markErr
+	}
 	return f.err
 }
 

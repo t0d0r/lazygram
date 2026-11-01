@@ -51,7 +51,7 @@ func TestParse(t *testing.T) {
 		{"/read-receipts on", Command{Receipts, "on"}, false},
 		{"/receipts", Command{Receipts, ""}, false},
 		{"/mark-as-read", Command{MarkRead, ""}, false},
-		{"/markread", Command{MarkRead, ""}, false},
+		{"/markread", Command{}, true}, // one spelling only
 		{"/redraw", Command{Redraw, ""}, false},
 		{"/clear", Command{Redraw, ""}, false},
 		{"/keys", Command{Keys, ""}, false},

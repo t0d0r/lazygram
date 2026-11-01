@@ -14,9 +14,10 @@ import (
 // (open a chat, focus a window), so with nothing chosen Enter does what
 // it always did. Read and unread keep the list open on the same row with
 // the same button, so Down, Enter repeats them down the list; close keeps
-// the list open too. Everything here is local, except that read follows
-// the read-receipt rule (receipts.go): with /read-receipts on, marking a
-// window with unread messages read reports it like a focus would.
+// the list open too. Read and unread change lazygram's counts and tell the
+// service once, whatever /read-receipts says (an explicit request, like
+// /mark-as-read): read sends a receipt and clears the chat's unread mark,
+// unread sets the mark (receipts.go). The server window tells nobody.
 
 // Action names; the first entry of each strip is the default.
 var (
@@ -73,13 +74,13 @@ func (m *Model) runListAction() (tea.Model, tea.Cmd) {
 			m.input, m.curBack = nil, 0
 			return m, m.switchTo(i)
 		case "read":
-			receipt := m.readCmd(w) // with read receipts on, reported like a focus; nil otherwise
 			w.unread = 0
-			m.setInfo("marked " + m.winName(i) + " read")
-			return m, receipt
+			m.setInfo("marked " + m.winName(i) + " read" + reporting(w.chatID))
+			return m, m.report(w.chatID, "read", "") // up to the service's newest: the cache may be behind
 		case "unread":
 			w.unread = max(w.unread, 1)
-			m.setInfo("marked " + m.winName(i) + " unread")
+			m.setInfo("marked " + m.winName(i) + " unread" + reporting(w.chatID))
+			return m, m.report(w.chatID, "unread", "")
 		case "close":
 			m.closeWin(i) // refuses window 0 with its own message
 			m.listCur = min(m.listCur, len(m.wins)-1)
@@ -102,23 +103,30 @@ func (m *Model) runListAction() (tea.Model, tea.Cmd) {
 		}
 		return m, m.switchTo(i)
 	case "read":
-		var receipt tea.Cmd
 		if w != nil {
-			receipt = m.readCmd(w) // with read receipts on, reported like a focus; nil otherwise
 			w.unread = 0
 		}
 		m.setChatUnread(c.ID, 0)
-		m.setInfo("marked " + m.nameOf(c.ID) + " read")
-		return m, receipt
+		m.setInfo("marked " + m.nameOf(c.ID) + " read" + reporting(c.ID))
+		return m, m.report(c.ID, "read", "")
 	case "unread":
 		if w == nil { // a window so that it shows in Act; the view stays where it is
 			_, w = m.openWin(c.ID)
 		}
 		w.unread = max(w.unread, 1)
 		m.setChatUnread(c.ID, max(c.Unread, 1))
-		m.setInfo("marked " + m.nameOf(c.ID) + " unread")
+		m.setInfo("marked " + m.nameOf(c.ID) + " unread" + reporting(c.ID))
+		return m, m.report(c.ID, "unread", "")
 	}
 	return m, nil
+}
+
+// reporting is the status suffix for a list action that tells the service.
+func reporting(chatID string) string {
+	if chatID == "" {
+		return ""
+	}
+	return ", telling the service..."
 }
 
 // setChatUnread changes a chat's unread count as the list shows it. The

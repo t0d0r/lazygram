@@ -13,12 +13,29 @@ type Provider interface {
     Edit(ctx, chatID, msgID, text string) error
     Delete(ctx, chatID, msgID string) error
     MarkRead(ctx, chatID, msgID string) error
+    MarkUnread(ctx, chatID string, unread bool) error
 }
 ```
 
+`provider.MemberLister` is optional: a provider that can list a group's
+members implements `Members(ctx, chatID) ([]domain.Participant, error)`
+(each person's own chat id, display name and username, without the
+account itself and deleted accounts), or returns
+`provider.ErrMembersHidden` when the chat does not show its list to the
+account. The TUI asks once a session per group (specs/ui.md, Members).
+
+`MarkRead` with an empty message id reports up to the chat's newest
+message at the service (Telegram: the dialog's top message from the last
+dialog list; an error when none is known). `MarkUnread(chatID, unread)`
+sets or clears the chat's unread mark (Telegram: messages.markDialogUnread
+with an inputDialogPeer); the demo keeps no marks.
+
 `MarkRead` is a read receipt: the chat was read up to and including
-`msgID`. The TUI calls it only with read receipts on, or on
-`/mark-as-read` (specs/ui.md); a provider that cannot report reads
+`msgID`. The TUI calls it with read receipts on (on focus), and on an
+explicit request: `/mark-as-read`, the `[read]` button of `/list` and
+`/win` (specs/ui.md); `MarkUnread` only on those requests and
+`[unread]`. A dialog marked unread (`unread_mark`) with no unread
+messages is reported as `Chat.Unread` 1; a provider that cannot report reads
 returns an error.
 
 `Chats` returns every chat with its kind (user, group, channel), alias,
@@ -46,7 +63,11 @@ Offline, synthetic, no network. Two groups (`#dev`, `#ops`), one person
 opens at start). Anchored to start time: older lines are already in the
 past and replayed by the first Sync, later lines "arrive" over about 4
 minutes. `Recent` serves the chat's past lines; `Send` appends a line from
-`me` that the next `Sync` returns. `@demobot` asks a question with
+`me` that the next `Sync` returns. The group members' messages carry
+an id (`demo-user-<nick>`) as `SenderID` and their nick as `SenderNick`, so `/whois` and @-completion in `#dev` and
+`#ops` offer `@ada`, `@alan`, and so on. `Members` lists the two groups,
+`#dev` with `margaret` (`@margaret_h`), who never writes, and `barbara`,
+who has no username; `#news` hides its subscribers. `@demobot` asks a question with
 `Deploy`, `Hold` and a `Runbook` link; `Press` answers and edits the
 question. `@linus` sends one photo; `Fetch` draws a small PNG in memory for it. Started with `lazygram demo`; nothing
 is kept on disk.
@@ -184,7 +205,29 @@ inputMediaUploadedPhoto for image names, inputMediaUploadedDocument with
 the base name and mime type otherwise; 64 MiB cap). Service messages are skipped;
 media-only messages show as `[media]`. Sender: user name, else post author,
 else `me` for own messages, else the peer's name in private chats, else
-`channel`. A FLOOD_WAIT of up to 60s is slept once and the request retried;
+`channel`. A message from a user (`from_id` a peerUser, not an own
+message) also carries the sender's chat id, `telegram:<user id>` like
+their private chat, as `SenderID`, and their username as `SenderNick`
+when the user came with the message and is neither deleted nor the
+account itself; the TUI's group members are built from them (specs/ui.md,
+Members). Posts sent as a channel carry neither. A group's or channel's
+dialog carries its own public username as `Chat.Username` (empty for
+people, whose username is their alias, and for chats without one), so
+its own signature in its posts is not taken for a member. Member lists (`Members`): messages.getFullChat for a basic group, whose
+participants come whole; for a supergroup first channels.getFullChannel,
+because Telegram answers a non-admin of a group with hidden members with
+the admins and bots only, not an error: when the full info says the
+account cannot view participants, or `participants_hidden` and the
+channel entry shows the account neither creator nor admin, that is
+`provider.ErrMembersHidden`; otherwise channels.getParticipants with the
+recent filter, 200 a page, each page offset by the entries before it,
+until a short page or 1000 members. A broadcast channel is not asked
+(subscribers are for admins). CHAT_ADMIN_REQUIRED, CHANNEL_PRIVATE,
+CHAT_FORBIDDEN and a forbidden basic-group list are
+`provider.ErrMembersHidden`. Only participant entries count: an inviter
+the response mentions is no member; a restricted member
+(channelParticipantBanned that has not left, a muted user, say) is one;
+those who left or were removed, and entries about chats, are not. A FLOOD_WAIT of up to 60s is slept once and the request retried;
 longer waits surface as errors.
 
 Limits: messages come by polling only (the update stream serves typing

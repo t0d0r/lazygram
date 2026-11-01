@@ -171,9 +171,10 @@ func TestReadReceiptsSettingSurvivesRestart(t *testing.T) {
 	}
 }
 
-// TestListReadButtonFollowsTheReceiptRule: the [read] button of /win and
-// /list reports the chat like a focus does, with receipts on only.
-func TestListReadButtonFollowsTheReceiptRule(t *testing.T) {
+// TestListReadUnreadTellTheServiceOnce: the [read] and [unread] buttons
+// of /win and /list tell the service once per press, whatever
+// /read-receipts says, and leave the setting alone.
+func TestListReadUnreadTellTheServiceOnce(t *testing.T) {
 	f := newFake()
 	m := setup(t, f)
 	dev, w := m.winFor("c1")
@@ -184,22 +185,45 @@ func TestListReadButtonFollowsTheReceiptRule(t *testing.T) {
 	}
 	press(m, tea.KeyRight) // [read]
 	runAll(m, press(m, tea.KeyEnter))
-	if w.unread != 0 || len(f.read) != 0 {
-		t.Fatalf("receipts off: unread=%d read=%v", w.unread, f.read)
+	if w.unread != 0 || len(f.read) != 1 || f.read[0] != "c1:" || len(f.marks) != 1 || f.marks[0] != "c1:false" {
+		t.Fatalf("receipts off, [read] still reports, up to the service's newest (the cache may be behind): unread=%d read=%v marks=%v", w.unread, f.read, f.marks)
+	}
+	if !strings.Contains(m.status, "reported #dev read") || m.receipts || persistedOn(m) {
+		t.Fatalf("one report, the setting stays off: %q", m.status)
+	}
+	runAll(m, press(m, tea.KeyEnter)) // again: one more, on request
+	if len(f.read) != 2 {
+		t.Fatalf("each press reports: %v", f.read)
+	}
+	press(m, tea.KeyRight) // [unread]
+	runAll(m, press(m, tea.KeyEnter))
+	if w.unread != 1 || len(f.marks) != 3 || f.marks[2] != "c1:true" || !strings.Contains(m.status, "reported #dev unread") {
+		t.Fatalf("[unread] sets the mark: unread=%d marks=%v status=%q", w.unread, f.marks, m.status)
+	}
+	for m.listCur != 0 {
+		press(m, tea.KeyUp)
+	}
+	press(m, tea.KeyLeft) // [read] on the server window: nobody to tell
+	runAll(m, press(m, tea.KeyEnter))
+	if len(f.read) != 2 || len(f.marks) != 3 {
+		t.Fatalf("the server window tells nobody: read=%v marks=%v", f.read, f.marks)
 	}
 	press(m, tea.KeyEsc)
-	enter(m, "/read-receipts on")
-	w.unread = 2
-	want, _ := m.newestID("c1")
-	enter(m, "/list dev")
+	enter(m, "/list news") // #news: no message held, no window needed
 	press(m, tea.KeyRight) // [read]
 	runAll(m, press(m, tea.KeyEnter))
-	if w.unread != 0 || len(f.read) != 1 || f.read[0] != "c1:"+want || m.mode != modeList {
-		t.Fatalf("receipts on: unread=%d read=%v mode=%v", w.unread, f.read, m.mode)
+	if len(f.read) != 3 || f.read[2] != "c3:" {
+		t.Fatalf("a chat with nothing held reports up to the service's newest: %v", f.read)
 	}
-	runAll(m, press(m, tea.KeyEnter)) // nothing unread any more: nothing sent
-	if len(f.read) != 1 {
-		t.Fatalf("a second read sent: %v", f.read)
+	f.err = errors.New("boom")
+	runAll(m, press(m, tea.KeyEnter))
+	if !m.isErr || !strings.Contains(m.status, "read receipt for #news") {
+		t.Fatalf("an error is said: %q", m.status)
+	}
+	press(m, tea.KeyRight) // [unread]
+	runAll(m, press(m, tea.KeyEnter))
+	if !m.isErr || !strings.Contains(m.status, "unread mark for #news") {
+		t.Fatalf("an unread-mark error is said: %q", m.status)
 	}
 }
 
@@ -214,13 +238,16 @@ func TestMarkAsReadIsOneReceiptWhateverTheSetting(t *testing.T) {
 	_, w := m.winFor("c2")
 	w.unread = 3
 	want, _ := m.newestID("c2")
-	cmd := enter(m, "/markread")
+	cmd := enter(m, "/mark-as-read")
 	if cmd == nil || m.isErr || !strings.Contains(m.status, "reporting @alice read") || w.unread != 0 {
 		t.Fatalf("mark: cmd=%v status=%q unread=%d", cmd != nil, m.status, w.unread)
 	}
 	runAll(m, cmd)
 	if len(f.read) != 1 || f.read[0] != "c2:"+want || !strings.Contains(m.status, "reported @alice read") {
 		t.Fatalf("sent: %v status=%q", f.read, m.status)
+	}
+	if len(f.marks) != 1 || f.marks[0] != "c2:false" {
+		t.Fatalf("/mark-as-read clears the unread mark too: %v", f.marks)
 	}
 	if m.receipts || persistedOn(m) {
 		t.Fatal("the setting stays off and nothing is persisted")
@@ -245,5 +272,47 @@ func TestMarkAsReadIsOneReceiptWhateverTheSetting(t *testing.T) {
 	runAll(m, enter(m, "/mark-as-read"))
 	if !m.isErr || !strings.Contains(m.status, "read receipt for @alice") || len(f.read) != 3 {
 		t.Fatalf("error: %q %v", m.status, f.read)
+	}
+}
+
+// TestReportsGoInTheOrderAsked: a [read] and an [unread] pressed before
+// the first answer reach the service one after the other, the last press
+// last; failures of the receipt and of the mark are told apart.
+func TestReportsGoInTheOrderAsked(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	enter(m, "/list dev")
+	press(m, tea.KeyRight) // [read]
+	first := press(m, tea.KeyEnter)
+	press(m, tea.KeyRight) // [unread]
+	if cmd := press(m, tea.KeyEnter); cmd != nil {
+		t.Fatal("the second report waits for the first")
+	}
+	press(m, tea.KeyLeft) // [read] again: replaces the waiting [unread]
+	press(m, tea.KeyRight)
+	press(m, tea.KeyEnter) // [unread] once more: the last press decides
+	_, next := m.Update(first())
+	if next == nil {
+		t.Fatal("the answer sends the waiting report")
+	}
+	_, after := m.Update(next())
+	if after != nil {
+		t.Fatal("nothing else waits")
+	}
+	if strings.Join(f.marks, ",") != "c1:false,c1:true" || len(f.read) != 1 || !strings.Contains(m.status, "reported #dev unread") {
+		t.Fatalf("read, then the last press: marks=%v read=%v", f.marks, f.read)
+	}
+	f.read, f.marks = nil, nil
+	f.err = errors.New("no receipt")
+	f.markErr = nil
+	press(m, tea.KeyLeft) // [read]
+	runAll(m, press(m, tea.KeyEnter))
+	if len(f.marks) != 1 || f.marks[0] != "c1:false" || !strings.Contains(m.status, "read receipt for #dev: no receipt") {
+		t.Fatalf("the mark is cleared even when the receipt fails: %v %q", f.marks, m.status)
+	}
+	f.err, f.markErr = nil, errors.New("no mark")
+	runAll(m, press(m, tea.KeyEnter))
+	if !strings.Contains(m.status, "unread mark for #dev: no mark") {
+		t.Fatalf("a failed mark is said as such: %q", m.status)
 	}
 }

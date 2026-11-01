@@ -26,7 +26,15 @@ index messages(time), messages(chat_key, time)
 In clear: the service's message ids, timestamps (Unix nanoseconds), keyed
 hashes of chat ids, and row counts. That reveals activity volume and timing
 per (unidentifiable) chat and nothing else. Everything identifying (text,
-sender, chat id, alias, title, kind, unread) is inside `data`.
+sender, the sender's id and username, chat id, alias, title, kind, unread)
+is inside `data`. The sender's id and username are optional JSON fields
+(`sender_id`, `sender_nick`), so rows cached before they existed still
+decode. `Add` never overwrites a stored row; `Identify` is the one
+exception for these two fields: when a fetched copy of a stored message
+carries a sender id and its id or username differs from the stored one,
+the stored row is re-sealed with the new values and every other field as
+it was. A stored row that does not open or decode is skipped, so one bad
+row never fails the fetch around it.
 
 ## Keys
 
@@ -80,5 +88,6 @@ copies at exit; the vault copy stays. A download is capped at 64 MiB.
 ## Limits
 
 No compaction or size cap. The TUI mirrors the newest 2000 cached messages
-in memory at start; windows and `/search` work on that mirror plus what
-arrives during the session.
+in memory at start; the chat windows and `/search` work on that mirror
+plus what arrives during the session, while the server window shows only
+what arrives during the session (specs/ui.md).

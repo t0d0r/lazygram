@@ -229,6 +229,63 @@ func (s *Store) Add(msgs []domain.Message) ([]domain.Message, error) {
 	return fresh, nil
 }
 
+// Identify gives stored messages the sender id and username that a copy
+// fetched again carries. For each message in msgs with a SenderID whose
+// stored copy differs in SenderID or SenderNick, the stored copy gets those
+// two fields and nothing else: text, buttons and media stay as stored. It
+// returns the updated stored copies. Messages cached before the fields
+// existed learn their sender this way when the service sends them again,
+// and a changed username replaces the old one.
+func (s *Store) Identify(msgs []domain.Message) ([]domain.Message, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var out []domain.Message
+	for _, m := range msgs {
+		if m.SenderID == "" {
+			continue
+		}
+		ck := s.chatKey(m.ChatID)
+		var data []byte
+		switch err := tx.QueryRow(`SELECT data FROM messages WHERE chat_key = ? AND id = ?`, ck, m.ID).Scan(&data); {
+		case errors.Is(err, sql.ErrNoRows):
+			continue
+		case err != nil:
+			return nil, err
+		}
+		// A row that does not open or decode is left alone: learning a
+		// sender is opportunistic and must not fail the fetch around it.
+		plain, err := s.open(data, rowAAD(ck, m.ID))
+		if err != nil {
+			continue
+		}
+		var old domain.Message
+		if json.Unmarshal(plain, &old) != nil {
+			continue
+		}
+		if old.SenderID == m.SenderID && old.SenderNick == m.SenderNick {
+			continue
+		}
+		old.SenderID, old.SenderNick = m.SenderID, m.SenderNick
+		if plain, err = json.Marshal(old); err != nil {
+			return nil, err
+		}
+		if _, err := tx.Exec(`UPDATE messages SET data = ? WHERE chat_key = ? AND id = ?`,
+			s.seal(plain, rowAAD(ck, m.ID)), ck, m.ID); err != nil {
+			return nil, err
+		}
+		out = append(out, old)
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // Replace stores a message, overwriting the stored one with the same chat
 // and id (an edited bot message after a button press).
 func (s *Store) Replace(m domain.Message) error {
