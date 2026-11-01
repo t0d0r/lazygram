@@ -14,8 +14,9 @@ import (
 // (open a chat, focus a window), so with nothing chosen Enter does what
 // it always did. Read and unread keep the list open on the same row with
 // the same button, so Down, Enter repeats them down the list; close keeps
-// the list open too. Everything here is local: nothing is reported to the
-// service, so the account's read receipts are untouched.
+// the list open too. Everything here is local, except that read follows
+// the read-receipt rule (receipts.go): with /read-receipts on, marking a
+// window with unread messages read reports it like a focus would.
 
 // Action names; the first entry of each strip is the default.
 var (
@@ -72,8 +73,10 @@ func (m *Model) runListAction() (tea.Model, tea.Cmd) {
 			m.input, m.curBack = nil, 0
 			return m, m.switchTo(i)
 		case "read":
+			receipt := m.readCmd(w) // with read receipts on, reported like a focus; nil otherwise
 			w.unread = 0
 			m.setInfo("marked " + m.winName(i) + " read")
+			return m, receipt
 		case "unread":
 			w.unread = max(w.unread, 1)
 			m.setInfo("marked " + m.winName(i) + " unread")
@@ -99,11 +102,14 @@ func (m *Model) runListAction() (tea.Model, tea.Cmd) {
 		}
 		return m, m.switchTo(i)
 	case "read":
+		var receipt tea.Cmd
 		if w != nil {
+			receipt = m.readCmd(w) // with read receipts on, reported like a focus; nil otherwise
 			w.unread = 0
 		}
 		m.setChatUnread(c.ID, 0)
 		m.setInfo("marked " + m.nameOf(c.ID) + " read")
+		return m, receipt
 	case "unread":
 		if w == nil { // a window so that it shows in Act; the view stays where it is
 			_, w = m.openWin(c.ID)

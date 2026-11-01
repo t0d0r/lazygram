@@ -120,8 +120,10 @@ titles and notices are stripped of control characters before rendering.
   that window (window 0 refuses as `/close` does). Read, unread and
   close keep the list open on the same row with the same button, so
   Down, Enter repeats them down the list; the filter stays and the
-  action applies to the filtered selection. The counts are local:
-  nothing is reported to the service (no read receipts), and the next
+  action applies to the filtered selection. The counts are local: nothing
+  is reported to the service unless read receipts are on, in which case
+  `[read]` on a window with unread messages reports it like a focus
+  would (Read receipts); the next
   chats refresh (`/refresh`, a restart) brings the service's own count
   back into the `/list` row. In a list Left/Right no longer move the
   filter cursor; Backspace, Ctrl-U and typing still edit the filter.
@@ -430,9 +432,10 @@ windows or the cache.
 Off by default: lazygram reports nothing read to the service, whatever
 it shows. `/read-receipts on` (kept in the state store under
 `read_receipts`; absent or unreadable means off) makes lazygram report a
-chat read at the one moment it marks the chat read itself: when a window
+chat read at the moments it marks the chat read itself: when a window
 with unread messages is focused (`/win N`, `/win @name`, Alt-N, Ctrl-N,
-Tab, a click on the window bar or a list row). The report covers the
+Tab, a click on the window bar or a list row), or marked read with the
+`[read]` button of `/win` or `/list` (Modes). The report covers the
 newest message lazygram holds for the chat (`Provider.MarkRead` with that
 message id), so what lazygram has not shown stays unread at the service;
 with no message of the chat known yet nothing is sent. Nothing is sent

@@ -22,7 +22,8 @@ in a searchable pager. Feature goals are inspired by nchat.
   history, bash-style Tab completion (commands, chats, themes, paths)
 - Read receipts stay off unless you turn them on (`/read-receipts on`, or
   `/mark-as-read` for one chat): Telegram is told a chat was read only
-  when you focus its window with unread messages
+  when you focus its window with unread messages or mark it read in a
+  list
 - Who is typing: the status line says `ada is typing` or `ada and bob are
   recording` for the current chat (every chat in the server window), with
   a running light; nothing is ever reported back about you

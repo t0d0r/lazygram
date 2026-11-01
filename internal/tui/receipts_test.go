@@ -171,6 +171,38 @@ func TestReadReceiptsSettingSurvivesRestart(t *testing.T) {
 	}
 }
 
+// TestListReadButtonFollowsTheReceiptRule: the [read] button of /win and
+// /list reports the chat like a focus does, with receipts on only.
+func TestListReadButtonFollowsTheReceiptRule(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	dev, w := m.winFor("c1")
+	w.unread = 2
+	enter(m, "/win")
+	for m.listCur != dev {
+		press(m, tea.KeyDown)
+	}
+	press(m, tea.KeyRight) // [read]
+	runAll(m, press(m, tea.KeyEnter))
+	if w.unread != 0 || len(f.read) != 0 {
+		t.Fatalf("receipts off: unread=%d read=%v", w.unread, f.read)
+	}
+	press(m, tea.KeyEsc)
+	enter(m, "/read-receipts on")
+	w.unread = 2
+	want, _ := m.newestID("c1")
+	enter(m, "/list dev")
+	press(m, tea.KeyRight) // [read]
+	runAll(m, press(m, tea.KeyEnter))
+	if w.unread != 0 || len(f.read) != 1 || f.read[0] != "c1:"+want || m.mode != modeList {
+		t.Fatalf("receipts on: unread=%d read=%v mode=%v", w.unread, f.read, m.mode)
+	}
+	runAll(m, press(m, tea.KeyEnter)) // nothing unread any more: nothing sent
+	if len(f.read) != 1 {
+		t.Fatalf("a second read sent: %v", f.read)
+	}
+}
+
 func TestMarkAsReadIsOneReceiptWhateverTheSetting(t *testing.T) {
 	f := newFake()
 	m := setup(t, f)
