@@ -13,6 +13,15 @@ import (
 // ErrNotImplemented is returned by connectors that are present but inert.
 var ErrNotImplemented = errors.New("live connector not implemented")
 
+// TypingSource is implemented by a service that reports who is typing.
+// Typing returns the feed of reports; the service closes it when it shuts
+// down. A nil feed means the service reports nothing, and the caller must
+// not wait on it. Nothing is ever sent back: lazygram never reports its
+// own typing.
+type TypingSource interface {
+	Typing() <-chan domain.Typing
+}
+
 // Provider is a source of chats and messages.
 type Provider interface {
 	// Name is the service name, e.g. "demo" or "telegram".

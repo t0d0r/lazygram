@@ -176,10 +176,39 @@ else `me` for own messages, else the peer's name in private chats, else
 `channel`. A FLOOD_WAIT of up to 60s is slept once and the request retried;
 longer waits surface as errors.
 
-Limits: no update stream (polling only), no topics/forums, no edit/delete
-tracking, no reconnect, chats beyond the 100 most recent are not shown, the
-per-chat cursor is in memory only (a restart shows nothing until a chat
-gets a new message; `/last` fills in).
+Limits: messages come by polling only (the update stream serves typing
+reports, nothing else), no topics/forums, no edit/delete tracking, no
+reconnect, chats beyond the 100 most recent are not shown, the per-chat
+cursor is in memory only (a restart shows nothing until a chat gets a new
+message; `/last` fills in).
+
+### Typing
+
+`provider.TypingSource` is optional: `Typing() <-chan domain.Typing`
+returns a feed of reports (chat, member name, kind, time), closed when the
+service stops; nil means the service reports nothing. The Telegram
+connector registers an update dispatcher for `updateUserTyping` (private
+chats), `updateChatUserTyping` (basic groups) and `updateChannelUserTyping`
+(supergroups and channels) and ignores every other update. Actions fold
+into four kinds: typing; recording (audio, video, round video); uploading
+(photo, video, audio, document, round); choosing (sticker, contact,
+location, game); `cancel` is a stop. Live drafts (a bot or a user
+streaming a reply) count as typing and their stop as a stop; history
+imports, speaking in a group call and emoji interactions are not reports.
+The member's name comes from a registry of the users seen in dialog and
+history responses and in the update containers themselves (the same name
+messages show); a member never seen, or a channel posting as itself, is
+unnamed. gotd runs the update handler concurrently, one goroutine per
+received frame, so the handler never blocks and touches only the
+non-blocking feed and the locked name registry: the feed holds 64 reports
+and a report that does not fit is dropped (the next one renews it).
+Reports are not guaranteed to reach the TUI in the order they were
+received (typing updates carry no sequence number), so a stop can
+occasionally be applied before the start it follows; the six-second TTL
+then ends it. The feed is closed only after the client's Run has
+returned, which is after the read loop has waited for every handler, so
+no handler can write to a closed channel. Nothing is sent: the connector
+never calls `messages.setTyping`.
 
 ## Adding a service
 

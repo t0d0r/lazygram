@@ -50,6 +50,7 @@ type service struct {
 	files  downloader.Client                          // nil: attachments cannot be fetched
 	upload uploadFunc                                 // nil: files cannot be sent
 	wait   func(context.Context, time.Duration) error // sleeps; tests replace it
+	names  *names                                     // user names seen in responses, for typing reports; nil learns nothing
 
 	known map[string]entity // chat id -> entity, filled by Dialogs
 	top   map[string]int    // chat id -> top message id already fetched
@@ -83,6 +84,7 @@ func (s *service) dialogs(ctx context.Context) ([]dialog, error) {
 	default:
 		return nil, fmt.Errorf("telegram: unexpected dialogs response %T", res)
 	}
+	s.names.learn(ents)
 	var out []dialog
 	for _, dc := range rows {
 		d, ok := dc.(*tg.Dialog)
@@ -322,6 +324,7 @@ func (s *service) rawMessage(ctx context.Context, ent entity, id int) (*tg.Messa
 	}
 	raw, users := historyParts(res)
 	ents := collect(users, nil)
+	s.names.learn(ents)
 	for _, mc := range raw {
 		if m, ok := mc.(*tg.Message); ok && m.ID == id {
 			return m, ents, nil
@@ -385,6 +388,7 @@ func (s *service) chatHistory(ctx context.Context, id string, ent entity, stopID
 			break
 		}
 		ents := collect(users, nil)
+		s.names.learn(ents)
 		done := false
 		lowest := raw[0].GetID()
 		for _, mc := range raw {

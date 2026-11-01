@@ -366,6 +366,43 @@ typed and sent with Ctrl-X goes out as text, which the 600 ms hold and
 the status line make visible and a second Ctrl-X takes back. Send errors
 go to the status line and the window.
 
+## Typing indicators
+
+A service that reports who is composing (`provider.TypingSource`, the
+Telegram connector does) feeds `domain.TypingState`, which the TUI owns:
+one report per member and chat, good for six seconds (the official
+clients renew every five), renewed by the next report, ended by a stop
+report, by the member's message arriving through sync, or by the expiry.
+A member the service cannot name is `someone`; unnamed members of one
+chat share that single entry, which a message from a sender nobody
+reported by name also ends (the sender most likely is that member). The
+status line shows, between the activity list and the counters,
+`ada is typing`, `ada and bob are recording`, `ada, bob and 2 others are
+typing` (the verb is the common kind: typing, recording, uploading,
+choosing; `typing` when they differ) for the current chat window; the
+server window shows every chat among the listed dialogs, the earliest
+report first, each name with its chat: `ada (#dev) and someone (@alice)
+are typing`; a report for a chat lazygram does not list (beyond the 100
+most recent, or before the first dialog list arrived) is kept for its
+expiry but not shown. The indicator takes only the room the other
+segments leave: when the names do not fit it becomes `2 typing`, and
+when even that does not fit it is left out, so the counters never go. A
+running light crosses the verb, to the right then back (150 ms a step);
+it follows `/fx` like the lights over clickable text, and with the lights
+off the verb is plain.
+
+Two timers serve this, each armed only while needed: an expiry timer,
+armed once while any report is pending and re-armed by its own firing;
+the light's tick, armed only while the current window shows someone and
+the lights are on, and dropped by the first tick that finds nothing to
+light. The timers are armed again after every message the model handles,
+so a window switch, a closed window or `/fx` is followed at once. The
+reports are read one at a time from the service's feed by a command that
+re-arms itself; the service closes the feed when it stops, which ends
+the reads. Nothing is ever sent back: lazygram does not report its own
+typing. Decision: reports are state, not messages; they never enter the
+windows or the cache.
+
 ## Keys
 
 | key                  | action                                            |
@@ -437,9 +474,10 @@ and the status line shows `[scrolled up N lines]` in the same colour.
 
 ## Status line
 
-`time  provider  [N:name]  Act: ...  M msgs  sync state  scrolled up K lines`
+`time  provider  [N:name]  Act: ...  ada is typing  M msgs  sync state  scrolled up K lines`
 (brackets only around the window tag; two spaces between segments; the
-message and the send hint live on the rule above). The
+message and the send hint live on the rule above; the typing segment
+appears only while someone is composing, see Typing indicators). The
 sync segment keeps a fixed width and colour (`synced: HH:MM:SS` or
 `syncing HH:MM:SS` with the last completion time) and a poll that brings
 nothing changes no status text, so the line does not flicker every ten

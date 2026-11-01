@@ -46,6 +46,16 @@ func New(cfg config.Telegram, client Client) (*Provider, error) {
 	return &Provider{client: client}, nil
 }
 
+// Typing implements provider.TypingSource when the client reports typing
+// (the MTProto client does); otherwise the feed is nil and the caller must
+// not wait on it.
+func (p *Provider) Typing() <-chan domain.Typing {
+	if c, ok := p.client.(provider.TypingSource); ok {
+		return c.Typing()
+	}
+	return nil
+}
+
 // Close releases the underlying client when it has one.
 func (p *Provider) Close() error {
 	if c, ok := p.client.(io.Closer); ok {

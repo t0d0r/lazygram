@@ -99,5 +99,6 @@
 - [x] input cursor: Left/Right, Ctrl-A/E, Delete, Ctrl-K, Ctrl-W before the cursor; completion at the cursor (specs/ui.md)
 - [x] mouse drag selects text and copies it on release: OSC 52 in the frame plus a system tool, /clip modes kept, clicks act on release (specs/ui.md, docs/clipboard.md)
 - [ ] double click selects a word, triple a row; Shift-click extends (specs/ui.md)
+- [~] typing indicators: Telegram typing updates to domain.TypingState with expiry, status line with a running light (specs/ui.md, specs/providers.md; branch feature/typing-indicators)
 - [x] Ctrl-X sends a line starting with / as text, bypassing the command parser; Enter keeps running commands (specs/ui.md); released in v0.4.17 (assets verified against SHA256SUMS); formula and the Arch recipe still at 0.4.14
 - [x] release v0.4.15 with the mouse selection and the self-update refusal (v0.4.15 and v0.4.16 released 2026-10-31; formula still at 0.4.14)

@@ -20,6 +20,9 @@ in a searchable pager. Feature goals are inspired by nchat.
 - Sending: Ctrl-X sends, a double Ctrl-X makes Enter send per window,
   `/me`, `/msg`, `/edit` and `/delete` of your last message, input
   history, bash-style Tab completion (commands, chats, themes, paths)
+- Who is typing: the status line says `ada is typing` or `ada and bob are
+  recording` for the current chat (every chat in the server window), with
+  a running light; nothing is ever reported back about you
 - Bots: `/press` answers inline and reply buttons, link buttons are printed
 - Attachments: nothing downloads until you click or `/open`; files land in
   an encrypted vault, pictures are painted inside the terminal, `/open out`

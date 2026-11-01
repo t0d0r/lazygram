@@ -42,13 +42,20 @@ type MTProto struct {
 
 	mu  sync.Mutex // serializes use of svc
 	svc *service
+
+	typing *typingFeed // typing reports from the update stream
+	names  *names      // user names seen in responses, shared with svc
 }
 
 // NewClient prepares a client. No network connection is made until Connect
 // or the first call to Dialogs or History.
 func NewClient(cfg config.Telegram) *MTProto {
-	return &MTProto{cfg: cfg, ready: make(chan struct{})}
+	return &MTProto{cfg: cfg, ready: make(chan struct{}), typing: newTypingFeed(), names: newNames()}
 }
+
+// Typing is the feed of typing reports (provider.TypingSource). It closes
+// once the connection has stopped, after Close or a failure.
+func (c *MTProto) Typing() <-chan domain.Typing { return c.typing.feed() }
 
 // Connect establishes the connection and verifies the session is authorized.
 // Without a session file it fails fast with ErrNotLoggedIn and no network use.
@@ -72,6 +79,7 @@ func (c *MTProto) start() {
 	c.cancel = cancel
 	go func() {
 		err := c.run(runCtx)
+		c.typing.closeFeed() // no update handler runs once Run has returned
 		if c.svc == nil && c.failed == nil {
 			c.failed = err
 			close(c.ready)
@@ -80,7 +88,11 @@ func (c *MTProto) start() {
 }
 
 func (c *MTProto) run(ctx context.Context) error {
-	cl, err := newGotdClient(c.cfg, gotd.Options{})
+	// The update stream is listened to for typing reports only; everything
+	// else still comes through the polled history.
+	d := tg.NewUpdateDispatcher()
+	c.typing.register(d, c.names, time.Now)
+	cl, err := newGotdClient(c.cfg, gotd.Options{UpdateHandler: d})
 	if err != nil {
 		return err
 	}
@@ -94,6 +106,7 @@ func (c *MTProto) run(ctx context.Context) error {
 		}
 		raw := tg.NewClient(cl)
 		c.svc = newService(floodAPI{api: raw, sleep: sleepCtx})
+		c.svc.names = c.names
 		c.svc.files = raw
 		c.svc.upload = uploadWith(raw)
 		close(c.ready)

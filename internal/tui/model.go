@@ -131,6 +131,13 @@ type Model struct {
 	animOn  bool         // the last View showed something animated
 	rcache  *renderCache // rendered messages, reused across ticks
 
+	now          func() time.Time     // the clock the typing state runs on; tests replace it
+	typing       *domain.TypingState  // who is typing where, from the service's reports
+	typingCh     <-chan domain.Typing // the service's feed; nil when it has none or closed it
+	typingExpiry bool                 // a typingExpireMsg is scheduled
+	typingAnim   bool                 // a typingAnimMsg is scheduled
+	typingStep   int                  // the running light's clock
+
 	escPending bool         // an Esc was just pressed: a digit now switches windows
 	escSaved   []rune       // the input as it was before that Esc cleared it
 	lastCtrlX  time.Time    // for the double Ctrl-X toggle
@@ -222,7 +229,8 @@ func New(opt Options) *Model {
 		opt.Open = opener.Open
 	}
 	m := &Model{opt: opt, width: 100, height: 30, loading: map[string]bool{}, visited: map[string]bool{},
-		wins: []*win{{}}, status: "type /help for commands", started: time.Now(), fx: true, rcache: &renderCache{}}
+		wins: []*win{{}}, status: "type /help for commands", started: time.Now(), fx: true, rcache: &renderCache{},
+		now: time.Now, typing: domain.NewTypingState(domain.DefaultTypingTTL)}
 	if found, err := opt.Store.State(fxKey, &m.fx); !found || err != nil {
 		m.fx = true
 	}
@@ -347,6 +355,9 @@ func (m *Model) Width() int { return m.width }
 func (m *Model) Init() tea.Cmd {
 	m.syncing = true
 	cmds := []tea.Cmd{m.chatsCmd(), m.syncCmd()}
+	if cmd := m.typingInit(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	if m.opt.Poll > 0 {
 		cmds = append(cmds, m.tickCmd())
 	}
@@ -610,6 +621,9 @@ func (m *Model) openCmd(target string) tea.Cmd {
 // kept going while something animated is on screen.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	model, cmd := m.update(msg)
+	if tcmds := m.typingTimers(); len(tcmds) > 0 { // the typing timers follow whatever the message changed
+		cmd = tea.Batch(append(tcmds, cmd)...)
+	}
 	if len(m.slow) > 0 && !m.slowTick { // keep a slow print going
 		m.slowTick = true
 		tick := tea.Tick(slowDelay, func(time.Time) tea.Msg { return slowTickMsg{} })
@@ -642,6 +656,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if cmd, ok := m.typingUpdate(msg); ok {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case slowTickMsg:
 		m.slowTick = false
@@ -981,6 +998,7 @@ func (m *Model) absorb(fresh []domain.Message) {
 // and activity is counted.
 func (m *Model) arrived(fresh []domain.Message) {
 	m.absorb(fresh)
+	m.typingSettled(fresh)
 	var order []int // windows that got something, in order of appearance
 	count := map[int]int{}
 	n := 0 // messages from others; what this account sent comes back through sync and is not news
@@ -1112,11 +1130,12 @@ func (m *Model) switchTo(i int) tea.Cmd {
 	if m.isErr { // a switch clears a stale error; the tag says where we are
 		m.setInfo("")
 	}
+	cmds := m.typingTimers() // the window shown decides whether the light runs
 	if w.chatID != "" && !w.loaded && !m.loading[w.chatID] {
 		m.note(w, fmt.Sprintf("fetching the last %d messages", recentOnOpen))
-		return m.recentCmd(w.chatID, recentOnOpen)
+		cmds = append(cmds, m.recentCmd(w.chatID, recentOnOpen))
 	}
-	return nil
+	return tea.Batch(cmds...)
 }
 
 func (m *Model) winName(i int) string {
@@ -2445,18 +2464,26 @@ func (m *Model) statusLine() string {
 	}
 	w := m.wins[m.cur]
 	gap := infoStyle.Render("  ")
-	text := infoStyle.Render(" ") +
+	head := infoStyle.Render(" ") +
 		seg(time.Now().Format("15:04"), 5, false) + gap +
 		seg(m.opt.Provider.Name(), 0, false) + gap +
 		seg(fmt.Sprintf("[%d:%s]", m.cur, m.winName(m.cur)), 3, true) + gap
 	if act := m.activity(); act != "" {
-		text += actStyle.Render(act) + gap
+		head += actStyle.Render(act) + gap
 	}
-	text += seg(fmt.Sprintf("%d msgs", len(m.msgs)), 1, false) + gap +
+	tail := seg(fmt.Sprintf("%d msgs", len(m.msgs)), 1, false) + gap +
 		seg(sync, syncColor, false) + gap
 	if w.scroll > 0 && m.mode == modeWin {
-		text += actStyle.Render(fmt.Sprintf("scrolled up %d lines", w.scroll)) + gap
+		tail += actStyle.Render(fmt.Sprintf("scrolled up %d lines", w.scroll)) + gap
 	}
+	// The typing indicator sits between the activity list and the
+	// counters and takes only the room they leave, so a narrow terminal
+	// keeps the counters and a short form of the indicator.
+	text := head
+	if t := m.typingSegment(m.width - lipgloss.Width(head) - lipgloss.Width(tail) - 2); t != "" {
+		text += t + gap
+	}
+	text += tail
 	// The message itself is shown on the rule above, so this line never
 	// has to truncate it.
 	return lipgloss.NewStyle().Background(statusBG()).Render(fitLine(text, m.width))
