@@ -213,6 +213,35 @@ func FuzzWrapText(f *testing.F) {
 	})
 }
 
+// FuzzRefRows: any line laid out as /help and /keys lay out theirs,
+// sanitized as the renderer does, in a window of at least 10 columns,
+// gives at least one row; no row is wider than the window or holds a
+// newline; and nothing but white space is lost or reordered.
+func FuzzRefRows(f *testing.F) {
+	for i, s := range fuzzTexts {
+		f.Add(s, uint8(i*7))
+		f.Add("  /x                     "+s, uint8(i*11))
+		f.Add("  "+s+"  the description", uint8(i*13))
+	}
+	f.Add("  /msg <@user|#chan> <text>  send to that chat, opening its window; also /say, /tell", uint8(35))
+	f.Fuzz(func(t *testing.T, raw string, w uint8) {
+		width := 10 + int(w)
+		text := sanitize(raw, true)
+		rows := refRows(text, width)
+		if len(rows) == 0 {
+			t.Fatalf("%q: no row", text)
+		}
+		for k, r := range rows {
+			if lw := lipgloss.Width(r); lw > width || strings.Contains(r, "\n") {
+				t.Fatalf("%q in %d columns: row %d is %d wide: %q", text, width, k, lw, rows)
+			}
+		}
+		if got, want := nonSpace(strings.Join(rows, "")), nonSpace(text); got != want {
+			t.Fatalf("%q in %d columns: text lost or reordered: %q", text, width, rows)
+		}
+	})
+}
+
 // FuzzFitLine: a bar is exactly width columns whatever its text, made of
 // a prefix of that text and padding spaces.
 func FuzzFitLine(f *testing.F) {

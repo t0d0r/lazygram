@@ -515,7 +515,7 @@ func TestKeysPrintsIntoServerWindow(t *testing.T) {
 		t.Fatalf("/keys focuses the server window (cur=%d mode=%v)", m.cur, m.mode)
 	}
 	m.Update(slowTickMsg{})
-	if n := m.wins[0].notes; !n[len(n)-1].plain || n[len(n)-1].text != "Keys" {
+	if n := m.wins[0].notes; !n[len(n)-1].plain || n[len(n)-1].text != "Mouse, themes and windows" {
 		t.Fatalf("first line: %+v", n[len(n)-1])
 	}
 	drain(m)
@@ -535,6 +535,81 @@ func TestKeysPrintsIntoServerWindow(t *testing.T) {
 	}
 	if m.isErr {
 		t.Fatalf("status %q", m.status)
+	}
+}
+
+// TestKeysEndsWithTheKeyTable: the window follows the newest line, so
+// /keys prints its notes first and the table last; printed the other way
+// round, the notes filled the screen and the table had to be scrolled to.
+func TestKeysEndsWithTheKeyTable(t *testing.T) {
+	m := setup(t, newFake())
+	enter(m, "/keys")
+	drain(m)
+	if n := m.wins[0].notes; !strings.HasPrefix(n[len(n)-1].text, "  Ctrl-C ") {
+		t.Fatalf("the last line printed is the last key: %q", n[len(n)-1].text)
+	}
+	rows := strings.Split(ansi.Strip(body(m)), "\n")
+	if !strings.HasPrefix(rows[len(rows)-1], "  Ctrl-C ") {
+		t.Fatalf("the screen ends with the key table:\n%s", strings.Join(rows, "\n"))
+	}
+	for _, note := range []string{"People are @name", "Themes:", "[Act: 1,2]"} {
+		if strings.Contains(strings.Join(rows, "\n"), note) {
+			t.Fatalf("note %q printed after the table:\n%s", note, strings.Join(rows, "\n"))
+		}
+	}
+	// A screen tall enough for the whole table shows it from its heading.
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
+	v := ansi.Strip(body(m))
+	if !strings.Contains(v, "\nKeys\n  Tab ") || !strings.Contains(v, "People are @name, groups and channels are #name.\nKeys\n") {
+		t.Fatalf("the notes, then the heading and the whole table:\n%s", v)
+	}
+}
+
+// TestHelpReflowsOnResize: the printed reference keeps its logical lines
+// and is laid out again for the new width, wider and narrower.
+func TestHelpReflowsOnResize(t *testing.T) {
+	m := setup(t, newFake())
+	press(m, tea.KeyF1)
+	drain(m)
+	at := func(width int) []string {
+		m.Update(tea.WindowSizeMsg{Width: width, Height: 20})
+		var rows []string
+		for _, l := range m.lines() {
+			rows = append(rows, ansi.Strip(l))
+		}
+		// From the heading on: the start banner above has faces of its own.
+		for i := len(rows) - 1; i >= 0 && rows[i] != "Commands"; i-- {
+			if lipgloss.Width(rows[i]) > width {
+				t.Errorf("%d columns: row %d wide: %q", width, lipgloss.Width(rows[i]), rows[i])
+			}
+		}
+		return rows
+	}
+	find := func(rows []string, prefix string) int {
+		for i, r := range rows {
+			if strings.HasPrefix(r, prefix) {
+				return i
+			}
+		}
+		t.Fatalf("no row starts with %q:\n%s", prefix, strings.Join(rows, "\n"))
+		return -1
+	}
+	whois := "  /whois [name]          what is known about a chat, or in a group about one of its members; also /wi, /info"
+	rows := at(160)
+	if i := find(rows, "  /whois "); rows[i] != whois {
+		t.Fatalf("160 columns: one row: %q", rows[i])
+	}
+	rows = at(80)
+	if i := find(rows, "  /whois "); rows[i] != "  /whois [name]          what is known about a chat, or in a group about one of" ||
+		rows[i+1] != strings.Repeat(" ", 25)+"its members; also /wi, /info" {
+		t.Fatalf("80 columns: hanging indent:\n%s\n%s", rows[i], rows[i+1])
+	}
+	rows = at(40)
+	if i := find(rows, "  /whois "); rows[i] != "  /whois [name]" || rows[i+1] != "    what is known about a chat, or in a" {
+		t.Fatalf("40 columns: the description under the names:\n%s\n%s", rows[i], rows[i+1])
+	}
+	if rows = at(160); rows[find(rows, "  /whois ")] != whois {
+		t.Fatal("back at 160 columns: one row again")
 	}
 }
 
@@ -686,8 +761,9 @@ func TestCtrlXSendsInChatWindowOnly(t *testing.T) {
 		t.Fatalf("Enter adds a line while Ctrl-X sends: %q", string(m.input))
 	}
 	typ(m, "second line")
-	if !strings.Contains(m.View(), "plain text\u21b5second line") {
-		t.Fatal("the input shows the line break")
+	if rows := strings.Split(ansi.Strip(m.View()), "\n"); strings.TrimRight(rows[len(rows)-2], " ") != "[@alice] plain text" ||
+		strings.TrimRight(rows[len(rows)-1], " ") != "         second line" {
+		t.Fatalf("the line break starts a new input row:\n%s", strings.Join(rows[len(rows)-2:], "\n"))
 	}
 	m.lastCtrlX = time.Time{}
 	_, tick = m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
@@ -2294,24 +2370,39 @@ func TestCursorEditing(t *testing.T) {
 	}
 }
 
-func TestInputLineShowsTheCursor(t *testing.T) {
+func TestInputAreaShowsTheCursor(t *testing.T) {
 	m := setup(t, newFake())
 	m.width = 20
+	area := func() string { // rows are padded to the width on the status background
+		rows := m.inputArea("> ")
+		for i, r := range rows {
+			rows[i] = strings.TrimRight(ansi.Strip(r), " ")
+		}
+		return strings.Join(rows, "\n")
+	}
 	m.input, m.curBack = []rune("abc"), 1 // cursor on "c": no extra cell
-	if got := ansi.Strip(m.inputLine("> ")); got != "> abc"+strings.Repeat(" ", 15) {
+	if got := area(); got != "> abc" {
 		t.Fatalf("%q", got)
 	}
 	m.curBack = 0
-	if got := ansi.Strip(m.inputLine("> ")); got != "> abc"+strings.Repeat(" ", 15) || lipgloss.Width(got) != 20 {
-		t.Fatalf("cursor cell after the text, row padded to the width: %q", got)
+	if got, row := area(), m.inputArea("> ")[0]; got != "> abc" || lipgloss.Width(row) != 20 {
+		t.Fatalf("cursor cell after the text, row padded to the width: %q", row)
 	}
-	m.input, m.curBack = []rune(strings.Repeat("x", 40)+"END"), 1 // long line, cursor near the end
-	got := ansi.Strip(m.inputLine("> "))
-	if !strings.HasSuffix(strings.TrimRight(got, " "), "END") || lipgloss.Width(got) != 20 {
-		t.Fatalf("scrolled to the cursor: %q (%d)", got, lipgloss.Width(got))
+	// A long line wraps instead of scrolling sideways: 17 cells a row (the
+	// width less the prompt and the cursor's cell), the text lined up.
+	m.input, m.curBack = []rune(strings.Repeat("x", 40)+"END"), 1
+	x17 := strings.Repeat("x", 17)
+	want := "> " + x17 + "\n  " + x17 + "\n  xxxxxxEND"
+	if got := area(); got != want {
+		t.Fatalf("wrapped:\n%s\nwant:\n%s", got, want)
 	}
-	m.curBack = len(m.input) // cursor at the start: the head shows
-	if got := ansi.Strip(m.inputLine("> ")); !strings.HasPrefix(got, "> xxx") || strings.Contains(got, "END") {
-		t.Fatalf("scrolled to the start: %q", got)
+	for _, row := range m.inputArea("> ") {
+		if lipgloss.Width(row) != 20 {
+			t.Fatalf("row not padded to the screen width: %q", row)
+		}
+	}
+	m.curBack = len(m.input) // cursor at the start: the same rows
+	if got := area(); got != want {
+		t.Fatalf("cursor at the start:\n%s", got)
 	}
 }

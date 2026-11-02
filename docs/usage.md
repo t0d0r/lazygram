@@ -95,7 +95,12 @@ in a group whose cached messages still lack their senders' usernames), and
 | `/autojoin [on\|off]`      | at start, open a window for every chat with unread messages (on by default, kept); no argument shows the setting |
 | `/redraw`, `/clear`        | drop notices, help text and pictures from this window; messages stay |
 | `/refresh`, `/help`, `/quit` | sync now; print the command list, with every short form, into the server window (it ends by naming `/keys`); leave |
-| `/keys`                    | print the keyboard shortcuts into the server window |
+| `/keys`                    | print the notes on the mouse, themes and windows into the server window, then the keyboard shortcuts last, so the table is what you see when it ends |
+
+Both lists are wrapped to the window's width as they are drawn and
+re-flow when the terminal is resized: a description continues under
+itself, and in a window too narrow for two columns it goes under the
+command or key, indented.
 
 ## Sending, buttons and pictures
 
@@ -105,7 +110,19 @@ never runs commands. Enter is for commands (press Ctrl-X twice quickly to
 make Enter send in that window, and again to switch back; a fast double
 Ctrl-X never sends, it only switches; the status line ends with
 `ctrl-x: to send` or `enter: to send`). The sent line shows up as `<me>`
-once the service has it. Bot messages with buttons show them underneath as
+once the service has it.
+
+A message may have several lines: Enter (Ctrl-X when Enter sends) starts
+a new line, and a paste keeps its line breaks. Each line is a row of its
+own in the input area at the bottom, lined up under the first one after
+the prompt, and a long line wraps onto the next row. The input area grows
+upward a row at a time, up to 8 rows (at most a third of the screen), and
+scrolls with the cursor past that; the messages above give up the rows.
+Up and Down move between the rows, keeping the column; on the first or
+the last row they walk the input history. Ctrl-A / Ctrl-E go to the start
+/ end of the line, Ctrl-K deletes to its end.
+
+Bot messages with buttons show them underneath as
 `[1] Yes  [2] Docs (link)  (msg 1234)`; `/press 1` answers the bot and the
 edited message replaces the old line, link buttons only print their URL,
 reply-keyboard buttons send their label. Photos show as `[photo]`: click
@@ -153,8 +170,8 @@ the candidates separated by commas.
 | Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash: commands, chats, themes, `/open out`, attachment message ids and the chat's ten most recent links, `/win list`, a command's settings (`/autojoin off`, `/clip tool`), paths after `/send`; in a group or channel window, its `@nicks` after `/whois` and in message text (`@ad` -> `@ada`); names match in Cyrillic or Latin |
 | Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
 | Alt-0 .. Alt-9      | window 0 .. 9 (Esc then the digit works too)       |
-| Up / Down           | input history (commands and sent lines; a recalled line is input again: Ctrl-X sends it, Enter runs it when it starts with `/`) |
-| Left / Right        | move the cursor in the input (in `/list` or `/win`: pick the row's action button); Ctrl-A / Ctrl-E start / end; Delete removes under the cursor (as Backspace at the end), Ctrl-W the word before it, Ctrl-K to the end |
+| Up / Down           | in a message of several rows: the row above / below, keeping the column; on the first / last row: input history (commands and sent lines; a recalled line is input again: Ctrl-X sends it, Enter runs it when it starts with `/`) |
+| Left / Right        | move the cursor in the input (in `/list` or `/win`: pick the row's action button); Ctrl-A / Ctrl-E start / end of the line; Delete removes under the cursor (as Backspace at the end), Ctrl-W the word before it, Ctrl-K to the end of the line |
 | PgUp / PgDn         | scroll a page; Home / End oldest / newest          |
 | Ctrl-R              | sync now                                           |
 | Ctrl-L              | redraw this window (`/redraw`): notices and pictures go, messages stay |
