@@ -3,6 +3,8 @@
 [![Linux](https://github.com/t0d0r/lazygram/actions/workflows/linux.yml/badge.svg)](https://github.com/t0d0r/lazygram/actions/workflows/linux.yml)
 [![macOS](https://github.com/t0d0r/lazygram/actions/workflows/macos.yml/badge.svg)](https://github.com/t0d0r/lazygram/actions/workflows/macos.yml)
 [![Release](https://img.shields.io/github/v/release/t0d0r/lazygram)](https://github.com/t0d0r/lazygram/releases)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/t0d0r/lazygram/badge)](https://scorecard.dev/viewer/?uri=github.com/t0d0r/lazygram)
+[![Scorecard](https://github.com/t0d0r/lazygram/actions/workflows/scorecard.yml/badge.svg)](https://github.com/t0d0r/lazygram/actions/workflows/scorecard.yml)
 
 Telegram in your terminal, IRC style (BitchX / irssi): every chat in one
 scrollback, a window per chat, QR login, an encrypted local cache.
