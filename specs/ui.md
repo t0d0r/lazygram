@@ -880,10 +880,14 @@ Shift-Tab to the previous one. With text typed, Tab completes the word
 before the cursor like bash and keeps what follows the cursor. A line that is one
 word starting with `/` completes command names; after `/theme ` theme
 names; after `/send ` (and its aliases) local paths: entries of the typed
-directory that start with the typed base name, `~` expanded, hidden files
-only when a dot is typed, directories filled in with a trailing `/` and no
-space so the next Tab descends; the caption after the path is free text
-and never completed. After `/open` (and `/fetch`, `/download`): `out` as
+directory that start with the typed base name, `~` expanded (a lone `~`
+completes to `~/`; the typed directory part is kept as typed and only
+the base name after the last `/` is matched), hidden files only when a
+dot is typed, directories filled in with a trailing `/` and no space so
+the next Tab descends; the caption after the path is free text and never
+completed. Decision, after a crash: the typed text is split before `~`
+is expanded, because the expanded `~/` loses its trailing slash and the
+home directory's name would be taken for the typed base name. After `/open` (and `/fetch`, `/download`): `out` as
 the first word, the chat's ten most recent distinct `http(s)` links
 (newest message first, taken from the same sanitised text a click uses,
 so no control character reaches the input and trailing punctuation is
