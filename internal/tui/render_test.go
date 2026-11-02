@@ -122,6 +122,67 @@ func TestHighlight(t *testing.T) {
 	}
 }
 
+// The hits are byte ranges of the line itself, found rune by rune, also
+// where lower-casing changes a letter's byte length (U+0130 and U+212A
+// shrink, U+023A grows), so a hit never starts inside a character.
+func TestHitSpans(t *testing.T) {
+	cases := []struct {
+		s, needle string
+		want      [][2]int
+	}{
+		{"Find FIND find", "find", [][2]int{{0, 4}, {5, 9}, {10, 14}}},
+		{"aaa", "aa", [][2]int{{0, 2}}}, // no overlap
+		{"abc", "", nil},
+		{"abc", "x", nil},
+		{"\u0130\u00e9abc\u023a", "abc", [][2]int{{4, 7}}},
+		{"\u212a k", "K", [][2]int{{0, 3}, {4, 5}}},
+		{"x\u0130", "i", [][2]int{{1, 3}}},
+		{"\u023a", "\u2c65", [][2]int{{0, 2}}},
+	}
+	for _, c := range cases {
+		got := hitSpans(c.s, c.needle)
+		if len(got) != len(c.want) {
+			t.Fatalf("%q in %q: %v, want %v", c.needle, c.s, got, c.want)
+		}
+		for k := range got {
+			if got[k] != c.want[k] {
+				t.Fatalf("%q in %q: %v, want %v", c.needle, c.s, got, c.want)
+			}
+		}
+	}
+}
+
+// A link ends as a double-clicked word does (specs/ui.md): sentence
+// punctuation and a closing bracket the link does not open are not part
+// of it, a bracket it opens is, so a click opens exactly what a double
+// click on it copies; a scheme with nothing but punctuation after it is
+// no link.
+func TestLinksEndAsWordsDo(t *testing.T) {
+	for _, c := range []struct{ row, link string }{
+		{"see (https://example.invalid/a_(b)). ok", "https://example.invalid/a_(b)"},
+		{"read https://en.wikipedia.org/wiki/Go_(game), then", "https://en.wikipedia.org/wiki/Go_(game)"},
+		{"[https://example.invalid/x]: done", "https://example.invalid/x"},
+		{"{https://example.invalid/y}!", "https://example.invalid/y"},
+		{"https://example.invalid/(z)?!", "https://example.invalid/(z)"},
+	} {
+		got := urlsOf(c.row)
+		if len(got) != 1 || got[0] != c.link {
+			t.Fatalf("%q: links %q, want %q", c.row, got, c.link)
+		}
+		sp := linkSpans(c.row, 0, got)
+		if len(sp) != 1 || sp[0].target != c.link {
+			t.Fatalf("%q: a click opens %+v, want %q", c.row, sp, c.link)
+		}
+		from, to, ok := wordAt(c.row, sp[0].x0+1)
+		if !ok || c.row[from:to+1] != c.link { // ASCII rows: a column is a byte
+			t.Fatalf("%q: a double click copies %q, a click opens %q", c.row, c.row[from:to+1], c.link)
+		}
+	}
+	if got := urlsOf("wow https://! and http://... or (https://)"); len(got) != 0 {
+		t.Fatalf("a bare scheme is no link: %q", got)
+	}
+}
+
 func TestRenderStripsControlCharacters(t *testing.T) {
 	msgs := []domain.Message{{ID: "1", ChatID: "c", Sender: "a\x1b[31m", Text: "hi\x1b]0;pwn\x07 there\tx\nnext", Time: time.Now()}}
 	notes := []note{{at: time.Now(), text: "evil\x1b[2Jnote"}}
