@@ -112,6 +112,7 @@
 - [x] Ctrl-L performs /redraw (specs/ui.md; attribution: Yanko Simeonov); released in v0.4.20
 - [x] /open autocompletes the 10 most recent links in the current chat (specs/ui.md); released in v0.4.20
 - [x] /open http://... opens an explicitly supplied URL (specs/ui.md); released in v0.4.20
+- [x] /help and /keys use the window's width (one logical line per entry, wrapped when drawn with a hanging indent, re-flowed on resize); /keys prints the notes first and ends with the key table; /about thanks @zechkata and @pau4o for their feedback (specs/ui.md, Commands; session/2026-11-03-help-keys-width.md)
 - [x] one process per data/state folder: a second lazygram started on the same folder notifies the user and refuses to run (force-closes itself) instead of sharing the session, cache and settings; reason: two MTProto sessions on one auth key trigger AUTH_KEY_DUPLICATED, which invalidates the login and wipes the cache (specs/security.md); released in v0.4.20
 - [x] /win list actions: mark the selected window unread, mark it read, close it (specs/ui.md): a button strip on the selected row, Left/Right pick, Enter runs, clickable; released in v0.4.19
 - [x] /list actions: mark the selected chat read or unread, as in the /win list (specs/ui.md); released in v0.4.19

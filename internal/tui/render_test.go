@@ -1,12 +1,15 @@
 package tui
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
+	"lazygram/internal/command"
 	"lazygram/internal/domain"
 )
 
@@ -39,6 +42,104 @@ func TestWrapText(t *testing.T) {
 	got = wrapText("  /x   a long description that wraps", 20, 20)
 	if len(got) != 3 || got[0] != "  /x a long" || got[1] != "  description that" || got[2] != "  wraps" {
 		t.Fatalf("indent must be kept on wrapped pieces: %q", got)
+	}
+}
+
+// entryRE splits a reference entry as specs/ui.md describes it: two
+// spaces, the names (single spaces inside), two or more spaces, then the
+// description. Kept apart from refEntry so the test does not grade the
+// code by itself.
+var entryRE = regexp.MustCompile(`^(  \S(?:.*?\S)?  +)(\S.*)$`)
+
+// refRowsAt draws one line of a reference, as /help and /keys print it,
+// in a window width columns wide, without colour.
+func refRowsAt(l string, width int) []string {
+	var rows []string
+	for _, r := range renderLines(nil, []note{{at: time.Now(), text: l, plain: true}}, lineOpts{width: width}) {
+		rows = append(rows, ansi.Strip(r))
+	}
+	return rows
+}
+
+// TestReferenceFollowsTheWidth: /help and /keys fill the window's width
+// instead of a fixed 70 columns. An entry's description wraps under
+// itself (a hanging indent) when there is room for the columns, and under
+// the names, indented 4, when there is not; a note is a wrapped paragraph.
+// No row is wider than the window and no word is lost or moved.
+func TestReferenceFollowsTheWidth(t *testing.T) {
+	for _, ref := range []string{command.HelpText, keyHelp} {
+		for _, width := range []int{40, 80, 160} {
+			wider := false
+			for _, l := range strings.Split(ref, "\n") {
+				rows := refRowsAt(l, width)
+				for _, r := range rows {
+					if lipgloss.Width(r) > width {
+						t.Errorf("%d columns: row %d wide: %q", width, lipgloss.Width(r), r)
+					}
+					wider = wider || lipgloss.Width(r) > 100
+				}
+				if got := strings.Fields(strings.Join(rows, " ")); strings.Join(got, " ") != strings.Join(strings.Fields(l), " ") {
+					t.Errorf("%d columns: words lost or moved in %q:\n%s", width, l, strings.Join(rows, "\n"))
+				}
+				sub := entryRE.FindStringSubmatch(l)
+				if sub == nil {
+					if strings.HasPrefix(l, " ") {
+						t.Errorf("a reference line is an entry or a note, not a continuation: %q", l)
+					}
+					continue
+				}
+				lead, hang := sub[1], len(sub[1])
+				switch width {
+				case 40: // 15 columns beside the names: the description goes under them
+					if rows[0] != strings.TrimRight(lead, " ") {
+						t.Errorf("40 columns: the names alone on the first row: %q", rows[0])
+					}
+					for _, r := range rows[1:] {
+						if !strings.HasPrefix(r, "    ") || r[4] == ' ' {
+							t.Errorf("40 columns: the description indented 4 under %q: %q", lead, r)
+						}
+					}
+				default:
+					if !strings.HasPrefix(rows[0], lead) || rows[0] == lead {
+						t.Errorf("%d columns: the first row holds the names and the description: %q", width, rows[0])
+					}
+					for _, r := range rows[1:] {
+						if len(r) <= hang || strings.TrimLeft(r, " ") != r[hang:] {
+							t.Errorf("%d columns: continuation of %q not at column %d: %q", width, lead, hang, r)
+						}
+					}
+				}
+			}
+			if width == 160 && !wider {
+				t.Errorf("160 columns: no row passes 100 columns, the reference ignores the width")
+			}
+		}
+	}
+	if rows := refRowsAt("  /win N                 switch to window N (0 is the server window)", 80); len(rows) != 1 || rows[0] != "  /win N                 switch to window N (0 is the server window)" {
+		t.Fatalf("an entry that fits keeps its columns on one row: %q", rows)
+	}
+	long := "  /send <path> [caption]  send a local file; pictures go as photos (Tab completes the path); also /file, /upload"
+	if rows := refRowsAt(long, 160); len(rows) != 1 || rows[0] != long {
+		t.Fatalf("160 columns hold the whole entry: %q", rows)
+	}
+	want := []string{
+		"  /send <path> [caption]  send a local file; pictures go as photos (Tab",
+		"                          completes the path); also /file, /upload",
+	}
+	if rows := refRowsAt(long, 72); strings.Join(rows, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("hanging indent at the description column:\n%s", strings.Join(rows, "\n"))
+	}
+	want = []string{
+		"  /send <path> [caption]",
+		"    send a local file; pictures go as",
+		"    photos (Tab completes the path);",
+		"    also /file, /upload",
+	}
+	if rows := refRowsAt(long, 40); strings.Join(rows, "\n") != strings.Join(want, "\n") {
+		t.Fatalf("too narrow for the columns: the description under the names:\n%s", strings.Join(rows, "\n"))
+	}
+	if rows := refRowsAt("Window 0 is the server window: every chat interleaved, plus notices; it stays at 0.", 40); len(rows) != 3 || rows[1] != "chat interleaved, plus notices; it stays" {
+		t.Fatalf("a note is a paragraph wrapped to the width: %q", rows)
 	}
 }
 

@@ -91,7 +91,12 @@ in a group whose cached messages still lack their senders' usernames), and
 | `/autojoin [on\|off]`      | at start, open a window for every chat with unread messages (on by default, kept); no argument shows the setting |
 | `/redraw`, `/clear`        | drop notices, help text and pictures from this window; messages stay |
 | `/refresh`, `/help`, `/quit` | sync now; print the command list, with every short form, into the server window (it ends by naming `/keys`); leave |
-| `/keys`                    | print the keyboard shortcuts into the server window |
+| `/keys`                    | print the notes on the mouse, themes and windows into the server window, then the keyboard shortcuts last, so the table is what you see when it ends |
+
+Both lists are wrapped to the window's width as they are drawn and
+re-flow when the terminal is resized: a description continues under
+itself, and in a window too narrow for two columns it goes under the
+command or key, indented.
 
 ## Sending, buttons and pictures
 
