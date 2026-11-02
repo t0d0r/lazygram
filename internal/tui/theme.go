@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 )
 
 // theme is a colour scheme: the roles lazygram paints, as hex or ANSI
@@ -166,8 +167,22 @@ func applyTheme(t theme) {
 	currentName = t.Name
 }
 
-// statusBG is the background colour shared by the status line and bar.
+// statusBG is the background colour shared by the status line, the
+// window bar and the prompt row.
 func statusBG() lipgloss.Color { return lipgloss.Color(themes[currentName].StatusBG) }
+
+// barRow fits s, made of segments already painted on the status
+// background, to width and paints the padding the same way. A background
+// on the whole line would not do: every segment ends with a reset, so it
+// would stop after the last one and leave the rest of the row on the
+// terminal's own background.
+func barRow(s string, width int) string {
+	s = ansi.Truncate(s, width, "")
+	if pad := width - lipgloss.Width(s); pad > 0 {
+		s += infoStyle.Render(strings.Repeat(" ", pad))
+	}
+	return s
+}
 
 // lookupTheme finds a theme by name, case-insensitively, by exact name or
 // unique prefix.

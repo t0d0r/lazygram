@@ -2298,16 +2298,16 @@ func TestInputLineShowsTheCursor(t *testing.T) {
 	m := setup(t, newFake())
 	m.width = 20
 	m.input, m.curBack = []rune("abc"), 1 // cursor on "c": no extra cell
-	if got := ansi.Strip(m.inputLine("> ")); got != "> abc" {
+	if got := ansi.Strip(m.inputLine("> ")); got != "> abc"+strings.Repeat(" ", 15) {
 		t.Fatalf("%q", got)
 	}
 	m.curBack = 0
-	if got := ansi.Strip(m.inputLine("> ")); got != "> abc " {
-		t.Fatalf("cursor cell after the text: %q", got)
+	if got := ansi.Strip(m.inputLine("> ")); got != "> abc"+strings.Repeat(" ", 15) || lipgloss.Width(got) != 20 {
+		t.Fatalf("cursor cell after the text, row padded to the width: %q", got)
 	}
 	m.input, m.curBack = []rune(strings.Repeat("x", 40)+"END"), 1 // long line, cursor near the end
 	got := ansi.Strip(m.inputLine("> "))
-	if !strings.HasSuffix(got, "END") || lipgloss.Width(got) > 20 {
+	if !strings.HasSuffix(strings.TrimRight(got, " "), "END") || lipgloss.Width(got) != 20 {
 		t.Fatalf("scrolled to the cursor: %q (%d)", got, lipgloss.Width(got))
 	}
 	m.curBack = len(m.input) // cursor at the start: the head shows
