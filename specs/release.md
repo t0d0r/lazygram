@@ -24,23 +24,80 @@ specs/providers.md).
 
 ## Publishing
 
-1. `make check`, commit, `git tag -a vX.Y.Z -m "lazygram vX.Y.Z"`. HEAD
-   must be exactly at that tag when releasing: `make release` checks
-   that `git describe` is `vX.Y.Z` with nothing after it (a commit past
-   the tag would otherwise create a release and a tag named like
-   `v0.4.11-1-gd0bdc3f`, which `lazygram update` cannot parse).
-2. `make dist`, then `make release`: `gh release create` with the tarballs
-   and `SHA256SUMS`, notes generated from the commits. HEAD must be at a
-   clean tag.
-3. Verify: download every asset back and check `SHA256SUMS`.
-4. Homebrew: in `t0d0r/homebrew-tap`, update `Formula/lazygram.rb` with the
+Releases are built and published by GitHub Actions, the Release workflow
+(`.github/workflows/release.yml`), when a `vX.Y.Z` tag is pushed.
+
+1. `make check`, commit, push `master`, wait for the Linux and macOS
+   workflows to pass (a macOS run that failed only because no hosted
+   runner picked the job up, "The job was not acquired by Runner", is
+   re-run, not read as a failed check). Then `git tag -a vX.Y.Z -m "lazygram vX.Y.Z"` on
+   that commit and `git push origin vX.Y.Z`.
+2. The workflow's build job (read-only token, no repository secrets)
+   refuses a tag that is not `vX.Y.Z` or whose commit is not on
+   `master`, sets up the Go version from `go.mod` with an empty module
+   cache, runs `make test` and `make dist VERSION=vX.Y.Z`, and hands
+   `dist/` to the next job as a workflow artifact.
+3. The publish job runs no repository code. It checks the downloaded
+   files against `SHA256SUMS`, creates one SLSA build provenance
+   attestation for every file listed there (`actions/attest`, signed
+   with a short-lived Sigstore certificate for this workflow run, stored
+   in the repository's attestations), writes it as one line to
+   `lazygram-vX.Y.Z.intoto.jsonl`, and runs `gh release create` with the
+   tarballs, `install.sh`, `SHA256SUMS` and that file, notes generated
+   from the commits. Only this job has `contents: write`, `id-token:
+   write` and `attestations: write`.
+4. Verify: download every asset back, check `SHA256SUMS`, and for each
+   tarball `gh attestation verify <tarball> --repo t0d0r/lazygram
+   --signer-workflow t0d0r/lazygram/.github/workflows/release.yml
+   --source-ref refs/tags/vX.Y.Z --deny-self-hosted-runners` (and once
+   more with `--bundle lazygram-vX.Y.Z.intoto.jsonl` and the same
+   flags). Then bump `packaging/omarchy/lazygram/PKGBUILD` to the release
+   (packaging/omarchy/README.md).
+5. Homebrew: in `t0d0r/homebrew-tap`, update `Formula/lazygram.rb` with the
    tag's source tarball URL and its sha256 (`curl -L .../archive/refs/tags/
    vX.Y.Z.tar.gz | shasum -a 256`), then `brew install --build-from-source
    t0d0r/tap/lazygram` and `brew test lazygram`.
-5. Push `main` and the tag.
 6. Check that `https://github.com/t0d0r/lazygram/releases/latest/download/install.sh`
    answers 200 and installs the new version into a scratch prefix
    (`LAZYGRAM_PREFIX=<dir> sh`); nothing in the script is bumped.
+
+If Actions is unavailable, the release waits: no release is published
+from a workstation, so every release from v0.4.22 on carries
+provenance. `make release` only says so and exits 1; `make dist` stays,
+the workflow builds with it. HEAD must still be exactly at a clean
+`vX.Y.Z` tag for a release (a commit past the tag once produced a
+release and a tag named `v0.4.11-1-gd0bdc3f`, which `lazygram update`
+cannot parse; the workflow's tag filter and check refuse such a name).
+
+Decisions:
+
+- Built in CI from v0.4.22 on, so every release carries provenance
+  that names the workflow, the tag and the commit it was built from
+  (OpenSSF Scorecard's Signed-Releases check: 10 for provenance on each
+  of the last five releases). The build is the same `make dist` as on a
+  workstation (pure Go cross-compile); a CI checkout never has the
+  git-ignored `app_local.go`, so a personal registration cannot reach a
+  release even by mistake.
+- GitHub artifact attestations, not slsa-framework/slsa-github-generator:
+  the generator has been unmaintained since August 2026 and points to
+  artifact attestations itself; `actions/attest` is maintained by GitHub
+  and can be pinned to a commit like every other action here.
+- Build and attestation in separate jobs: the job that compiles code and
+  downloads modules has a read-only token, and the job that can sign and
+  publish runs only pinned GitHub actions and `gh`.
+- The `master` ancestry check runs from the tagged commit's own
+  `release.yml`. It stops a tag on the wrong commit by mistake; it does
+  not stop someone with push access, who could change the workflow on
+  that commit. The provenance names the tag and the commit, not
+  `master`.
+- The releases up to v0.4.21 were built on a workstation and carry no
+  provenance. Once v0.4.22 has been published by the Release workflow
+  and verified (step 4), they are deleted from GitHub with `gh release
+  delete vX.Y.Z --yes` (no `--cleanup-tag`). Their tags stay: the
+  Homebrew formula and the Arch recipe build from tag source tarballs,
+  and the history keeps them. The exception was the stray
+  `v0.4.11-1-gd0bdc3f`, not a version: its release and tag were deleted
+  on 2026-11-02.
 
 ## Installer script
 
@@ -76,7 +133,8 @@ changes only when a release is published. What it does, in POSIX sh
 Linux and macOS, amd64 and arm64; other systems stop with a message.
 `make dist` copies `install.sh` into `dist/` and lists it in
 `SHA256SUMS`, so a reader who downloads the script can check it against
-the release; `make release` attaches it and refuses without it.
+the release; the Release workflow attaches it (its checksum check
+fails without it).
 `internal/installer` tests the real script offline under `sh` and
 `dash`, from a file and from stdin, with a fake `curl` serving a fake
 release: the latest lookup, HTTPS-only flags on every call, a pinned
@@ -94,8 +152,13 @@ compromised account or release changes it for everyone at once;
 `SHA256SUMS` from the same release catches corruption, not tampering,
 and HTTPS to GitHub is the trust anchor, as for `lazygram update`. The
 README offers reading the script first and pinning a version with
-`LAZYGRAM_VERSION`. GitHub's immutable releases setting, when enabled
-on the repository, stops a published asset from being replaced.
+`LAZYGRAM_VERSION`. Immutable releases are enabled on the repository
+(from v0.4.22): a published release's assets cannot be replaced or
+deleted and its tag cannot be moved; the `release tags` ruleset keeps
+any `v*` tag from being deleted or moved. This does not stop someone
+with write access from publishing a new release and marking it latest,
+so it protects pinned versions (`LAZYGRAM_VERSION`, the tags Homebrew
+and the Arch recipe build from), not `releases/latest`.
 
 The README command switches to this URL only after the first release
 that carries `install.sh` answers 200 there; until then it points at the
@@ -165,8 +228,8 @@ the maintainer side (build and test evidence, submission steps).
   `.omarchy/`; the files here are their upstream source.
 - Omarchy metadata (`.omarchy/package.json`): `source` local; a GitHub
   release watch on `t0d0r/lazygram` with the pattern
-  `v(?P<version>[0-9]+(?:\.[0-9]+)*)` (whole tags only, so the stray
-  `v0.4.11-1-gd0bdc3f` is ignored), so the repository's bot opens the
+  `v(?P<version>[0-9]+(?:\.[0-9]+)*)` (whole tags only, so a malformed
+  tag such as `v0.4.11-1-gd0bdc3f`, deleted on 2026-11-02, is ignored), so the repository's bot opens the
   version-bump PR itself and merges it when its CI is green;
   `min_release_age` 24h, so a release reaches Omarchy a day after it is
   published, time to pull a bad one (a maintainer can bypass the hold for
@@ -184,6 +247,6 @@ the maintainer side (build and test evidence, submission steps).
   the package manager. Decision: a file pacman owns is never replaced by
   lazygram, so `pacman -Qkk` stays clean and the next upgrade cannot
   silently undo an update. The recipe builds v0.4.20, which refuses.
-- A new release needs: the tag, `make release`, then the watch does the
-  rest; a packaging change at the same version bumps `pkgrel`. The recipe
-  builds v0.4.20 for the first submission.
+- A new release needs: push the `vX.Y.Z` tag (the Release workflow
+  publishes it, see Publishing), then the watch does the rest; a
+  packaging change at the same version bumps `pkgrel`.

@@ -116,7 +116,29 @@
   reads none, and installs nothing the user has to trust beyond the
   binary built from the source.
 - Run gitleaks before the first push and review `git log -p`.
-
+- Vulnerability reports: SECURITY.md at the repository root, private
+  reports through GitHub's private vulnerability reporting (enabled on
+  the repository); acknowledgement within 7 days, assessment within 14,
+  a fixed release within 90 days, disclosed as a GitHub security
+  advisory once the release is out. Only the latest release is
+  supported.
+- Known advisories in dependencies: `govulncheck ./...` decides whether
+  lazygram reaches one; Dependabot proposes updates weekly
+  (specs/ci.md). An advisory that cannot be fixed and is not reached is
+  listed in `osv-scanner.toml` with the reason and an `ignoreUntil`
+  date, so OSV-Scanner and Scorecard skip it until it is looked at
+  again. Listed: GO-2026-5932 (golang.org/x/crypto/openpgp, no fixed
+  version, not imported), until 2027-05-01.
+- Releases from v0.4.22 on are built by the Release workflow and carry
+  SLSA build provenance (specs/release.md). `gh attestation verify
+  <tarball> --repo t0d0r/lazygram --signer-workflow
+  t0d0r/lazygram/.github/workflows/release.yml --source-ref
+  refs/tags/vX.Y.Z --deny-self-hosted-runners` checks the repository,
+  the workflow, the tag and a GitHub-hosted runner; `--repo` alone
+  accepts any workflow of the repository from any branch, so the docs
+  never give it alone. That the tagged commit is on `master` is enforced
+  by the workflow, not recorded in the certificate. The checksum file
+  alone only catches a broken download.
 ## Terminal injection
 
 Sender and text from remote services are untrusted. The renderer drops all

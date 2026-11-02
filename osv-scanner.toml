@@ -1,0 +1,8 @@
+# Advisories that OSV-Scanner, and OpenSSF Scorecard's Vulnerabilities
+# check, skip for this module. Each says why it does not affect lazygram
+# and expires, so it is looked at again (specs/security.md).
+
+[[IgnoredVulns]]
+id = "GO-2026-5932"
+ignoreUntil = 2027-05-01
+reason = "golang.org/x/crypto/openpgp is unmaintained and has no fixed version; x/crypto comes in through gotd/td and lazygram never imports openpgp (govulncheck: not imported, not called)"
