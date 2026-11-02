@@ -2880,7 +2880,7 @@ func (m *Model) statusLine() string {
 	text += tail
 	// The message itself is shown on the rule above, so this line never
 	// has to truncate it.
-	return lipgloss.NewStyle().Background(statusBG()).Render(fitLine(text, m.width))
+	return barRow(text, m.width)
 }
 
 // windowBar lists every window as [N:name]; the current one is
@@ -2896,8 +2896,8 @@ func (m *Model) windowBar() (string, []span) {
 		x += lipgloss.Width(tag) + 1
 		st := infoStyle
 		switch {
-		case i == m.cur: // only the active window stands out
-			st = hiStyle
+		case i == m.cur: // only the active window stands out, in the theme's status colours reversed
+			st = infoStyle.Reverse(true).Bold(true)
 		case w.unread > 0: // the indicator for new messages
 			st = actStyle
 		}
@@ -2908,7 +2908,7 @@ func (m *Model) windowBar() (string, []span) {
 		}
 		b.WriteString(infoStyle.Render(" "))
 	}
-	return lipgloss.NewStyle().Background(statusBG()).Render(fitLine(" "+b.String(), m.width)), spans
+	return barRow(infoStyle.Render(" ")+b.String(), m.width), spans
 }
 
 // rule is the thin line above the status rows. It carries the status
@@ -2938,7 +2938,8 @@ func (m *Model) rule(label string) string {
 
 // inputLine shows the input with line breaks as a return mark and the
 // cursor as a reverse-video cell; a line longer than the row scrolls so
-// the cursor stays in view.
+// the cursor stays in view. The whole row is on the status background,
+// like the status line and the window bar under it.
 func (m *Model) inputLine(prompt string) string {
 	room := max(m.width-lipgloss.Width(prompt)-1, 1)
 	in := []rune(strings.ReplaceAll(string(m.input), "\n", "\u21b5"))
@@ -2956,7 +2957,8 @@ func (m *Model) inputLine(prompt string) string {
 	if p+1 <= len(in) {
 		after = string(in[min(p+1, len(in)):])
 	}
-	return dimStyle.Render(prompt) + string(in[:p]) + lipgloss.NewStyle().Reverse(true).Render(under) + after
+	return barRow(dimStyle.Background(statusBG()).Render(prompt)+infoStyle.Render(string(in[:p]))+
+		infoStyle.Reverse(true).Render(under)+infoStyle.Render(after), m.width)
 }
 
 const keyHelp = `Keys
