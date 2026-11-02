@@ -1976,6 +1976,52 @@ func TestCompleteArgumentsAndPaths(t *testing.T) {
 	if got := string(m.input); got != "/send "+filepath.Join(dir, "cat.png")+" my ca" {
 		t.Fatalf("caption untouched: %q", got)
 	}
+
+	// ~ is the home directory: "~/" used to expand without its slash, so
+	// the home directory's own name passed for the typed file name and
+	// the slice went negative (a panic on Tab).
+	t.Setenv("HOME", dir)
+	for typed, want := range map[string]string{
+		"/send ~":      "/send ~/",
+		"/send ~/":     "/send ~/", // four names, no common start
+		"/send ~/n":    "/send ~/notes.txt ",
+		"/send ~/s":    "/send ~/sub/",
+		"/send ~/sub/": "/send ~/sub/",
+	} {
+		m.input = []rune(typed)
+		m.comp = nil
+		m.complete()
+		if got := string(m.input); got != want {
+			t.Errorf("%q: got %q, want %q", typed, got, want)
+		}
+	}
+}
+
+// FuzzPathCandidates: whatever is typed after /send, completion never
+// panics and every candidate keeps the typed directory part.
+func FuzzPathCandidates(f *testing.F) {
+	for _, s := range []string{"", "~", "~/", "~//", "~/.", "~/..", "~x", "./", "../", "/", "a/b/", "~/sub/", "~/sub/n"} {
+		f.Add(s)
+	}
+	home := f.TempDir()
+	for _, n := range []string{"notes.txt", "sub/cat.png"} {
+		p := filepath.Join(home, n)
+		if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
+			f.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			f.Fatal(err)
+		}
+	}
+	f.Setenv("HOME", home)
+	f.Fuzz(func(t *testing.T, typed string) {
+		dir, _ := filepath.Split(typed)
+		for _, c := range pathCandidates(typed) {
+			if typed != "~" && !strings.HasPrefix(c, dir) {
+				t.Fatalf("%q: candidate %q lost the typed directory %q", typed, c, dir)
+			}
+		}
+	})
 }
 
 func TestStartupRevealsTheWindowLineByLine(t *testing.T) {
