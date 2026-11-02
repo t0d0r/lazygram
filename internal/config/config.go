@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 const (
@@ -53,7 +54,7 @@ func (a App) Validate() error {
 	}
 	if h := strings.TrimSpace(a.APIHash); h == "" {
 		errs = append(errs, errors.New("application hash is required"))
-	} else if len(h) < 16 || strings.ContainsAny(h, " \t\n") {
+	} else if len(h) < 16 || strings.ContainsAny(h, " \t\n") || !utf8.ValidString(h) { // JSON cannot store invalid UTF-8 as is
 		errs = append(errs, errors.New("application hash looks wrong (expected a long hex string)"))
 	}
 	return errors.Join(errs...)
@@ -80,6 +81,10 @@ func LoadApp(dir string) (app App, found bool, err error) {
 		return App{}, false, err
 	}
 	if err := json.Unmarshal(b, &app); err != nil {
+		var te *json.UnmarshalTypeError
+		if errors.As(err, &te) && te.Field != "" { // its text quotes a number from the file
+			return App{}, true, fmt.Errorf("%s: %s is not a valid %s", appFile, te.Field, te.Type)
+		}
 		return App{}, true, fmt.Errorf("%s is not valid JSON: %w", appFile, err)
 	}
 	if err := app.Validate(); err != nil {

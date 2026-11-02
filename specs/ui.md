@@ -160,10 +160,12 @@ member list from the service. Three things make a member:
 - **Being mentioned.** An `@username` in the text of any of the chat's
   messages, own ones and channel posts included (`domain.MentionsIn`: an
   `@` at the start or after a character that is no letter or digit in
-  any script, no underscore and none of `/ . @ = &`, then a letter and 3
-  to 31 more letters, digits or underscores, then the end or a character
-  that is no letter, digit or `/`; an `@` in a space-separated word that
-  holds `://` or starts with `www.` is part of a link, which Telegram
+  any script, no underscore and none of `/ . @ = &`, then the whole run
+  of Latin letters, digits and underscores after it, which must start
+  with a letter and be 4 to 32 long (so `@nickя` is none), then the end
+  or a character that is no letter, digit or `/`; an `@` in a
+  space-separated word that holds `://` or starts with `www.` (ignoring
+  case) is part of a link, which Telegram
   reads as one: so `mail@example.com`, `имейл@example.com`,
   `youtube.com/@name` and `@ab` are none). A mention counts for the
   member with that username, ignoring case; otherwise it makes a member
@@ -524,6 +526,17 @@ the image viewer). The wheel scrolls the window three
 lines (the cursor in a list). Opening happens only on a click or an
 `/open <link>`, only for http and https links with a host (the opener's
 own rule, `opener.IsLink`, for both); nothing is opened automatically.
+
+A link runs from `http://` or `https://` to the next white space (any
+Unicode space, the no-break space included), quote (`"` `'` or a
+backtick) or angle bracket, then ends as a double-clicked word does
+(Selection and clipboard): trailing `.` `,` `;` `:` `!` `?` is dropped,
+and a closing bracket at the end is dropped when the link holds more of
+it than of its opening bracket, so `Go_(game)` keeps its bracket. A
+scheme with nothing left after it (`https://!`) is no link. The link a
+click opens, the one Tab offers after `/open` and the text a double
+click on it copies are the same (for a link that starts its word apart
+from leading brackets and quotes).
 
 ### Selection and clipboard
 

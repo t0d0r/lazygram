@@ -109,8 +109,9 @@ it with the built-in version, and installs by the method the running binary
 was installed with: `brew upgrade t0d0r/tap/lazygram` when the resolved
 executable is under `/Cellar/lazygram/`, otherwise the platform tarball is
 downloaded (HTTPS only, 64 MiB cap), checked against `SHA256SUMS`, the
-`lazygram` file extracted (regular file only, from the expected directory)
-and renamed over the running binary (temp file next to it, so never half
+`lazygram` file extracted (regular file only, from the expected directory,
+at most 64 MiB: a larger one is an error, never cut short) and renamed
+over the running binary (temp file next to it, so never half
 written). `-check` only reports; `-yes` skips the question. A build from
 source (`dev` or between tags) is reported but never replaced. The
 checksums catch corruption, not tampering; HTTPS to GitHub is the trust

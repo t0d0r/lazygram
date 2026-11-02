@@ -315,7 +315,11 @@ func MentionsIn(text string) []string {
 // inLink reports whether the space-separated word around text[i] is a
 // link: it holds :// or starts with www.
 func inLink(text string, i int) bool {
-	start := strings.LastIndexFunc(text[:i], unicode.IsSpace) + 1
+	start := 0
+	if k := strings.LastIndexFunc(text[:i], unicode.IsSpace); k >= 0 {
+		_, n := utf8.DecodeRuneInString(text[k:]) // a space may take more than a byte
+		start = k + n
+	}
 	end := len(text)
 	if k := strings.IndexFunc(text[i:], unicode.IsSpace); k >= 0 {
 		end = i + k
