@@ -91,9 +91,9 @@ Decisions:
   that commit. The provenance names the tag and the commit, not
   `master`.
 - The releases up to v0.4.21 were built on a workstation and carry no
-  provenance. Once v0.4.22 has been published by the Release workflow
-  and verified (step 4), they are deleted from GitHub with `gh release
-  delete vX.Y.Z --yes` (no `--cleanup-tag`). Their tags stay: the
+  provenance. After v0.4.22 had been published by the Release workflow
+  and verified (step 4), they were deleted from GitHub on 2026-11-02
+  with `gh release delete vX.Y.Z --yes` (no `--cleanup-tag`). Their tags stay: the
   Homebrew formula and the Arch recipe build from tag source tarballs,
   and the history keeps them. The exception was the stray
   `v0.4.11-1-gd0bdc3f`, not a version: its release and tag were deleted
@@ -246,7 +246,7 @@ the maintainer side (build and test evidence, submission steps).
   manager, `-check` still reports, and the exit banner's hint points at
   the package manager. Decision: a file pacman owns is never replaced by
   lazygram, so `pacman -Qkk` stays clean and the next upgrade cannot
-  silently undo an update. The recipe builds v0.4.20, which refuses.
+  silently undo an update. The recipe builds v0.4.22, which refuses.
 - A new release needs: push the `vX.Y.Z` tag (the Release workflow
   publishes it, see Publishing), then the watch does the rest; a
   packaging change at the same version bumps `pkgrel`.
