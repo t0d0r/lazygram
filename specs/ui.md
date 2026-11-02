@@ -25,7 +25,42 @@ completion, and an activity indicator.
   window was current; errors also show in the status line. It opens with a figlet banner (font banner3
   where the window is at least its 76 columns wide, chunky below that,
   chosen at render time; plain ASCII, coloured top to bottom) and a
-  tagline with the version. At start the content rolls in like on a slow
+  tagline with the version, then `-!- /help lists commands, /keys the
+  shortcuts` and the start hints: notices that start with `hint: `, one
+  line each. The first two always show, in this order: `/list` (the
+  chats, @people and #channels; Enter opens one) and `/win` (the open
+  windows; `/win N` or Alt-N switches). Two more follow, drawn at random
+  without repeats from a pool of at least 12 others
+  (`internal/tui/hints.go`: Tab completion, Ctrl-X and Enter, the double
+  Ctrl-X, Ctrl-N and Ctrl-P, `/search`, double and triple click,
+  `/theme`, `/autojoin`, `/read-receipts`, `/whois`, `/send`,
+  `/open <link>`, Ctrl-L, `/about`, `/mark-as-read`, `/names`, `/last`,
+  Up and Down, `/mouse`, PgUp and PgDn, `/move` and `/close`), so the pair
+  differs between starts (`Options.Rand` draws them, `rand.IntN` unless
+  a test injects one). They are printed once per start, in window 0 only,
+  as part of its start-up screen, so they roll in with it when window 0
+  is the window shown at start; a chat list,
+  `/refresh` or a poll never prints them again, and `/redraw` drops them
+  like any notice. Each hint is at most 70 columns, so it fits one row of
+  an 80-column window after the stamp, plain ASCII, true of the current
+  code, and names only commands the parser knows. A hint is read in
+  window 0, which has no chat, so it never speaks of "this" chat or
+  window, and one that names Ctrl-X or a command the server window
+  refuses (`/send`, `/mark-as-read`, `/last`, `/move`, `/close`, `/edit`,
+  `/delete`, `/me`, `/press`) says it works in a chat window. A word such
+  as `on` or `off` after a command appears only where that command takes
+  it (`/autojoin off`, `/read-receipts on`); `/mouse` takes none, it
+  toggles, so its hint says so. Tests check the form, the command names,
+  these wordings, and that window 0 does refuse each of those commands
+  and Ctrl-X. Decision: a new user's first steps are a
+  chat and a window, so those two always show; the rest is discovered
+  one tip at a time, two per start, which keeps the start-up screen
+  short. Decision: a hint is tried where it is read, so one that fails in
+  window 0 (or that turns a kept setting the wrong way, as `/mouse off`
+  did when the mouse was already off) teaches the wrong thing; the
+  wording names the chat window instead.
+  The `/help` line named `/list` too before; it names `/keys` now,
+  since `/list` has a hint of its own. At start the content rolls in like on a slow
   serial line: the window that is current at start (the server window,
   or the one restored from the last session) shows its rendered lines
   one by one, each new line at the bottom pushing the earlier ones up, so
