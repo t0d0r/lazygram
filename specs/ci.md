@@ -79,7 +79,15 @@ modules and of the GitHub Actions, each ecosystem grouped into one pull
 request, with a 7-day cooldown before a new version is proposed (time
 for a compromised release to be pulled). Commit messages follow the
 repository's convention: `build(deps): ...` for modules,
-`ci(deps): ...` for actions. The pull requests run the Linux, macOS
+`ci(deps): ...` for actions. `github.com/charmbracelet/x/*` gets patch
+updates only: its minor releases follow the charm v2 stack, and the first
+one proposed (ansi 0.10.1 -> 0.11.9) broke the build of the cellbuf that
+lipgloss v1.1.0 and bubbletea v1.3.10 use; with cellbuf moved along too,
+the fuzz targets showed ansi.Truncate and lipgloss.Width disagreeing on
+widths (a digit with an emoji variation selector, an Arabic prepend
+mark). Decision: those libraries move together with lipgloss and
+bubbletea, as one migration to v2, not one Dependabot pull request at a
+time. The pull requests run the Linux, macOS
 and CodeQL workflows; merging them is a manual decision. Dependabot
 alerts and Dependabot security updates are separate repository
 settings (Settings -> Advanced Security), both enabled: an advisory
