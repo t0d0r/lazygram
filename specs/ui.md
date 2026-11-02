@@ -363,7 +363,7 @@ names `/keys`, so the keys are one step away from either.
 | `/open out [msg]`             | the same, but a picture goes to the system viewer    |
 | `/open <link>`                | hand one `http(s)` link with a host to the browser, as a click does (any window; a link with more words after it, or one without a host, is refused); Tab after `/open` offers the chat's ten most recent distinct links, newest first, beside `out` and the attachment ids |
 | `/theme [name]`               | list the colour themes or switch (see Themes)        |
-| `/about`, `/version`          | version, author, repository, license, build, libraries, uptime |
+| `/about`, `/version`          | version, author, repository, license, thanks to the people whose feedback shaped it, build, libraries, uptime |
 | `/fx`                         | running lights over clickable text on or off (kept) |
 | `/mouse`                      | mouse reporting on or off; off lets the terminal select text (kept) |
 | `/clip [mode]`                | where a mouse selection is copied: `auto`, `osc52`, `tool`, `off`; no argument shows the mode and the tool (kept) |

@@ -391,10 +391,11 @@ func (m *Model) about() {
 	for _, l := range []string{
 		"lazygram " + v + " - IRC-style terminal client for Telegram, in the spirit of BitchX and nchat",
 		"  by t0d0r (Todor Dragnev) - https://github.com/t0d0r/lazygram - BSD-2-Clause",
+		"  thanks to @zechkata and @pau4o for their feedback",
 		"  built with " + runtime.Version() + " for " + runtime.GOOS + "/" + runtime.GOARCH +
 			"; gotd/td (MTProto), bubbletea, lipgloss, modernc.org/sqlite",
 		fmt.Sprintf("  provider %s, theme %s, up %s", m.opt.Provider.Name(), currentName, time.Since(m.started).Truncate(time.Second)),
-		"  /help for commands, lazygram update for the latest release",
+		"  /help for the commands, /keys for the shortcuts, lazygram update for the latest release",
 	} {
 		m.note(w, l)
 	}
