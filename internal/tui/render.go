@@ -681,11 +681,15 @@ func splitAt(s string, width int) (string, string) {
 }
 
 // fitLine truncates s to width columns and pads it with spaces, so bars
-// never wrap however long their content is.
+// never wrap however long their content is. It pads until the row
+// measures width: a prepend mark at the end (U+0600..U+0605, Arabic
+// number signs) joins the first space into its grapheme cluster, so one
+// round of padding comes up a column short. A space adds at most one
+// column, so the loop never overshoots.
 func fitLine(s string, width int) string {
 	s = ansi.Truncate(s, width, "")
-	if pad := width - lipgloss.Width(s); pad > 0 {
-		s += strings.Repeat(" ", pad)
+	for w := lipgloss.Width(s); w < width; w = lipgloss.Width(s) {
+		s += strings.Repeat(" ", width-w)
 	}
 	return s
 }

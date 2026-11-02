@@ -40,3 +40,20 @@ func TestBottomRowsAreOnTheStatusBackground(t *testing.T) {
 		}
 	}
 }
+
+// TestBarRowFillsAfterAPrependMark: an Arabic number sign (U+0603) at
+// the end of a row joins the first pad space into one grapheme cluster,
+// so a single round of padding left the row a column short (found by
+// FuzzFitLine with charmbracelet/x/ansi 0.10.4).
+func TestBarRowFillsAfterAPrependMark(t *testing.T) {
+	for _, s := range []string{"؃", "status ؀", "a؅"} {
+		for _, w := range []int{2, 5, 40} {
+			if got := lipgloss.Width(barRow(s, w)); got != w {
+				t.Errorf("barRow(%q, %d) is %d wide", s, w, got)
+			}
+			if got := lipgloss.Width(fitLine(s, w)); got != w {
+				t.Errorf("fitLine(%q, %d) is %d wide", s, w, got)
+			}
+		}
+	}
+}
