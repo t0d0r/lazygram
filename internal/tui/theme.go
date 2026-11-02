@@ -175,11 +175,12 @@ func statusBG() lipgloss.Color { return lipgloss.Color(themes[currentName].Statu
 // background, to width and paints the padding the same way. A background
 // on the whole line would not do: every segment ends with a reset, so it
 // would stop after the last one and leave the rest of the row on the
-// terminal's own background.
+// terminal's own background. It pads until the row measures width, as
+// fitLine does (a prepend mark joins the first space).
 func barRow(s string, width int) string {
 	s = ansi.Truncate(s, width, "")
-	if pad := width - lipgloss.Width(s); pad > 0 {
-		s += infoStyle.Render(strings.Repeat(" ", pad))
+	for w := lipgloss.Width(s); w < width; w = lipgloss.Width(s) {
+		s += infoStyle.Render(strings.Repeat(" ", width-w))
 	}
 	return s
 }
