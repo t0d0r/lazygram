@@ -3,6 +3,7 @@ package tui
 import (
 	"bytes"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -192,6 +193,15 @@ func TestHintsAreWellFormed(t *testing.T) {
 		t.Fatalf("the pool holds at least 12 hints: %d", len(hintPool))
 	}
 	slash := regexp.MustCompile(`(?:^|[\s(])(/[a-z?-]+)`)
+	// The words Tab offers after a command are the settings it takes.
+	settings := map[string]bool{}
+	for _, ws := range argWords {
+		for _, w := range ws {
+			settings[w] = true
+		}
+	}
+	withArg := regexp.MustCompile(`(?:^|[\s(])(/[a-z?-]+) ([a-z0-9-]+)`)
+	thisOne := regexp.MustCompile(`(?i)\bthis (chat|window)`)
 	seen := map[string]bool{}
 	for _, h := range append(append([]string(nil), hintsFixed...), hintPool...) {
 		if seen[h] {
@@ -214,10 +224,75 @@ func TestHintsAreWellFormed(t *testing.T) {
 		if sanitize(h, false) != h {
 			t.Errorf("%q: changed by sanitize", h)
 		}
+		// Read in window 0, which has no chat: an action that needs one
+		// is said to work in a chat window.
+		if thisOne.MatchString(h) {
+			t.Errorf("%q: read in window 0, it must not speak of this chat or window", h)
+		}
+		needsChat := strings.Contains(h, "Ctrl-X")
 		for _, m := range slash.FindAllStringSubmatch(h, -1) {
-			if _, err := command.Parse(m[1]); err != nil {
+			c, err := command.Parse(m[1])
+			if err != nil {
 				t.Errorf("%q names %s: %v", h, m[1], err)
+				continue
+			}
+			_, ok := hintNeedsChat[c.Kind]
+			needsChat = needsChat || ok
+		}
+		if needsChat && !strings.Contains(h, "chat window") {
+			t.Errorf("%q: window 0 refuses it, so the hint says \"chat window\"", h)
+		}
+		// "/autojoin off" is fine; "/mouse off" is not: /mouse toggles.
+		for _, m := range withArg.FindAllStringSubmatch(h, -1) {
+			c, err := command.Parse(m[1])
+			if err != nil || !settings[m[2]] {
+				continue
+			}
+			if !slices.Contains(argWords[c.Kind], m[2]) {
+				t.Errorf("%q: %s takes no %q", h, m[1], m[2])
 			}
 		}
+	}
+}
+
+// hintNeedsChat are the commands the server window refuses, with a line
+// that runs each; with Ctrl-X they need a chat window.
+var hintNeedsChat = map[command.Kind]string{
+	command.SendFile: "/send /nonexistent", command.MarkRead: "/mark-as-read",
+	command.Last: "/last 5", command.Move: "/move 2", command.Close: "/close",
+	command.Edit: "/edit x", command.Delete: "/delete", command.Me: "/me x",
+	command.Press: "/press 1",
+}
+
+// TestHintNeedsChatHolds keeps hintNeedsChat true of the code: each of
+// those commands, and Ctrl-X twice, fails in window 0.
+func TestHintNeedsChatHolds(t *testing.T) {
+	m := hintModel(t, Options{Rand: func(int) int { return 0 }})
+	m.revealAll()
+	m.fx = false
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 20})
+	m.Update(m.chatsCmd()())
+	m.Update(m.syncCmd()())
+	enter(m, "/win 0")
+	n := len(m.wins)
+	if m.cur != 0 || n < 2 {
+		t.Fatalf("in window 0 with chat windows open: cur %d, %d windows", m.cur, n)
+	}
+	for k, line := range hintNeedsChat {
+		if c, err := command.Parse(line); err != nil || c.Kind != k {
+			t.Fatalf("%q does not run the command it stands for: %v", line, err)
+		}
+		m.status, m.isErr = "", false
+		enter(m, line)
+		if !m.isErr || m.cur != 0 || len(m.wins) != n {
+			t.Errorf("%q in window 0: %q; want an error, no window moved or closed", line, m.status)
+		}
+	}
+	m.status, m.isErr = "", false
+	typ(m, "hi")
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
+	if !m.isErr || m.wins[0].enterSends {
+		t.Fatalf("Ctrl-X twice in window 0: %q, enter sends %v; want an error and no toggle", m.status, m.wins[0].enterSends)
 	}
 }
