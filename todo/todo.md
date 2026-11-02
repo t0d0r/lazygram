@@ -105,6 +105,8 @@
 - [x] input cursor: Left/Right, Ctrl-A/E, Delete, Ctrl-K, Ctrl-W before the cursor; completion at the cursor (specs/ui.md)
 - [x] mouse drag selects text and copies it on release: OSC 52 in the frame plus a system tool, /clip modes kept, clicks act on release (specs/ui.md, docs/clipboard.md)
 - [x] double click selects a word, triple a row; Shift-click extends (specs/ui.md, Selection and clipboard)
+- [x] multi-line input area: each line of the input on its own row (no return mark), growing up to 8 rows or a third of the screen, Up/Down between rows and to the history at the edges, rows on the status background (specs/ui.md, Input area; session/2026-11-03-multiline-input.md)
+- [ ] input area follow-ups to decide: Ctrl-W across a line break, Ctrl-K at a line's end joining the next line, word instead of character wrapping, a marker for rows scrolled out of the area
 - [x] typing indicators: Telegram typing updates to domain.TypingState with expiry, status line with a running light (specs/ui.md, specs/providers.md); released in v0.4.18 (assets verified against SHA256SUMS); formula and the Arch recipe still at 0.4.14
 - [x] Ctrl-X sends a line starting with / as text, bypassing the command parser; Enter keeps running commands (specs/ui.md); released in v0.4.17 (assets verified against SHA256SUMS); formula and the Arch recipe still at 0.4.14
 - [x] release v0.4.15 with the mouse selection and the self-update refusal (v0.4.15 and v0.4.16 released 2026-10-31; formula still at 0.4.14)
