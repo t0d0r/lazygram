@@ -97,6 +97,7 @@
 - [ ] sending messages (post-v0.1)
 - [ ] unread markers and mention highlight
 - [ ] cmd/lazygram tests for provider selection
+- [x] status line, window bar and prompt row on the theme's status background across the whole width, in every theme (specs/ui.md, Themes)
 - [ ] gitleaks pre-commit hook
 - [x] CI: Linux and macOS workflows with README badges (specs/ci.md)
 - [x] OpenSSF Scorecard workflow, results published, score and workflow badges in the README (specs/ci.md)

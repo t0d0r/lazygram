@@ -525,6 +525,16 @@ activity and error colours, the nick/chat palette and the banner
 gradient; the terminal's own background is never changed. Colours are
 hex values, downsampled by lipgloss on 256-colour terminals.
 
+The status line, the window bar and the prompt row are painted on the
+theme's status background across the whole width of the window, the
+padding after the last segment included; the prompt itself is in the
+dim colour, typed text in the status text colour, the cursor cell and
+the current window's tag in the bar are the status colours reversed.
+Decision: in every theme the bottom rows read as one block, like an
+Emacs mode line and minibuffer; before, every segment ended with a
+reset, so the background stopped after the last one and the rest of the
+row showed the terminal's own colours.
+
 ## Mouse
 
 Clickable text looks clickable: links are underlined in the theme's link
