@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -105,6 +106,47 @@ func tarball(t *testing.T, entries ...entry) []byte {
 	_ = tw.Close()
 	_ = zw.Close()
 	return buf.Bytes()
+}
+
+// zeroTarball is a release tarball whose DIR/lazygram is size zero bytes.
+// The zeros are streamed, never held, and compress about a thousandfold,
+// so an entry over the 64 MiB cap is a download of about 66 KB.
+func zeroTarball(tb testing.TB, dir string, size int64) []byte {
+	tb.Helper()
+	var buf bytes.Buffer
+	zw, _ := gzip.NewWriterLevel(&buf, gzip.BestSpeed)
+	tw := tar.NewWriter(zw)
+	if err := tw.WriteHeader(&tar.Header{Name: dir + "/lazygram", Typeflag: tar.TypeReg, Mode: 0o755, Size: size}); err != nil {
+		tb.Fatal(err)
+	}
+	zeros := make([]byte, 1<<20)
+	for n := size; n > 0; n -= int64(len(zeros)) {
+		if _, err := tw.Write(zeros[:min(n, int64(len(zeros)))]); err != nil {
+			tb.Fatal(err)
+		}
+	}
+	if err := tw.Close(); err != nil {
+		tb.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		tb.Fatal(err)
+	}
+	return buf.Bytes()
+}
+
+// TestExtractBinaryCap: a binary of exactly the 64 MiB cap comes out whole;
+// one byte more is refused, never cut to the cap and installed broken over
+// the running one (specs/release.md). The error says why, not the size the
+// tarball claims.
+func TestExtractBinaryCap(t *testing.T) {
+	dir := "lazygram-v0.4.1-linux-amd64"
+	if bin, err := ExtractBinary(zeroTarball(t, dir, maxFile), dir); err != nil || len(bin) != maxFile {
+		t.Fatalf("an entry of %d bytes gave %d bytes, %v", maxFile, len(bin), err)
+	}
+	bin, err := ExtractBinary(zeroTarball(t, dir, maxFile+1), dir)
+	if err == nil || !strings.Contains(err.Error(), "larger than 64 MiB") || strings.Contains(err.Error(), strconv.Itoa(maxFile+1)) {
+		t.Fatalf("an entry of %d bytes gave %d bytes, %v", maxFile+1, len(bin), err)
+	}
 }
 
 func TestExtractBinary(t *testing.T) {
