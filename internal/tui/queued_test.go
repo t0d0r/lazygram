@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"lazygram/internal/domain"
 )
@@ -167,8 +168,16 @@ func TestPastedTextKeepsItsLineBreaks(t *testing.T) {
 	if got := string(m.input); got != "line one\nline two\nend\n" {
 		t.Fatalf("line breaks kept, CR LF as one: %q", got)
 	}
-	if !strings.Contains(m.View(), "line one↵line two↵end↵") {
-		t.Fatal("the input shows the breaks as return marks")
+	// Each pasted line is a row of the input area, and the cursor waits on
+	// the empty row after the last break.
+	rows := strings.Split(ansi.Strip(m.View()), "\n")
+	want := []string{"[@alice] line one", "         line two", "         end", ""}
+	got := make([]string, 4)
+	for i, r := range rows[len(rows)-4:] {
+		got[i] = strings.TrimRight(r, " ") // input rows are padded to the width
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") || len(rows) != m.height {
+		t.Fatalf("the input shows each line on its own row:\n%s", strings.Join(got, "\n"))
 	}
 	m.input, m.curBack = nil, 0
 	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("tab\there\x01x"), Paste: true})
