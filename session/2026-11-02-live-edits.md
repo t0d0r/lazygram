@@ -81,7 +81,10 @@ a note in Saved Messages on the phone while lazygram shows it.
 
 ## State and next
 
-- Branch `feature/live-edits` (worktree `../lazygram-live-edits`) from
-  master, three local commits; not merged into master or pushed.
-- Next: merge into master when approved; master is ahead of
-  origin/master and unpushed.
+- master carries the three commits, fast-forwarded from
+  `feature/live-edits`; `make check`, the race tests and the smoke test
+  pass on it. It is not pushed: master is ahead of origin/master.
+- Next: try it on a real account (edit and delete a note in Saved
+  Messages on the phone while lazygram shows it); push master when
+  approved; then a patch release (v0.4.21) with the Homebrew formula and
+  the Arch recipe, if wanted.
