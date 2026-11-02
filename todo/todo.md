@@ -96,6 +96,7 @@
 
 - [ ] sending messages (post-v0.1)
 - [ ] unread markers and mention highlight
+- [x] rows padded to the window width stay full after an Arabic prepend mark (U+0600..U+0605), a regression with charmbracelet/x/ansi 0.10.4 found by FuzzFitLine (session/2026-11-03-prepend-padding.md)
 - [ ] cmd/lazygram tests for provider selection
 - [x] status line, window bar and prompt row on the theme's status background across the whole width, in every theme (specs/ui.md, Themes)
 - [ ] gitleaks pre-commit hook
