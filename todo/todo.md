@@ -48,7 +48,7 @@
 - [x] v0.4.12 released (tarballs, SHA256SUMS verified); formula at 0.4.12
 - [x] v0.4.13 released after green Linux and macOS CI (tarballs, SHA256SUMS verified); formula at 0.4.13
 - [x] v0.4.14 released (input cursor) after green CI; formula at 0.4.14
-- [ ] delete the stray GitHub release and tag `v0.4.11-1-gd0bdc3f` (needs `gh release delete ... --cleanup-tag` by hand)
+- [x] delete the stray GitHub release and tag `v0.4.11-1-gd0bdc3f` (2026-11-02, `gh release delete --cleanup-tag`)
 - [x] figlet banners at start and exit (specs/ui.md)
 - [x] /theme with nine colour schemes, persisted (specs/ui.md)
 - [x] pictures rendered in the terminal from memory; /open out for the viewer (specs/ui.md)
@@ -134,3 +134,18 @@
 - [x] the server window shows only what arrives during the session; the cached backlog and older fetched history stay in the chat windows and /search (specs/ui.md, Windows)
 - [x] a group's member list from Telegram (messages.getFullChat, channels.getParticipants, up to 1000), asked once a session when the window opens and kept in memory, so members who never wrote complete too; hidden lists and broadcast channels keep the members seen (specs/ui.md, Members; specs/providers.md; specs/security.md)
 - [x] stable latest installer on GitHub only (specs/release.md, Installer script): `curl -fsSL https://github.com/t0d0r/lazygram/releases/latest/download/install.sh | sh`; install.sh becomes POSIX sh, resolves the latest release from the `releases/latest` redirect (vX.Y.Z only) unless LAZYGRAM_VERSION is set, downloads over HTTPS only (redirects too), checks the tarball against that release's SHA256SUMS, installs to ~/.local/bin without sudo and checks the binary's version; `make dist` copies install.sh into dist/ and lists it in SHA256SUMS, `make release` attaches it; README switches from the commit-pinned command only after the first release that carries the asset answers 200, with the trust/update trade-off and the inspect-first alternative; released in v0.4.20: the URL serves the v0.4.20 install.sh and installs v0.4.20 (checked with sh and dash on macOS arm64, Linux arm64 and amd64)
+
+## Supply chain and OpenSSF Scorecard (specs/ci.md, specs/release.md, specs/security.md)
+
+- [x] CodeQL for Go on pull requests, `master` and weekly (specs/ci.md, CodeQL)
+- [x] Dependabot weekly for Go modules and GitHub Actions, grouped, 7-day cooldown (specs/ci.md, Dependabot)
+- [x] every action pinned to a commit SHA; golangci-lint pinned to v2.15.0 (specs/ci.md, Pinned actions)
+- [x] SECURITY.md with private vulnerability reporting, which is enabled on the repository (specs/security.md)
+- [x] golang.org/x/net 0.62.0; `osv-scanner.toml` skips GO-2026-5932 (openpgp, not imported) until 2027-05-01 (specs/security.md)
+- [x] ruleset on `master`: no force push, no deletion, no bypass
+- [x] Release workflow: a pushed vX.Y.Z tag is built, attested (SLSA build provenance, `actions/attest`) and published; `make release` refuses (specs/release.md, Publishing)
+- [ ] v0.4.22 from the Release workflow: verify assets and provenance, Homebrew formula, PKGBUILD bump, update omacom/omarchy-pkgs#2022
+- [ ] delete the GitHub releases v0.3.0 to v0.4.21 after v0.4.22 is verified; their tags stay (specs/release.md, Decisions)
+- [x] repository settings: Dependabot alerts and security updates, immutable releases, ruleset `release tags` (no deletion or move of `v*`), ruleset `master` requires a pull request and a passing `Linux` check on an up-to-date branch, no bypass (specs/ci.md, Repository settings)
+- [ ] OpenSSF Best Practices badge: CONTRIBUTING.md, CHANGELOG.md with the release notes taken from it, then the registration at bestpractices.dev by the owner
+- [ ] Code-Review: approvals need a second GitHub identity (a second maintainer, or a machine account that opens the pull requests)

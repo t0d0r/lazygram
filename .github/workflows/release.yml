@@ -1,0 +1,81 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+
+# Read only by default; each job names the write scopes it needs.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0 # the master ancestry check needs the history
+          persist-credentials: false
+      - name: Check the tag
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          echo "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$' || { echo "not a release tag: $TAG"; exit 1; }
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/master || { echo "$TAG is not on master"; exit 1; }
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false # a release starts from an empty module cache
+      - name: Test
+        run: make test
+      - name: Build
+        env:
+          TAG: ${{ github.ref_name }}
+        run: make dist VERSION="$TAG"
+      - name: Upload
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+          retention-days: 5
+
+  # No repository code runs here: this job only holds the write scopes.
+  publish:
+    name: Attest and publish
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the GitHub release
+      id-token: write # Sigstore certificate that signs the provenance
+      attestations: write # store the provenance in the attestations API
+    steps:
+      - name: Download
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist
+          path: dist
+      - name: Check the checksums
+        working-directory: dist
+        run: sha256sum -c SHA256SUMS
+      - name: Attest build provenance
+        id: attest
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-checksums: dist/SHA256SUMS
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          BUNDLE: ${{ steps.attest.outputs.bundle-path }}
+        run: |
+          jq -c . "$BUNDLE" > "dist/lazygram-$TAG.intoto.jsonl"
+          gh release create "$TAG" dist/*.tar.gz dist/install.sh dist/SHA256SUMS "dist/lazygram-$TAG.intoto.jsonl" \
+            --verify-tag --title "lazygram $TAG" --generate-notes
