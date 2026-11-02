@@ -96,19 +96,19 @@ tests/package-metadata.sh
 bin/build --package lazygram --dry-run  # the plan; without --dry-run the full build in its builder image
 ```
 
-Last run on 2026-10-31, for the 0.4.14 recipe (the metadata has not
-changed since), in an Arch Linux ARM container against omarchy-pkgs
-master `dd63dc3` (before `min_release_age` was added to the metadata; the
-validator accepts a number with an `s`/`m`/`h`/`d` suffix): `validate`
-exit 0; `check` printed `{"status": "skipped", "current": "0.4.14",
-"reason": "already current"}`; `validate_package_metadata` printed
-`metadata valid`; `pinned-sources.sh` and `package-metadata.sh` PASS;
-`bin/build --package lazygram --dry-run` planned `lazygram` (its four
-`curl` 404 lines are the channel databases it probes for a published
-version; none holds the package yet).
+Last run on 2026-11-02, for the 0.4.21 recipe, in an Arch Linux ARM
+container against omarchy-pkgs master `1c774e2`: `validate` exit 0;
+`check` printed `{"status": "skipped", "current": "0.4.21", "reason":
+"already current"}`; `validate_package_metadata` printed `metadata
+valid`; `pinned-sources.sh` and `package-metadata.sh` PASS; `bin/build
+--package lazygram --dry-run` planned `lazygram` (its four `curl` 404
+lines are the channel databases it probes for a published version; none
+holds the package yet). `makepkg --printsrcinfo` refuses to run as root
+there, which is expected. The first run, on 2026-10-31 for the 0.4.14
+recipe against `dd63dc3`, passed the same way.
 
 The watch pattern itself was checked here too: `v(?P<version>[0-9]+(?:\.[0-9]+)*)`
-matches `v0.4.20` whole and does not match `v0.4.11-1-gd0bdc3f`.
+matches `v0.4.21` whole and does not match `v0.4.11-1-gd0bdc3f`.
 
 ## Manual validation still to do on an Omarchy machine
 
@@ -129,8 +129,15 @@ matches `v0.4.20` whole and does not match `v0.4.11-1-gd0bdc3f`.
 
 ## Submit it to omarchy-pkgs
 
-0. Done: the recipe builds v0.4.20, installs the entry and icon from the
-   tarball and lists `wl-clipboard`; PR.md names 0.4.20.
+Status: submitted on 2026-11-02 as omacom/omarchy-pkgs#2022 (branch
+`lazygram` of the fork t0d0r/omarchy-pkgs, commit `51a84c0` on master
+`1c774e2`, only `pkgbuilds/lazygram/PKGBUILD` and `.omarchy/package.json`).
+It waits for a maintainer's `build-approved` label; the omarchy-pkgs
+repository had about 190 open "Add ..." PRs at the time, some of them
+weeks old, so the wait may be long.
+
+0. Done: the recipe builds v0.4.21, installs the entry and icon from the
+   tarball and lists `wl-clipboard`; PR.md names 0.4.21.
 1. Keep this repository's `packaging/omarchy/lazygram/` as the source of
    truth; the PR copies it.
 2. Fork and branch:
@@ -150,9 +157,9 @@ matches `v0.4.20` whole and does not match `v0.4.11-1-gd0bdc3f`.
 
    ```sh
    git add pkgbuilds/lazygram
-   git commit -m "Add lazygram 0.4.20"
+   git commit -m "feat(lazygram): add lazygram 0.4.21"
    git push -u origin lazygram
-   gh pr create -R omacom/omarchy-pkgs --title "Add lazygram 0.4.20: terminal Telegram client (TUI)" \
+   gh pr create -R omacom/omarchy-pkgs --title "Add lazygram 0.4.21: terminal Telegram client (TUI)" \
      --body-file /path/to/lazygram/packaging/omarchy/PR.md
    ```
 
