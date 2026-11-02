@@ -75,12 +75,8 @@ dist: ## build release tarballs, install.sh and SHA256SUMS into dist/ for every 
 	if command -v sha256sum >/dev/null; then sha256sum *.tar.gz install.sh; else shasum -a 256 *.tar.gz install.sh; fi > SHA256SUMS; \
 	cat SHA256SUMS
 
-release: ## publish dist/ as the GitHub release for the current tag (needs gh and a clean vX.Y.Z tag)
-	@echo "$(VERSION)" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$$' || { echo "release: HEAD must be at a clean vX.Y.Z tag, got $(VERSION)"; exit 1; }
-	@command -v gh >/dev/null || { echo "release: gh is required"; exit 1; }
-	@test -f dist/SHA256SUMS || { echo "release: run make dist first"; exit 1; }
-	@test -f dist/install.sh || { echo "release: dist/install.sh missing; run make dist"; exit 1; }
-	gh release create $(VERSION) dist/*.tar.gz dist/install.sh dist/SHA256SUMS --title "lazygram $(VERSION)" --generate-notes
+release: ## releases are published by the Release workflow on a pushed vX.Y.Z tag (specs/release.md)
+	@echo "release: push a vX.Y.Z tag; .github/workflows/release.yml builds, attests and publishes it"; exit 1
 
 fmt: ## format in place
 	gofmt -w $(GOFILES)

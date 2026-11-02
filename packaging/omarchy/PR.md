@@ -52,9 +52,9 @@ terminal. Pure Go, BSD-2-Clause. Upstream: https://github.com/t0d0r/lazygram
   `validate_package_metadata` passes, `tests/pinned-sources.sh` and
   `tests/package-metadata.sh` pass, `bin/build --package lazygram
   --dry-run` plans the build.
-- The watch pattern matches `v0.4.21` whole and ignores the stray tag
-  `v0.4.11-1-gd0bdc3f` in the upstream repository (a release mishap, to
-  be deleted).
+- The watch pattern matches `v0.4.21` whole, so a malformed tag such as
+  the `v0.4.11-1-gd0bdc3f` the upstream repository once had (a release
+  mishap, deleted since) would never be taken for a version.
 - Not tested by me on Omarchy itself: the launcher entry inside Hyprland
   and `omarchy pkg add lazygram` once published.
 
