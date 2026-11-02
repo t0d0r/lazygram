@@ -1,6 +1,7 @@
 package command
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -130,22 +131,59 @@ func TestHelpTextCoversEveryName(t *testing.T) {
 // wrapped here by hand would come out as a stray row of its own.
 func TestHelpTextIsOneLinePerEntry(t *testing.T) {
 	for _, l := range strings.Split(HelpText, "\n") {
-		if !strings.HasPrefix(l, " ") {
-			continue // a heading or a note
+		if p := entryProblem(l); p != "" {
+			t.Errorf("%s: %q", p, l)
 		}
-		if !strings.HasPrefix(l, "  ") || l[2] == ' ' {
-			t.Errorf("an entry starts with exactly two spaces, no continuation lines: %q", l)
-			continue
-		}
-		names, rest, ok := strings.Cut(l[2:], "  ")
-		desc := strings.TrimLeft(rest, " ")
-		if !ok || desc == "" {
-			t.Errorf("no description after the names: %q", l)
-			continue
-		}
-		col := len(l) - len(desc)
-		if want := max(25, 2+len(names)+2); col != want {
-			t.Errorf("description at column %d, want %d: %q", col, want, l)
+	}
+}
+
+// entryProblem says what is wrong with one line of HelpText, or "" for a
+// well-formed entry, heading or note. It checks the length before
+// indexing, so a malformed line fails the test instead of panicking it.
+func entryProblem(l string) string {
+	if !strings.HasPrefix(l, " ") {
+		return "" // a heading or a note
+	}
+	if strings.TrimSpace(l) == "" {
+		return "a blank line holds spaces"
+	}
+	if !strings.HasPrefix(l, "  ") || l[2] == ' ' {
+		return "an entry starts with exactly two spaces, no continuation lines"
+	}
+	names, rest, ok := strings.Cut(l[2:], "  ")
+	desc := strings.TrimLeft(rest, " ")
+	if !ok || desc == "" {
+		return "no description after the names"
+	}
+	col := len(l) - len(desc)
+	if want := max(25, 2+len(names)+2); col != want {
+		return fmt.Sprintf("description at column %d, want %d", col, want)
+	}
+	return ""
+}
+
+// TestEntryProblem covers the malformed lines HelpText does not hold today,
+// so the check above reports them rather than panicking on a short line.
+func TestEntryProblem(t *testing.T) {
+	ok := "  /help" + strings.Repeat(" ", 25-7) + "this list"
+	for _, c := range []struct {
+		line, want string
+	}{
+		{"", ""},
+		{"Commands", ""},
+		{ok, ""},
+		{"  /a-very-long-command-name  its description", ""},
+		{" ", "a blank line holds spaces"},
+		{"  ", "a blank line holds spaces"},
+		{"     ", "a blank line holds spaces"},
+		{" /help  one space", "an entry starts with exactly two spaces, no continuation lines"},
+		{"    wrapped continuation", "an entry starts with exactly two spaces, no continuation lines"},
+		{"  /help", "no description after the names"},
+		{"  /help   ", "no description after the names"},
+		{"  /help  this list", "description at column 9, want 25"},
+	} {
+		if got := entryProblem(c.line); got != c.want {
+			t.Errorf("entryProblem(%q) = %q, want %q", c.line, got, c.want)
 		}
 	}
 }
