@@ -96,6 +96,14 @@
   next start then exits with the "not linked" hint.
 - Third-party dependencies: github.com/gotd/td, modernc.org/sqlite; review
   upgrades before bumping.
+- Fuzz targets (`func Fuzz...` in `*_test.go`) cover the parsers and
+  sanitizers that see untrusted input: message text (mentions, links,
+  wrapping, highlighting, sanitizing), typed input (commands, paths,
+  chat and member names), version strings, release tarballs and
+  checksum files, the application registration. Their seeds and the
+  saved failures under `testdata/fuzz/` run with `make test`; `make
+  fuzz` runs each target for `FUZZTIME` (default 10s) and stops when a
+  package's tests do not build.
 - `lazygram update` is the only network use besides Telegram; downloads are
   HTTPS-only, size-capped and checked against SHA256SUMS; release binaries
   never contain a registration (specs/release.md). A binary installed by

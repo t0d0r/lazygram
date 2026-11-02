@@ -92,6 +92,7 @@
 ## Next
 
 - [ ] cap the media vault size (specs/storage.md)
+- [x] fuzz targets for the parsers and sanitizers that see untrusted input, `make fuzz`; the bugs they found are fixed (specs/security.md; session/2026-11-02-fuzzing.md)
 
 - [ ] sending messages (post-v0.1)
 - [ ] unread markers and mention highlight

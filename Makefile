@@ -5,7 +5,7 @@ GOFILES  = $(shell find . -name '*.go' -not -path './.state/*' -not -path './dis
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 DIST_PLATFORMS ?= linux/amd64 linux/arm64 darwin/amd64 darwin/arm64
 
-.PHONY: help build test lint check run demo login smoke embed dist release fmt install uninstall clean purge
+.PHONY: help build test fuzz lint check run demo login smoke embed dist release fmt install uninstall clean purge
 .DEFAULT_GOAL := help
 
 help: ## list the targets
@@ -16,6 +16,17 @@ build: ## build ./lazygram (carries the registration when "make embed" was run)
 
 test: ## run all tests
 	go test ./...
+
+FUZZTIME ?= 10s
+
+fuzz: ## run every fuzz target for FUZZTIME each (default 10s); failures land in testdata/fuzz
+	@set -e; for pkg in $$(go list ./...); do \
+		list=$$(go test -list '^Fuzz' $$pkg) || exit 1; \
+		for f in $$(printf '%s\n' "$$list" | grep '^Fuzz' || true); do \
+			echo "== $$pkg $$f"; \
+			go test $$pkg -run '^$$' -fuzz "^$$f$$" -fuzztime $(FUZZTIME); \
+		done; \
+	done
 
 lint: ## gofmt check, go vet, golangci-lint (staticcheck, errcheck, unused), sh -n and shellcheck on install.sh
 	@out="$$(gofmt -l $(GOFILES))"; if [ -n "$$out" ]; then echo "gofmt needed:"; echo "$$out"; exit 1; fi
