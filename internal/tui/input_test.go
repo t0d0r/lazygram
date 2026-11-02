@@ -76,13 +76,16 @@ func TestInputAreaGrowsUpward(t *testing.T) {
 			!strings.HasPrefix(rows[h+2], " [0:server]") {
 			t.Fatalf("rule, status and bar above the input:\n%s", strings.Join(rows[h:h+3], "\n"))
 		}
+		for i := h + 3; i < len(rows); i++ { // input rows are padded to the width
+			rows[i] = strings.TrimRight(rows[i], " ")
+		}
 		return rows
 	}
 
 	// One row: the screen as it always was.
 	typ(m, "hello")
 	rows := frame(1)
-	if rows[29] != "[@alice] hello " || m.contentHeight() != m.height-4 {
+	if rows[29] != "[@alice] hello" || m.contentHeight() != m.height-4 {
 		t.Fatalf("one row: %q", rows[29])
 	}
 	newest := rows[25] // the bottom message row
@@ -95,7 +98,7 @@ func TestInputAreaGrowsUpward(t *testing.T) {
 	press(m, tea.KeyEnter)
 	typ(m, "again")
 	rows = frame(3)
-	if got := strings.Join(rows[27:], "\n"); got != "[@alice] hello\n"+pad+"world\n"+pad+"again " {
+	if got := strings.Join(rows[27:], "\n"); got != "[@alice] hello\n"+pad+"world\n"+pad+"again" {
 		t.Fatalf("three rows:\n%s", got)
 	}
 	if rows[23] != newest {
@@ -184,10 +187,10 @@ func TestInputRowsWrap(t *testing.T) {
 		t.Helper()
 		var out []string
 		for _, r := range m.inputArea("> ") {
-			if w := lipgloss.Width(r); w > m.width {
-				t.Fatalf("a row wider than the screen: %q (%d)", r, w)
+			if w := lipgloss.Width(r); w != m.width {
+				t.Fatalf("a row not padded to the screen width: %q (%d)", r, w)
 			}
-			out = append(out, ansi.Strip(r))
+			out = append(out, strings.TrimRight(ansi.Strip(r), " ")) // the padding and the cursor's cell past the text
 		}
 		return out
 	}
@@ -209,6 +212,9 @@ func TestInputRowsWrap(t *testing.T) {
 	}
 	for _, c := range cases {
 		m.input, m.curBack = []rune(c.in), 0
+		for i := range c.want {
+			c.want[i] = strings.TrimRight(c.want[i], " ")
+		}
 		if got := area(); strings.Join(got, "\n") != strings.Join(c.want, "\n") {
 			t.Errorf("%q:\n%s\nwant:\n%s", c.in, strings.Join(got, "\n"), strings.Join(c.want, "\n"))
 		}
@@ -398,7 +404,11 @@ func TestClicksAndSelectionWithATallInput(t *testing.T) {
 	paste(m, "one\ntwo\nthree")
 	rows := shown(t, m)
 	n := m.height
-	if got := strings.Join(rows[n-3:], "\n"); got != "[server] one\n         two\n         three " {
+	last3 := make([]string, 3)
+	for i, r := range rows[n-3:] {
+		last3[i] = strings.TrimRight(r, " ") // rows are padded to the width
+	}
+	if got := strings.Join(last3, "\n"); got != "[server] one\n         two\n         three" {
 		t.Fatalf("a three-row input:\n%s", got)
 	}
 

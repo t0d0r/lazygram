@@ -685,8 +685,8 @@ func TestCtrlXSendsInChatWindowOnly(t *testing.T) {
 		t.Fatalf("Enter adds a line while Ctrl-X sends: %q", string(m.input))
 	}
 	typ(m, "second line")
-	if rows := strings.Split(ansi.Strip(m.View()), "\n"); rows[len(rows)-2] != "[@alice] plain text" ||
-		rows[len(rows)-1] != "         second line " {
+	if rows := strings.Split(ansi.Strip(m.View()), "\n"); strings.TrimRight(rows[len(rows)-2], " ") != "[@alice] plain text" ||
+		strings.TrimRight(rows[len(rows)-1], " ") != "         second line" {
 		t.Fatalf("the line break starts a new input row:\n%s", strings.Join(rows[len(rows)-2:], "\n"))
 	}
 	m.lastCtrlX = time.Time{}
@@ -2297,14 +2297,20 @@ func TestCursorEditing(t *testing.T) {
 func TestInputAreaShowsTheCursor(t *testing.T) {
 	m := setup(t, newFake())
 	m.width = 20
-	area := func() string { return ansi.Strip(strings.Join(m.inputArea("> "), "\n")) }
+	area := func() string { // rows are padded to the width on the status background
+		rows := m.inputArea("> ")
+		for i, r := range rows {
+			rows[i] = strings.TrimRight(ansi.Strip(r), " ")
+		}
+		return strings.Join(rows, "\n")
+	}
 	m.input, m.curBack = []rune("abc"), 1 // cursor on "c": no extra cell
 	if got := area(); got != "> abc" {
 		t.Fatalf("%q", got)
 	}
 	m.curBack = 0
-	if got := area(); got != "> abc " {
-		t.Fatalf("cursor cell after the text: %q", got)
+	if got, row := area(), m.inputArea("> ")[0]; got != "> abc" || lipgloss.Width(row) != 20 {
+		t.Fatalf("cursor cell after the text, row padded to the width: %q", row)
 	}
 	// A long line wraps instead of scrolling sideways: 17 cells a row (the
 	// width less the prompt and the cursor's cell), the text lined up.
@@ -2315,8 +2321,8 @@ func TestInputAreaShowsTheCursor(t *testing.T) {
 		t.Fatalf("wrapped:\n%s\nwant:\n%s", got, want)
 	}
 	for _, row := range m.inputArea("> ") {
-		if lipgloss.Width(row) > 20 {
-			t.Fatalf("row wider than the screen: %q", row)
+		if lipgloss.Width(row) != 20 {
+			t.Fatalf("row not padded to the screen width: %q", row)
 		}
 	}
 	m.curBack = len(m.input) // cursor at the start: the same rows

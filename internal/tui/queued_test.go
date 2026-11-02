@@ -171,8 +171,12 @@ func TestPastedTextKeepsItsLineBreaks(t *testing.T) {
 	// Each pasted line is a row of the input area, and the cursor waits on
 	// the empty row after the last break.
 	rows := strings.Split(ansi.Strip(m.View()), "\n")
-	want := []string{"[@alice] line one", "         line two", "         end", "          "}
-	if got := rows[len(rows)-4:]; strings.Join(got, "\n") != strings.Join(want, "\n") || len(rows) != m.height {
+	want := []string{"[@alice] line one", "         line two", "         end", ""}
+	got := make([]string, 4)
+	for i, r := range rows[len(rows)-4:] {
+		got[i] = strings.TrimRight(r, " ") // input rows are padded to the width
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") || len(rows) != m.height {
 		t.Fatalf("the input shows each line on its own row:\n%s", strings.Join(got, "\n"))
 	}
 	m.input, m.curBack = nil, 0

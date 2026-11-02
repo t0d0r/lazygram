@@ -2889,7 +2889,7 @@ func (m *Model) statusLine() string {
 	text += tail
 	// The message itself is shown on the rule above, so this line never
 	// has to truncate it.
-	return lipgloss.NewStyle().Background(statusBG()).Render(fitLine(text, m.width))
+	return barRow(text, m.width)
 }
 
 // windowBar lists every window as [N:name]; the current one is
@@ -2905,8 +2905,8 @@ func (m *Model) windowBar() (string, []span) {
 		x += lipgloss.Width(tag) + 1
 		st := infoStyle
 		switch {
-		case i == m.cur: // only the active window stands out
-			st = hiStyle
+		case i == m.cur: // only the active window stands out, in the theme's status colours reversed
+			st = infoStyle.Reverse(true).Bold(true)
 		case w.unread > 0: // the indicator for new messages
 			st = actStyle
 		}
@@ -2917,7 +2917,7 @@ func (m *Model) windowBar() (string, []span) {
 		}
 		b.WriteString(infoStyle.Render(" "))
 	}
-	return lipgloss.NewStyle().Background(statusBG()).Render(fitLine(" "+b.String(), m.width)), spans
+	return barRow(infoStyle.Render(" ")+b.String(), m.width), spans
 }
 
 // rule is the thin line above the status rows. It carries the status

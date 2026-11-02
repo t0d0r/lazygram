@@ -5,7 +5,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 )
 
 // The input area (specs/ui.md, Input area): every line of the input is a
@@ -163,38 +162,50 @@ func (m *Model) inputHeight() int {
 // input's first row after the prompt, every other row indented to the
 // prompt's width so the text lines up, and the cursor as a reverse-video
 // cell on its row (on the character under it, or past the line's text).
+// Every row is on the status background across the whole width, like the
+// status line and the window bar above it: the prompt in the dim colour,
+// the text in the status text colour, the cursor in the two reversed.
 func (m *Model) inputArea(prompt string) []string {
 	rows, cur, top, n := m.inputLayout(prompt)
 	m.inTop = top
 	p := m.pos()
 	indent := strings.Repeat(" ", lipgloss.Width(prompt))
-	cursor := lipgloss.NewStyle().Reverse(true)
+	cursor := infoStyle.Reverse(true)
 	out := make([]string, 0, n)
 	for i := top; i < top+n; i++ {
 		var b strings.Builder
 		if i == 0 {
-			b.WriteString(dimStyle.Render(prompt))
+			b.WriteString(dimStyle.Background(statusBG()).Render(prompt))
 		} else {
-			b.WriteString(indent)
+			b.WriteString(infoStyle.Render(indent))
 		}
 		r := rows[i]
 		under := -1
 		if i == cur {
 			under = r.under(p)
 		}
-		for k, g := range r.gs {
-			if k == under {
-				b.WriteString(cursor.Render(g.text))
-			} else {
-				b.WriteString(g.text)
+		var text strings.Builder // runs of plain text share one style
+		flush := func() {
+			if text.Len() > 0 {
+				b.WriteString(infoStyle.Render(text.String()))
+				text.Reset()
 			}
 		}
+		for k, g := range r.gs {
+			if k == under {
+				flush()
+				b.WriteString(cursor.Render(g.text))
+			} else {
+				text.WriteString(g.text)
+			}
+		}
+		flush()
 		if under == len(r.gs) {
 			b.WriteString(cursor.Render(" "))
 		}
 		line := b.String()
-		if m.width > 0 { // a no-op unless the prompt or one character is wider than the screen
-			line = ansi.Truncate(line, m.width, "")
+		if m.width > 0 { // cut to the screen (a no-op unless the prompt or one character is wider) and padded
+			line = barRow(line, m.width)
 		}
 		out = append(out, line)
 	}
