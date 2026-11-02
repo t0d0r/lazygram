@@ -146,6 +146,37 @@ func TestInputAreaCap(t *testing.T) {
 	}
 }
 
+// TestFrameHeight pins the rule the click map depends on: from 5 rows up
+// the frame fills the screen exactly whatever the input, and a smaller
+// screen still gets the 5-row frame (a message row, rule, status line,
+// window bar and an input row), whose top rows the terminal hides.
+func TestFrameHeight(t *testing.T) {
+	for _, lines := range []int{1, 3, 12} {
+		for height := 1; height <= 40; height++ {
+			m := chatOn(t, 40, height)
+			paste(m, numbered("", 1, lines))
+			frame := strings.Split(m.View(), "\n")
+			if want := max(height, 5); len(frame) != want || len(m.clicks) != want {
+				t.Errorf("%d input lines, height %d: frame %d rows, click map %d; want %d",
+					lines, height, len(frame), len(m.clicks), want)
+			}
+		}
+	}
+	// The list filter wraps rather than taking line breaks; it is capped
+	// the same way.
+	for height := 1; height <= 40; height++ {
+		m := chatOn(t, 20, height)
+		enter(m, "/list")
+		typ(m, strings.Repeat("x", 200))
+		if got, want := len(strings.Split(m.View(), "\n")), max(height, 5); got != want || m.mode != modeList {
+			t.Errorf("list filter, height %d: frame %d rows, want %d", height, got, want)
+		}
+		if height == 30 && m.inputHeight() != 8 { // 200 cells in rows of 12 would be 17 rows
+			t.Errorf("list filter: %d rows, want the cap of 8", m.inputHeight())
+		}
+	}
+}
+
 func TestInputRowsWrap(t *testing.T) {
 	m := setup(t, newFake())
 	m.width = 20 // with the prompt "> " a row holds 17 cells and the cursor's cell

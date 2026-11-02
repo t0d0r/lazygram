@@ -745,13 +745,18 @@ that order, and are drawn as before. With one row of input the screen is
 exactly as it was when the input was always one line. Past the cap the area
 scrolls: the rows shown stay put while the cursor moves among them, and
 when the cursor leaves them they move just far enough to show its row
-again; the prompt scrolls away with the first row. The frame always has
-exactly the screen's height, and clicks, the running light under the
-pointer, drags and double and triple clicks map screen rows through the
-rows of that frame (content, rule, status line, window bar, then the
-input rows), so they hit the row they point at whatever the height of
-the input area; a drag over the input rows copies them as shown, prompt
-and indent included. The list filter and the pager search take no line
+again; the prompt scrolls away with the first row. On a screen of at
+least 5 rows the frame has exactly the screen's height (the cap of a
+third of the screen always leaves the content area a row), and clicks,
+the running light under the pointer, drags and double and triple clicks
+map screen rows through the rows of that frame (content, rule, status
+line, window bar, then the input rows), so they hit the row they point
+at whatever the height of the input area; a drag over the input rows
+copies them as shown, prompt and indent included. The content area and
+the input area each keep at least one row, so on a screen of fewer than
+5 rows the frame still has 5 rows; the terminal shows only its bottom
+rows, and the mouse misses by the rows it hides, as it did before the
+input area could grow. The list filter and the pager search take no line
 breaks, so they stay one row unless they are longer than a row.
 
 In a window (not in a list or the pager), when the input has more than
@@ -776,7 +781,11 @@ so a message of several lines can be read and corrected while it is
 written; a long line wraps rather than scrolling sideways for the same
 reason. The cap keeps the messages in view on any screen. The content
 height is computed from the real height of the input area, and the click
-rows come from the same frame, so the mouse hits what is drawn.
+rows come from the same frame, so the mouse hits what is drawn. A screen
+of fewer than 5 rows keeps the 5-row frame rather than dropping the one
+message row or the one input row, because without either the screen has
+nothing to work with; the mouse is not corrected for the rows such a
+screen hides.
 
 ## Typing indicators
 
