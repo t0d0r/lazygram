@@ -83,6 +83,7 @@
 - [x] docs: docs/arch-omarchy.md, README install line, specs/release.md and specs/security.md
 - [x] built and tested in Arch x86_64 and Arch Linux ARM aarch64 containers; omarchy-pkgs validators run
 - [x] point the recipe at the latest release: v0.4.20, entry and icon from the tarball, `wl-clipboard` optional, rebuilt and tested in Arch Linux and Arch Linux ARM containers (packaging/omarchy/README.md)
+- [x] v0.4.21 released (assets verified against SHA256SUMS, the stable installer URL installs it); Homebrew formula at 0.4.21; the recipe builds v0.4.21, built and tested in Arch Linux and Arch Linux ARM containers (packaging/omarchy/README.md)
 - [ ] submit: fork omacom/omarchy-pkgs, copy packaging/omarchy/lazygram to pkgbuilds/lazygram, open the PR (packaging/omarchy/README.md has the steps and packaging/omarchy/PR.md the text); needs the build-approved label from a maintainer
 - [ ] after the package is published: README install line "omarchy pkg add lazygram" first, verify both channels and architectures
 - [ ] man page and shell completions (optional; the recipe would install them)

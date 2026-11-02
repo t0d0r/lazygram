@@ -22,14 +22,14 @@ programs (omarchy-speedtest, cliamp).
 | build | pure Go, no cgo of its own; builds PIE with external linking per the guidelines; `-tags release` as the upstream release tarballs |
 | tests | hermetic; `go test ./...` passes inside makepkg on both architectures |
 | runtime | `glibc` and `hicolor-icon-theme`; `xdg-utils`, `xdg-terminal-exec` and `wl-clipboard` optional; pictures use half-block characters, no terminal graphics protocol |
-| version | `-X main.version=0.4.20`; `lazygram -version` prints it; `update.Parse` accepts it |
+| version | `-X main.version=0.4.21`; `lazygram -version` prints it; `update.Parse` accepts it |
 | state | `~/.local/state/lazygram`, created by lazygram, owner-only; nothing in `/etc` |
 | license | BSD-2-Clause, installed to `/usr/share/licenses/lazygram/` |
 | Omarchy metadata | required (`.omarchy/package.json`); GitHub release watch so releases are proposed by the repository bot |
-| gap, fixed in code | `lazygram update` would try to replace `/usr/bin/lazygram`; now `update.Detect` reports `Package` for a binary under `/usr` outside `/usr/local`, the update refuses with an error before asking anything, and the exit hint names the package manager. Shipped in v0.4.15; the recipe packages v0.4.20, so the packaged binary refuses |
+| gap, fixed in code | `lazygram update` would try to replace `/usr/bin/lazygram`; now `update.Detect` reports `Package` for a binary under `/usr` outside `/usr/local`, the update refuses with an error before asking anything, and the exit hint names the package manager. Shipped in v0.4.15; the recipe packages v0.4.21, so the packaged binary refuses |
 | gap, fixed | no launcher entry or icon; added in the form of Omarchy's own TUI entries (`xdg-terminal-exec --app-id=org.omarchy.lazygram -e sh -c "lazygram \|\| { ...; read -r _; }"`, `Terminal=false`, `TryExec=xdg-terminal-exec`): the class `omarchy-launch-tui` would assign, and the window stays open on the not-linked hint instead of flashing shut |
 | gap, fixed | the entry and icon came from beside the recipe; since v0.4.20 the recipe installs them from the release tarball, so omarchy-pkgs gets only `PKGBUILD` and `.omarchy/` |
-| gap, fixed | the recipe named 0.4.14; it builds v0.4.20, which refuses to self-update and offers `wl-clipboard` as the Wayland clipboard fallback |
+| gap, fixed | the recipe named 0.4.14; it builds v0.4.21, which refuses to self-update and offers `wl-clipboard` as the Wayland clipboard fallback |
 | gap, open | no man page, no shell completions (optional) |
 | gap, open | the stray upstream tag `v0.4.11-1-gd0bdc3f` (ignored by the watch pattern, which matches whole tags) should be deleted |
 
@@ -58,25 +58,25 @@ docker run --rm --platform linux/amd64 \
 # Arch Linux ARM aarch64: the same with --platform linux/arm64 menci/archlinuxarm:base-devel
 ```
 
-Evidence from the runs of 2026-11-01 with the v0.4.20 recipe, built from a
+Evidence from the runs of 2026-11-02 with the v0.4.21 recipe, built from a
 directory that held only `PKGBUILD` and `.omarchy/package.json`, exactly
 what omarchy-pkgs gets (logs kept outside the tree):
 
 | check | aarch64 (Arch Linux ARM, native) | x86_64 (archlinux:base-devel, emulated) |
 |-------|----------------------------------|------------------------------------------|
-| `makepkg -sf` incl. `check()` | 117 s, every Go test green, the installer tests included | 311 s, every Go test green |
-| package | `lazygram-0.4.20-1-aarch64.pkg.tar.xz`, 5.2 MiB, 20.9 MiB installed | `lazygram-0.4.20-1-x86_64.pkg.tar.zst`, 8.0 MiB, 22.1 MiB installed |
+| `makepkg -sf` incl. `check()` | 140 s, every Go test green, the installer tests included | 307 s, every Go test green |
+| package | `lazygram-0.4.21-1-aarch64.pkg.tar.xz`, 5.3 MiB, 21.4 MiB installed | `lazygram-0.4.21-1-x86_64.pkg.tar.zst`, 8.1 MiB, 22.6 MiB installed |
 | `.PKGINFO` | depends glibc, hicolor-icon-theme; optdepends xdg-utils, xdg-terminal-exec, wl-clipboard | same |
 | `namcap PKGBUILD` | clean | clean |
 | `namcap <package>` | two contradictory glibc warnings (that image's namcap cannot resolve the libc provider; glibc is the right dependency) | clean |
 | `pacman -U`, `pacman -Qkk` | 17 files, 0 altered | 17 files, 0 altered |
 | binary | ELF pie, `NOW PIE`, needs `libc.so.6` only | same |
-| `lazygram -version` | `lazygram 0.4.20` | same |
+| `lazygram -version` | `lazygram 0.4.21` | same |
 | `desktop-file-validate` on the entry from the tarball | valid | valid |
 | the entry's command line, run as the terminal would | prints the not-linked hint, then "Press Enter to close" and waits | same |
 | `lazygram -smoke demo` (offline) | prints the demo screen | same |
 | start without an account | exit status 2 with the login hint | same |
-| `lazygram update -check` / `-yes` | "up to date" (0.4.20 is the latest release, so the packaged-install refusal is not reached; `TestUpdateRefusesAPackagedInstall` covers it) | same |
+| `lazygram update -check` / `-yes` | "up to date" (0.4.21 is the latest release, so the packaged-install refusal is not reached; `TestUpdateRefusesAPackagedInstall` covers it) | same |
 
 A first aarch64 run beside the emulated x86_64 build was killed by the
 8 GiB Docker VM while compiling `github.com/gotd/td/tg`; build one at a

@@ -96,7 +96,7 @@ watch follows the GitHub releases of this repository, one day after each
 release is published.
 
 `lazygram update` on a packaged install refuses with an error that names
-pacman (every package from 0.4.15 on; the recipe builds 0.4.20),
+pacman (every package from 0.4.15 on; the recipe builds 0.4.21),
 `lazygram update -check` still reports whether a newer release exists,
 and the exit banner points at the package manager. Never run
 `sudo lazygram update`; use `sudo pacman -Syu`.
