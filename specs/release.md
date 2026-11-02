@@ -152,8 +152,13 @@ compromised account or release changes it for everyone at once;
 `SHA256SUMS` from the same release catches corruption, not tampering,
 and HTTPS to GitHub is the trust anchor, as for `lazygram update`. The
 README offers reading the script first and pinning a version with
-`LAZYGRAM_VERSION`. GitHub's immutable releases setting, when enabled
-on the repository, stops a published asset from being replaced.
+`LAZYGRAM_VERSION`. Immutable releases are enabled on the repository
+(from v0.4.22): a published release's assets cannot be replaced or
+deleted and its tag cannot be moved; the `release tags` ruleset keeps
+any `v*` tag from being deleted or moved. This does not stop someone
+with write access from publishing a new release and marking it latest,
+so it protects pinned versions (`LAZYGRAM_VERSION`, the tags Homebrew
+and the Arch recipe build from), not `releases/latest`.
 
 The README command switches to this URL only after the first release
 that carries `install.sh` answers 200 there; until then it points at the

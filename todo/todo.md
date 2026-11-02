@@ -145,6 +145,6 @@
 - [x] Release workflow: a pushed vX.Y.Z tag is built, attested (SLSA build provenance, `actions/attest`) and published; `make release` refuses (specs/release.md, Publishing)
 - [ ] v0.4.22 from the Release workflow: verify assets and provenance, Homebrew formula, PKGBUILD bump, update omacom/omarchy-pkgs#2022
 - [ ] delete the GitHub releases v0.3.0 to v0.4.21 after v0.4.22 is verified; their tags stay (specs/release.md, Decisions)
-- [ ] repository settings, each pending a decision: Dependabot alerts and security updates, immutable releases, a ruleset for `v*` tags, pull requests required on `master`
+- [x] repository settings: Dependabot alerts and security updates, immutable releases, ruleset `release tags` (no deletion or move of `v*`), ruleset `master` requires a pull request and a passing `Linux` check on an up-to-date branch, no bypass (specs/ci.md, Repository settings)
 - [ ] OpenSSF Best Practices badge: CONTRIBUTING.md, CHANGELOG.md with the release notes taken from it, then the registration at bestpractices.dev by the owner
 - [ ] Code-Review: approvals need a second GitHub identity (a second maintainer, or a machine account that opens the pull requests)

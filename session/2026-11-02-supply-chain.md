@@ -19,8 +19,14 @@
 - golang.org/x/net 0.61.0 -> 0.62.0 (GO-2026-6860, GO-2026-6866);
   `osv-scanner.toml` skips GO-2026-5932 (golang.org/x/crypto/openpgp,
   no fixed version, not imported per govulncheck) until 2027-05-01.
-- Ruleset `master` on the repository: deletion and non-fast-forward
-  blocked, no bypass actors.
+- Repository settings (specs/ci.md, Repository settings): ruleset
+  `master` (no deletion, no force push, pull request required, `Linux`
+  check required on an up-to-date branch, no bypass); ruleset `release
+  tags` for `refs/tags/v*` (no deletion, no move, no bypass); immutable
+  releases; Dependabot alerts and security updates; private
+  vulnerability reporting.
+- The Linux and macOS jobs are named `Linux` and `macOS` (both were
+  `check`), so the required check is unambiguous.
 - `.github/workflows/release.yml`: a pushed `vX.Y.Z` tag on `master`
   is tested and built with `make dist` in a read-only job; a second job,
   which runs no repository code, checks `SHA256SUMS`, creates one SLSA
@@ -51,15 +57,12 @@
 - The releases up to v0.4.21 carry no provenance and are deleted once
   v0.4.22 is verified; their tags stay for the Homebrew formula, the
   Arch recipe and the history.
-- Changes go through pull requests from here on.
+- Changes go through pull requests from here on, enforced by the
+  `master` ruleset; only `Linux` is a required check because macOS
+  runners are sometimes unavailable.
 
 ## Open
 
-- Repository settings, each needing the owner's decision: Dependabot
-  alerts and Dependabot security updates (both off; specs/ci.md
-  describes them as separate settings), immutable releases, a ruleset
-  for `v*` tags (no deletion, no move), pull requests required on
-  `master` (with required status checks).
 - Code-Review stays 0 while the same account writes and merges: GitHub
   does not let an author approve their own pull request.
 - OpenSSF Best Practices badge (passing): CONTRIBUTING.md and

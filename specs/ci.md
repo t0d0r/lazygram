@@ -1,7 +1,8 @@
 # Continuous integration
 
-Two GitHub Actions workflows, `.github/workflows/linux.yml` (name
-`Linux`, ubuntu-latest) and `macos.yml` (name `macOS`, macos-latest),
+Two GitHub Actions workflows, `.github/workflows/linux.yml` (workflow
+and job `Linux`, ubuntu-latest) and `macos.yml` (workflow and job
+`macOS`, macos-latest),
 run on every pull request and on every push to `master`; CodeQL,
 Scorecard and Release are described below. Each job checks
 the repository out, installs the Go version from `go.mod`
@@ -81,9 +82,32 @@ repository's convention: `build(deps): ...` for modules,
 `ci(deps): ...` for actions. The pull requests run the Linux, macOS
 and CodeQL workflows; merging them is a manual decision. Dependabot
 alerts and Dependabot security updates are separate repository
-settings (Settings -> Advanced Security): with them on, an advisory
+settings (Settings -> Advanced Security), both enabled: an advisory
 against a dependency opens its own pull request at once, without the
-cooldown. Their state is recorded in the latest session note.
+cooldown.
+
+## Repository settings
+
+Kept on GitHub, not in the tree; changed only by the owner.
+
+- Ruleset `master` (the default branch), no bypass actors, not even
+  for administrators: no deletion, no force push; changes arrive only
+  through a pull request (no approval required: a single maintainer
+  cannot approve their own); the `Linux` check must pass on a branch
+  that is up to date with `master`. `macOS` is not required, because
+  GitHub's macOS runners are sometimes unavailable for a while; a red
+  `macOS` run is still read before merging.
+- Ruleset `release tags` (`refs/tags/v*`), no bypass actors: a tag
+  cannot be deleted or moved once pushed.
+- Immutable releases: a published release's assets and tag cannot be
+  changed. Releases published before it was enabled (up to v0.4.21)
+  stay mutable and can be deleted.
+- Private vulnerability reporting (SECURITY.md), Dependabot alerts and
+  Dependabot security updates: enabled.
+
+Decision: the rules apply to everyone, so a compromised token or a
+mistake cannot rewrite `master` or a release tag. The cost is that
+every change, notes included, goes through a pull request.
 
 ## Release
 
