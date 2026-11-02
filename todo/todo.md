@@ -103,6 +103,7 @@
 - [x] OpenSSF Scorecard workflow, results published, score and workflow badges in the README (specs/ci.md)
 - [x] fix: Tab after `/send ~/` or `/send ~` panicked (slice out of range) since v0.4.7; regression test and FuzzPathCandidates (specs/ui.md, Completion; session/2026-11-02-path-completion.md)
 - [x] input cursor: Left/Right, Ctrl-A/E, Delete, Ctrl-K, Ctrl-W before the cursor; completion at the cursor (specs/ui.md)
+- [x] start hints in window 0: /list and /win always, then two drawn at random from a pool of 21, each true where it is read (specs/ui.md, Windows; session/2026-11-03-start-hints.md)
 - [x] mouse drag selects text and copies it on release: OSC 52 in the frame plus a system tool, /clip modes kept, clicks act on release (specs/ui.md, docs/clipboard.md)
 - [x] double click selects a word, triple a row; Shift-click extends (specs/ui.md, Selection and clipboard)
 - [x] typing indicators: Telegram typing updates to domain.TypingState with expiry, status line with a running light (specs/ui.md, specs/providers.md); released in v0.4.18 (assets verified against SHA256SUMS); formula and the Arch recipe still at 0.4.14
