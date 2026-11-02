@@ -14,6 +14,16 @@ updates:
     commit-message:
       prefix: build
       include: scope
+    ignore:
+      # The charmbracelet/x libraries move with the charm v2 stack: ansi
+      # 0.11 breaks the cellbuf that lipgloss v1.1.0 and bubbletea v1.3.10
+      # build with, and measures widths differently from them. Patch
+      # releases still come; minor and major ones wait for the move to
+      # the v2 stack (specs/ci.md, Dependabot).
+      - dependency-name: github.com/charmbracelet/x/*
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-major
   - package-ecosystem: github-actions
     directory: /
     schedule:
