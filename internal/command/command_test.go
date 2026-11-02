@@ -110,7 +110,7 @@ func hasSlashWord(text, name string) bool {
 }
 
 // TestHelpTextCoversEveryName keeps /help and the parser table in step:
-// a spelling added to the table without a line in HelpText fails here.
+// a spelling added to the table without an entry in HelpText fails here.
 func TestHelpTextCoversEveryName(t *testing.T) {
 	for name := range table {
 		if !hasSlashWord(HelpText, name) {
@@ -120,12 +120,32 @@ func TestHelpTextCoversEveryName(t *testing.T) {
 	if hasSlashWord("/win /edit", "w") || hasSlashWord("/win /edit", "e") || !hasSlashWord("also /w, /e", "e") {
 		t.Fatal("hasSlashWord must match whole words only")
 	}
-	for _, l := range strings.Split(HelpText, "\n") {
-		if len(l) > 70 {
-			t.Errorf("help line over 70 columns (%d): %q", len(l), l)
-		}
-	}
 	if !strings.HasSuffix(HelpText, "type /keys.") || strings.Contains(HelpText, "Ctrl-") {
 		t.Fatal("help names /keys for the shortcuts and holds no key listing")
+	}
+}
+
+// TestHelpTextIsOneLinePerEntry keeps the reference unwrapped: the window
+// wraps it to its own width when drawn (specs/ui.md, /help), so a line
+// wrapped here by hand would come out as a stray row of its own.
+func TestHelpTextIsOneLinePerEntry(t *testing.T) {
+	for _, l := range strings.Split(HelpText, "\n") {
+		if !strings.HasPrefix(l, " ") {
+			continue // a heading or a note
+		}
+		if !strings.HasPrefix(l, "  ") || l[2] == ' ' {
+			t.Errorf("an entry starts with exactly two spaces, no continuation lines: %q", l)
+			continue
+		}
+		names, rest, ok := strings.Cut(l[2:], "  ")
+		desc := strings.TrimLeft(rest, " ")
+		if !ok || desc == "" {
+			t.Errorf("no description after the names: %q", l)
+			continue
+		}
+		col := len(l) - len(desc)
+		if want := max(25, 2+len(names)+2); col != want {
+			t.Errorf("description at column %d, want %d: %q", col, want, l)
+		}
 	}
 }

@@ -2960,53 +2960,31 @@ func (m *Model) inputLine(prompt string) string {
 	return dimStyle.Render(prompt) + string(in[:p]) + lipgloss.NewStyle().Reverse(true).Render(under) + after
 }
 
-const keyHelp = `Keys
-  Tab                    on an empty prompt: next window (Shift-Tab previous);
-                         otherwise complete like bash: a command, a @user /
-                         #chan or a theme (in a group or channel window its
-                         @nicks, in the text and after /whois); Tab again
-                         lists the possibilities
-  Ctrl-X                 send the typed text to this chat (after a short pause),
-                         as typed: a line starting with / goes out as a message,
-                         never as a command (Enter runs commands); Enter then
-                         adds a line to the message
-  Ctrl-X twice (fast)    toggle "Enter sends" for this window; nothing is sent;
-                         Ctrl-X then adds a line instead, except to a line
-                         starting with / (no leading space), which it still
-                         sends as text
+// keyHelp is what /keys prints: the notes first and the Keys table last,
+// so the table is what the window shows when printing ends (the window
+// follows the newest line). Entries are one logical line each, laid out
+// as in command.HelpText and wrapped when drawn.
+const keyHelp = `Mouse, themes and windows
+Themes: /theme lists the colour schemes, /theme <name> switches (kept).
+Clickable text is bright and underlined; a running light plays over the one under the mouse pointer. /fx turns the light on or off (kept).
+Drag with the left button to select text; on release it is copied to the clipboard: through the terminal (OSC 52) and the system tool when there is one (pbcopy, wl-copy, xclip, xsel, clip); /clip picks (kept).
+Double click copies the word under the pointer, triple click the row; on a link or a name the first click acts and the next ones only select. Shift-click extends the selection where the terminal passes Shift on; most Linux terminals keep Shift-drag (Option on macOS) for their own selection, as does /mouse off.
+Mouse: click a chat name or nick in window 0 to open its window, a tag in the window bar to focus it, a row in a list to open it, a link or a [photo] / [file] token to open it with the system; the wheel scrolls.
+Window 0 is the server window: every chat interleaved, plus notices; it stays at 0 and cannot be closed. /move N puts this window at N.
+A window opens for a chat when it gets a message or has unread ones; [Act: 1,2] in the status line lists windows with unread messages.
+People are @name, groups and channels are #name.
+Keys
+  Tab                    on an empty prompt: next window (Shift-Tab previous); otherwise complete like bash: a command, a @user / #chan or a theme (in a group or channel window its @nicks, in the text and after /whois); Tab again lists the possibilities
+  Ctrl-X                 send the typed text to this chat (after a short pause), as typed: a line starting with / goes out as a message, never as a command (Enter runs commands); Enter then adds a line to the message
+  Ctrl-X twice (fast)    toggle "Enter sends" for this window; nothing is sent; Ctrl-X then adds a line instead, except to a line starting with / (no leading space), which it still sends as text
   Ctrl-N / Ctrl-P        next / previous window (Alt-Right / Alt-Left too)
   Alt-0..9, Esc 0..9     window 0..9 (0 is the server window)
-  Left / Right           move the cursor; Ctrl-A / Ctrl-E line start / end;
-                         Backspace / Delete remove before / under the cursor;
-                         Ctrl-W the word before it, Ctrl-K to the end, Ctrl-U all;
-                         in /list or /win: pick the row's action button
-                         (open or focus, read, unread, close), Enter does it
-  Up / Down              walk the input history (commands and sent lines); a
-                         recalled line is input again: Ctrl-X sends it, Enter
-                         runs it when it starts with /
+  Left / Right           move the cursor; Ctrl-A / Ctrl-E line start / end; Backspace / Delete remove before / under the cursor; Ctrl-W the word before it, Ctrl-K to the end, Ctrl-U all; in /list or /win: pick the row's action button (open or focus, read, unread, close), Enter does it
+  Up / Down              walk the input history (commands and sent lines); a recalled line is input again: Ctrl-X sends it, Enter runs it when it starts with /
   PgUp / PgDn            scroll a page (the wheel scrolls too)
   Home / End             oldest / newest
   Ctrl-R                 sync now
   Ctrl-L                 redraw: drop notices and pictures (/redraw)
   F1                     the command list (/help); /keys prints this
   Esc                    close the list or pager; clear the input
-  Ctrl-C                 quit
-Themes: /theme lists the colour schemes, /theme <name> switches (kept).
-Clickable text is bright and underlined; a running light plays over the
-one under the mouse pointer. /fx turns the light on or off (kept).
-Drag with the left button to select text; on release it is copied to
-the clipboard: through the terminal (OSC 52) and the system tool when
-there is one (pbcopy, wl-copy, xclip, xsel, clip); /clip picks (kept).
-Double click copies the word under the pointer, triple click the row;
-on a link or a name the first click acts and the next ones only select.
-Shift-click extends the selection where the terminal passes Shift on;
-most Linux terminals keep Shift-drag (Option on macOS) for their own
-selection, as does /mouse off.
-Mouse: click a chat name or nick in window 0 to open its window, a tag in
-the window bar to focus it, a row in a list to open it, a link or a
-[photo] / [file] token to open it with the system; the wheel scrolls.
-Window 0 is the server window: every chat interleaved, plus notices;
-it stays at 0 and cannot be closed. /move N puts this window at N.
-A window opens for a chat when it gets a message or has unread ones;
-[Act: 1,2] in the status line lists windows with unread messages.
-People are @name, groups and channels are #name.`
+  Ctrl-C                 quit`

@@ -271,7 +271,8 @@ style, and empty lines inside a message are dropped. Notices: `HH:MM -!- text`. 
 whose text starts with `* ` is an action line (`/me`) and renders as
 `HH:MM * sender text`. Long lines
 wrap as described above; a long line that starts with spaces keeps that
-indent on every piece, so help columns survive narrow windows. A dim separator marks a change of local day.
+indent on every piece. The `/help` and `/keys` references have a layout
+of their own (see `/help` under Modes). A dim separator marks a change of local day.
 Chat and sender colors derive from a hash so they are stable. Sender, text,
 titles and notices are stripped of control characters before rendering.
 
@@ -322,24 +323,52 @@ titles and notices are stripped of control characters before rendering.
   highlighted; the status line shows `N of M messages`; Esc returns.
 `/help` and F1 focus the server window (window 0) and print the command
 reference there as plain lines (no time stamp or marker; command lines
-start after two spaces), one line every 28 ms like a terminal on a slow
-serial line; there is no separate help view. The command reference lists
-the slash commands only, each as its `/name` with every short form the
-parser accepts spelled out (see Short forms below), wrapped so no line
-passes 70 columns, and ends with a line that says to type `/keys` for
-the keyboard shortcuts. `/keys` prints the key
-reference (the Keys table below, plus the notes on themes, mouse and
-windows) the same way, into the server window, slowly, as plain lines.
+start after two spaces), one logical line every 28 ms like a terminal on
+a slow serial line; there is no separate help view. The command
+reference lists the slash commands only, each as its `/name` with every
+short form the parser accepts spelled out (see Short forms below), and
+ends with a line that says to type `/keys` for the keyboard shortcuts.
+`/keys` prints the key reference the same way, into the server window,
+slowly, as plain lines: first the notes on themes, the mouse, selection
+and windows (under the heading `Mouse, themes and windows`), then the
+Keys table below (under `Keys`), last, so that when printing ends the
+table is what the window shows (the window follows the newest line).
 The two are separate so that `/help` stays short enough to read on one
 screen; F1 keeps printing the command reference, and that reference
 names `/keys`, so the keys are one step away from either.
+
+Both references are kept as logical lines and wrapped when drawn, to
+the server window's text width, so they use the whole width of any
+terminal and re-flow on resize:
+
+- An entry is one line: two spaces, the names (single spaces inside),
+  spaces to the description column (column 25; at least two spaces
+  after names that reach it), then the whole description. Drawn, the
+  description wraps with its continuation rows indented to the column
+  where it starts on the first row (a hanging indent).
+- When that leaves the description fewer than 20 columns beside the
+  names, the names take their own row (wrapped, keeping their two-space
+  indent, if the window is narrower than they are) and the description
+  goes on the rows under them, indented 4.
+- Any other line (a heading, a note) is a paragraph wrapped to the
+  width.
+
+No row is wider than the window (at least 10 columns), and no word is
+dropped or reordered; only a word wider than its room is broken.
+Decision: the references were wrapped by hand at 70 columns, which left
+most of a wide terminal empty, could not follow a resize, and broke
+oddly in a narrow window; laying them out when drawn uses whatever width
+there is. `/keys` printed the table first and about 20 lines of notes
+after it, so the notes filled the screen and the table had to be
+scrolled back to; the table is what `/keys` is asked for, so it comes
+last and the notes are one scroll up.
 
 ## Commands
 
 | command                       | action                                               |
 |-------------------------------|------------------------------------------------------|
 | `/help`, `/?`                 | focus the server window and print the command reference there; it ends by naming `/keys` |
-| `/keys`, `/shortcuts`         | focus the server window and print the key reference there |
+| `/keys`, `/shortcuts`         | focus the server window and print the key reference there: the notes first, the key table last |
 | `/redraw`, `/clear`           | drop the window's notices, help text, pictures and banner; the messages stay; a slow print still queued for it is dropped |
 | `/quit`, `/q`                 | leave                                                |
 | `/refresh`, `/r`              | sync now                                             |

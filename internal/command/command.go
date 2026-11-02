@@ -110,68 +110,44 @@ func Names() []string {
 }
 
 // HelpText lists the commands for /help: every spelling the parser table
-// accepts appears as a slash-prefixed word, the short forms on an "also"
-// continuation of their command (TestHelpTextCoversEveryName enforces
-// it). The keys are a separate list, printed by /keys, and the last line
-// says so. Lines stay under 70 columns so they fit an 80-column window
-// after the notice indent.
+// accepts appears as a slash-prefixed word, the short forms after "also"
+// (TestHelpTextCoversEveryName enforces it). The keys are a separate list,
+// printed by /keys, and the last line says so. Each entry is one logical
+// line, two spaces, the names, spaces to column 25 (at least two), then
+// the whole description: the window wraps it to its width when drawn, so
+// nothing here is wrapped by hand (specs/ui.md, /help).
 const HelpText = `Commands
   /help, /?              this command list (F1 too); also /h
-  /keys                  the keyboard shortcuts;
-                         also /shortcuts, /bindings
+  /keys                  the keyboard shortcuts; also /shortcuts, /bindings
   /quit, /q              leave lazygram; also /exit
   /refresh, /r           sync now; also /sync
-  /list [text]           chat list: @people and #channels;
-                         also /ls, /chats
+  /list [text]           chat list: @people and #channels; also /ls, /chats
   /win, /win list        list of the open windows
   /win N                 switch to window N (0 is the server window)
-  /win @user | #chan     open or switch to that chat's window
-                         /win is also /w, /window, /j, /join, /query
+  /win @user | #chan     open or switch to that chat's window; /win is also /w, /window, /j, /join, /query
   /close [N]             close a window; also /wc, /part
   /move N                move this window to position N; also /mv
-  /last [N]              fetch the last N messages here (default 10);
-                         also /history, /hist
-  /search [text]         page through this chat's local history;
-                         also /find, /log
-  /whois [name]          what is known about a chat, or in a group
-                         about one of its members; also /wi, /info
+  /last [N]              fetch the last N messages here (default 10); also /history, /hist
+  /search [text]         page through this chat's local history; also /find, /log
+  /whois [name]          what is known about a chat, or in a group about one of its members; also /wi, /info
   /stats                 client statistics; also /uptime
   /me <text>             send an action line; also /action
-  /msg <@user|#chan> <text>  send to that chat, opening its window;
-                         also /say, /tell
-  /send <path> [caption] send a local file; pictures go as photos
-                         (Tab completes the path); also /file, /upload
-  /redraw, /clear        drop the notices and pictures from this
-                         window; the messages stay
-  /edit [text]           edit your last message here
-                         (no text: put it in the prompt); also /e
-  /delete                delete your last message here, for everyone;
-                         also /del, /rm
-  /press N | <msg> N     press a bot button (numbers shown under it);
-                         also /button, /btn
-  /open [msg]            fetch a photo and show it in the terminal
-                         (a file: decrypt a copy and show where)
+  /msg <@user|#chan> <text>  send to that chat, opening its window; also /say, /tell
+  /send <path> [caption]  send a local file; pictures go as photos (Tab completes the path); also /file, /upload
+  /redraw, /clear        drop the notices and pictures from this window; the messages stay
+  /edit [text]           edit your last message here (no text: put it in the prompt); also /e
+  /delete                delete your last message here, for everyone; also /del, /rm
+  /press N | <msg> N     press a bot button (numbers shown under it); also /button, /btn
+  /open [msg]            fetch a photo and show it in the terminal (a file: decrypt a copy and show where)
   /open out [msg]        the same, but in the system viewer
-  /open <link>           open an http(s) link in the browser; Tab
-                         offers the chat's recent links
-                         /open is also /fetch, /download
-  /theme [name]          list the colour themes, or switch to one;
-                         also /colors, /colours
-  /about                 version, author and build information;
-                         also /version
-  /fx                    running lights over links and buttons
-                         on or off; also /lights, /anim
-  /mouse                 mouse reporting on or off
-                         (off: the terminal selects text)
-  /clip [mode]           selection clipboard: auto (terminal/tool),
-                         osc52, tool or off (kept); also /clipboard
-  /names                 show chats by nick (@alias) or name (@Title);
-                         also /nicks
-  /read-receipts [on|off] report a chat read when you focus its
-                         window with unread messages; off by default,
-                         kept; no argument shows; also /receipts
-  /mark-as-read          one receipt for this window's chat, now,
-                         whatever /read-receipts says
-  /autojoin [on|off]     at start open a window for every chat with
-                         unread messages; on by default, kept
+  /open <link>           open an http(s) link in the browser; Tab offers the chat's recent links; /open is also /fetch, /download
+  /theme [name]          list the colour themes, or switch to one; also /colors, /colours
+  /about                 version, author and build information; also /version
+  /fx                    running lights over links and buttons on or off; also /lights, /anim
+  /mouse                 mouse reporting on or off (off: the terminal selects text)
+  /clip [mode]           selection clipboard: auto (terminal/tool), osc52, tool or off (kept); also /clipboard
+  /names                 show chats by nick (@alias) or name (@Title); also /nicks
+  /read-receipts [on|off]  report a chat read when you focus its window with unread messages; off by default, kept; no argument shows; also /receipts
+  /mark-as-read          one receipt for this window's chat, now, whatever /read-receipts says
+  /autojoin [on|off]     at start open a window for every chat with unread messages; on by default, kept
 Keyboard shortcuts: type /keys.`
