@@ -31,7 +31,7 @@ programs (omarchy-speedtest, cliamp).
 | gap, fixed | the entry and icon came from beside the recipe; since v0.4.20 the recipe installs them from the release tarball, so omarchy-pkgs gets only `PKGBUILD` and `.omarchy/` |
 | gap, fixed | the recipe named 0.4.14; it builds v0.4.21, which refuses to self-update and offers `wl-clipboard` as the Wayland clipboard fallback |
 | gap, open | no man page, no shell completions (optional) |
-| gap, open | the stray upstream tag `v0.4.11-1-gd0bdc3f` (ignored by the watch pattern, which matches whole tags) should be deleted |
+| gap, fixed | the stray upstream release and tag `v0.4.11-1-gd0bdc3f` were deleted on 2026-11-02; the watch pattern matches whole tags, so such a tag would be ignored anyway |
 
 Decisions and their reasons are in specs/release.md.
 

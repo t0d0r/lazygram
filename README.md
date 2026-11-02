@@ -41,8 +41,24 @@ shasum -a 256 -c SHA256SUMS --ignore-missing   # sha256sum on Linux
 less install.sh && sh install.sh
 ```
 
-`LAZYGRAM_VERSION=vX.Y.Z` pins a release, `LAZYGRAM_PREFIX` changes the
-prefix. Later: `lazygram update` (or `brew upgrade`, or `pacman -Syu`).
+Releases from v0.4.22 on are built by GitHub Actions and carry signed
+SLSA build provenance. To check that a tarball came from this
+repository's Release workflow, run for tag `vX.Y.Z`:
+
+```sh
+gh attestation verify lazygram-vX.Y.Z-linux-amd64.tar.gz --repo t0d0r/lazygram \
+  --signer-workflow t0d0r/lazygram/.github/workflows/release.yml \
+  --source-ref refs/tags/vX.Y.Z --deny-self-hosted-runners
+```
+
+[SECURITY.md](SECURITY.md) explains what that proves and how to report
+a vulnerability.
+
+`LAZYGRAM_VERSION=vX.Y.Z` pins a release (v0.4.22 or later; earlier
+releases are no longer published), `LAZYGRAM_PREFIX` changes the
+prefix. Later: `lazygram update` (or `brew upgrade`; an Arch package
+built with makepkg: `git pull` and `makepkg -si` again, or `pacman -Syu`
+once lazygram is in pkgs.omarchy.org).
 
 ## Quick start
 
