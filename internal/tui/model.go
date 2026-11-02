@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -74,6 +75,7 @@ type Options struct {
 	Backlog  int                // cached messages loaded at start; zero means defaultBacklog
 	Version  string             // shown in the start banner
 	Open     func(string) error // opens a link or file; nil means opener.Open
+	Rand     func(n int) int    // draws the start-up hints, a number in [0, n); nil means rand.IntN
 }
 
 // win is one virtual window. wins[0] is the server window (chatID empty).
@@ -269,6 +271,9 @@ func New(opt Options) *Model {
 	if opt.Open == nil {
 		opt.Open = opener.Open
 	}
+	if opt.Rand == nil {
+		opt.Rand = rand.IntN
+	}
 	m := &Model{opt: opt, width: 100, height: 30, loading: map[string]bool{}, visited: map[string]bool{},
 		listed: map[string][]domain.Participant{}, listAsked: map[string]bool{}, listHidden: map[string]bool{},
 		live: map[string]bool{}, reporting: map[string]bool{}, reportNext: map[string]pendingReport{}, gone: map[string]bool{},
@@ -300,7 +305,12 @@ func New(opt Options) *Model {
 	// the cached messages are.
 	m.wins[0].notes = append(m.wins[0].notes, note{text: logo.Wide, raw: true})
 	m.note(m.wins[0], Tagline(opt.Version))
-	m.note(m.wins[0], "/help lists commands, /list the chats")
+	m.note(m.wins[0], "/help lists commands, /keys the shortcuts") // /list has its own hint below
+	// Printed here, once per start, so they roll in with the rest of the
+	// start-up screen; no chat list or /refresh prints them again.
+	for _, h := range startHints(opt.Rand) {
+		m.note(m.wins[0], h)
+	}
 	m.restoreLayout()
 	m.restoreTheme()
 	m.wins[m.cur].revealing = true // only the first screen rolls in; switching windows shows them at once

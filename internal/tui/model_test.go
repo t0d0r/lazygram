@@ -507,7 +507,8 @@ func TestKeysPrintsIntoServerWindow(t *testing.T) {
 	}
 	typ(m, "/keys")
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd == nil || len(m.slow) == 0 || m.slowWin != m.wins[0] || strings.Contains(body(m), "Ctrl-X") {
+	// A start hint may name Ctrl-X; only the reference has "Ctrl-X twice (fast)".
+	if cmd == nil || len(m.slow) == 0 || m.slowWin != m.wins[0] || strings.Contains(body(m), "Ctrl-X twice (fast)") {
 		t.Fatal("/keys starts a slow print into window 0, nothing shown yet")
 	}
 	if m.cur != 0 || m.mode != modeWin {

@@ -45,7 +45,11 @@ embed, which wins over the one shipped in the source; delete
 
 It works like BitchX/irssi, down to the banner at start and the parting
 one at exit (one of several faces, at random), both rolling in line by
-line like a terminal on a slow serial line. Window 0 is the server window:
+line like a terminal on a slow serial line. Under the start banner a few
+`-!- hint:` lines say what to try: always `/list` (the chats, @people and
+#channels; Enter opens one) and `/win` (the open windows and how to
+switch), then two more tips picked at random, different from one start
+to the next. Window 0 is the server window:
 what every chat brings while lazygram runs, interleaved by time as
 `HH:MM #chat <sender> text`, plus `-!-` notices; older messages from the
 cache show in each chat's own window. A window bar above the input lists every window as `[N:name]`.
