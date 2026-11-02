@@ -90,7 +90,7 @@ completion, and an activity indicator.
   In a group whose newest 100 known messages include one from a sender
   without an id (cached by a lazygram that kept no ids; own messages and
   unsigned posts need none), the first show fetches the last 100, so
-  `Store.Identify` learns those senders' usernames (see Members).
+  `Store.Refresh` learns those senders' usernames (see Members).
   Channels keep 10: their posts never carry a sender id.
 - The status line shows `[Act: 2,3]`: the windows with unread messages.
   When a sync brings messages from others the status message (on the
@@ -179,8 +179,8 @@ nick like any.
 
 A cached message learns its sender's id and username when the service
 sends it again (a window's first fetch of its last messages, `/last N`, a
-sync): `Store.Identify` writes those two fields into the cached copy,
-nothing else, and the copy in memory follows. Until then a sender known
+sync): `Store.Refresh` replaces the cached copy with the fetched one,
+and the copy in memory follows (see Edits and deletions). Until then a sender known
 only from older cached messages has no username here. Names and usernames
 are stripped of control characters before they reach the input line or a
 notice.
@@ -398,6 +398,35 @@ base name and mime type. The status shows `sending photo name (N KiB) to
 @chat...` while the upload runs; the message then arrives through sync
 like any other and shows as `[photo]`/`[file: name]`. In the server
 window `/send` is an error. Nothing is read without the command.
+
+## Edits and deletions made elsewhere
+
+A message edited or deleted after lazygram cached it, on another device,
+by the account or by the other side (a "delete for everyone"), changes
+in lazygram too:
+
+- While lazygram runs the service reports it (`provider.ChangeSource`;
+  Telegram: the update stream). An edit replaces the message's text,
+  attachment and buttons in the cache and in every window at once; who
+  sent it and when stay as cached. A deletion removes the message from
+  the cache, its attachment from the vault, and the line from the
+  windows, without a notice: a deleted message is gone. A deletion the
+  service reports without a chat (Telegram's private chats and basic
+  groups share one id space) removes the id from the chats marked
+  `Chat.SharedIDs`, where it is unique. An edit of a message lazygram
+  does not hold changes nothing.
+- A change made while lazygram was off, or one the feed dropped, is
+  healed when the chat's history is fetched (a window's first show,
+  `/last N`): the fetched page replaces cached copies that differ
+  (`Store.Refresh`) and removes the cached messages inside the page's
+  range that the page lacks (`Store.Prune`), since a page has no gaps.
+  Older cached messages, outside every page fetched, keep their last
+  known state.
+
+Decision: the polled history only sees new messages, so without the
+update stream an edit never arrived and a deleted message stayed
+readable in the cache; a message deleted for everyone should not
+outlive the deletion in lazygram.
 
 ## Editing and deleting
 

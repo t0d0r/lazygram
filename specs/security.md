@@ -46,6 +46,11 @@
   when its window is first shown, with the account's own rights, and is
   kept in memory only: it is never written to the cache, a log or a
   file. Broadcast channels are never asked.
+- A message deleted at the service (by the account on another device, or
+  for everyone by the other side) leaves the cache and its attachment the
+  vault as soon as lazygram hears of it, live or at the next fetch of the
+  chat's history (specs/ui.md, Edits and deletions); nothing keeps or
+  shows its text afterwards. An edit replaces the cached text.
 - Attachments are downloaded only on /open or a click, never on arrival,
   and stored encrypted in the vault (hashed names, same keys as the
   cache). Pictures are shown inside the terminal from memory by default, so

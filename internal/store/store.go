@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"time"
 
@@ -229,14 +230,50 @@ func (s *Store) Add(msgs []domain.Message) ([]domain.Message, error) {
 	return fresh, nil
 }
 
-// Identify gives stored messages the sender id and username that a copy
-// fetched again carries. For each message in msgs with a SenderID whose
-// stored copy differs in SenderID or SenderNick, the stored copy gets those
-// two fields and nothing else: text, buttons and media stay as stored. It
-// returns the updated stored copies. Messages cached before the fields
-// existed learn their sender this way when the service sends them again,
-// and a changed username replaces the old one.
-func (s *Store) Identify(msgs []domain.Message) ([]domain.Message, error) {
+// storedLocked reads one stored message; ok is false when there is none
+// or it does not open or decode (a bad row is left alone). s.mu is held.
+func (s *Store) storedLocked(q interface {
+	QueryRow(string, ...any) *sql.Row
+}, chatID, msgID string) (m domain.Message, ok bool, err error) {
+	ck := s.chatKey(chatID)
+	var data []byte
+	switch err := q.QueryRow(`SELECT data FROM messages WHERE chat_key = ? AND id = ?`, ck, msgID).Scan(&data); {
+	case errors.Is(err, sql.ErrNoRows):
+		return m, false, nil
+	case err != nil:
+		return m, false, err
+	}
+	plain, err := s.open(data, rowAAD(ck, msgID))
+	if err != nil {
+		return m, false, nil
+	}
+	if json.Unmarshal(plain, &m) != nil {
+		return m, false, nil
+	}
+	return m, true, nil
+}
+
+// putLocked writes m over its stored row. s.mu is held.
+func (s *Store) putLocked(q interface {
+	Exec(string, ...any) (sql.Result, error)
+}, m domain.Message) error {
+	ck := s.chatKey(m.ChatID)
+	plain, err := json.Marshal(m)
+	if err != nil {
+		return err
+	}
+	_, err = q.Exec(`INSERT OR REPLACE INTO messages (chat_key, id, time, data) VALUES (?, ?, ?, ?)`,
+		ck, m.ID, m.Time.UnixNano(), s.seal(plain, rowAAD(ck, m.ID)))
+	return err
+}
+
+// Refresh brings stored messages up to date with copies fetched again:
+// each message in msgs whose stored copy differs (edited text, media or
+// buttons, the sender's id, username or name) replaces it, and the
+// replacements are returned. Messages not stored are left to Add; a
+// stored row that does not open or decode is left alone, so one bad row
+// never fails the fetch around it.
+func (s *Store) Refresh(msgs []domain.Message) ([]domain.Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	tx, err := s.db.Begin()
@@ -246,42 +283,129 @@ func (s *Store) Identify(msgs []domain.Message) ([]domain.Message, error) {
 	defer func() { _ = tx.Rollback() }()
 	var out []domain.Message
 	for _, m := range msgs {
-		if m.SenderID == "" {
-			continue
-		}
-		ck := s.chatKey(m.ChatID)
-		var data []byte
-		switch err := tx.QueryRow(`SELECT data FROM messages WHERE chat_key = ? AND id = ?`, ck, m.ID).Scan(&data); {
-		case errors.Is(err, sql.ErrNoRows):
-			continue
-		case err != nil:
-			return nil, err
-		}
-		// A row that does not open or decode is left alone: learning a
-		// sender is opportunistic and must not fail the fetch around it.
-		plain, err := s.open(data, rowAAD(ck, m.ID))
+		old, ok, err := s.storedLocked(tx, m.ChatID, m.ID)
 		if err != nil {
-			continue
-		}
-		var old domain.Message
-		if json.Unmarshal(plain, &old) != nil {
-			continue
-		}
-		if old.SenderID == m.SenderID && old.SenderNick == m.SenderNick {
-			continue
-		}
-		old.SenderID, old.SenderNick = m.SenderID, m.SenderNick
-		if plain, err = json.Marshal(old); err != nil {
 			return nil, err
 		}
-		if _, err := tx.Exec(`UPDATE messages SET data = ? WHERE chat_key = ? AND id = ?`,
-			s.seal(plain, rowAAD(ck, m.ID)), ck, m.ID); err != nil {
+		if !ok {
+			continue
+		}
+		a, _ := json.Marshal(old)
+		b, _ := json.Marshal(m)
+		if string(a) == string(b) {
+			continue
+		}
+		if err := s.putLocked(tx, m); err != nil {
 			return nil, err
 		}
-		out = append(out, old)
+		out = append(out, m)
 	}
 	if err := tx.Commit(); err != nil {
 		return nil, err
+	}
+	return out, nil
+}
+
+// Prune deletes the stored messages of chatID that a fetched page proves
+// gone: the page is a chat's history without gaps (the service's newest
+// messages, or a range of them), so a stored message whose numeric id
+// lies between the page's lowest and highest and that the page lacks was
+// deleted at the service. Their attachments go with them. It returns the
+// deleted ids. Non-numeric ids are never pruned.
+func (s *Store) Prune(chatID string, page []domain.Message) ([]string, error) {
+	in := map[int64]bool{}
+	lo, hi := int64(0), int64(0)
+	for _, m := range page {
+		if m.ChatID != chatID {
+			continue
+		}
+		n, err := strconv.ParseInt(m.ID, 10, 64)
+		if err != nil {
+			continue
+		}
+		if len(in) == 0 || n < lo {
+			lo = n
+		}
+		if len(in) == 0 || n > hi {
+			hi = n
+		}
+		in[n] = true
+	}
+	if len(in) == 0 {
+		return nil, nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	ck := s.chatKey(chatID)
+	rows, err := s.db.Query(`SELECT id FROM messages WHERE chat_key = ?`, ck)
+	if err != nil {
+		return nil, err
+	}
+	var gone []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		if n, err := strconv.ParseInt(id, 10, 64); err == nil && n > lo && n < hi && !in[n] {
+			gone = append(gone, id)
+		}
+	}
+	_ = rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, id := range gone {
+		if _, err := s.db.Exec(`DELETE FROM messages WHERE chat_key = ? AND id = ?`, ck, id); err != nil {
+			return nil, err
+		}
+		s.deleteMediaLocked(chatID, id)
+	}
+	return gone, nil
+}
+
+// Edit applies an edit the service reported to the stored message: its
+// text, attachment and buttons become m's; who sent it, when and its ids
+// stay. It returns the message as stored now, or ok false when it is not
+// stored.
+func (s *Store) Edit(m domain.Message) (domain.Message, bool, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	old, ok, err := s.storedLocked(s.db, m.ChatID, m.ID)
+	if err != nil || !ok {
+		return domain.Message{}, false, err
+	}
+	old.Text, old.Media, old.Buttons = m.Text, m.Media, m.Buttons
+	if err := s.putLocked(s.db, old); err != nil {
+		return domain.Message{}, false, err
+	}
+	return old, true, nil
+}
+
+// MessageRef names one stored message.
+type MessageRef struct{ ChatID, ID string }
+
+// DeleteMessages deletes the messages with the given ids from any of the
+// given chats, with their attachments, and returns which were stored. It
+// serves deletions the service reports without naming the chat: ids that
+// are unique across a set of chats.
+func (s *Store) DeleteMessages(chatIDs, ids []string) ([]MessageRef, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []MessageRef
+	for _, chatID := range chatIDs {
+		ck := s.chatKey(chatID)
+		for _, id := range ids {
+			res, err := s.db.Exec(`DELETE FROM messages WHERE chat_key = ? AND id = ?`, ck, id)
+			if err != nil {
+				return out, err
+			}
+			if n, _ := res.RowsAffected(); n > 0 {
+				out = append(out, MessageRef{chatID, id})
+				s.deleteMediaLocked(chatID, id)
+			}
+		}
 	}
 	return out, nil
 }
@@ -301,12 +425,27 @@ func (s *Store) Replace(m domain.Message) error {
 	return err
 }
 
-// Delete removes a message from the cache.
+// Delete removes a message from the cache, and its attachment from the
+// vault.
 func (s *Store) Delete(chatID, msgID string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	_, err := s.db.Exec(`DELETE FROM messages WHERE chat_key = ? AND id = ?`, s.chatKey(chatID), msgID)
+	if err == nil {
+		s.deleteMediaLocked(chatID, msgID)
+	}
 	return err
+}
+
+// deleteMediaLocked removes a message's attachment from the vault, if
+// there is one. s.mu is held.
+func (s *Store) deleteMediaLocked(chatID, msgID string) {
+	key := s.mediaKey(chatID, msgID)
+	if s.mediaDir == "" {
+		delete(s.memMedia, key)
+		return
+	}
+	_ = os.Remove(filepath.Join(s.mediaDir, key+".enc"))
 }
 
 // Messages returns the newest limit messages of a chat (every chat when

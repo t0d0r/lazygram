@@ -139,6 +139,7 @@ type Model struct {
 	now          func() time.Time     // the clock the typing state and double clicks run on; tests replace it
 	typing       *domain.TypingState  // who is typing where, from the service's reports
 	typingCh     <-chan domain.Typing // the service's feed; nil when it has none or closed it
+	changeCh     <-chan domain.Change // edits and deletions from the service; nil without
 	typingExpiry bool                 // a typingExpireMsg is scheduled
 	typingAnim   bool                 // a typingAnimMsg is scheduled
 	typingStep   int                  // the running light's clock
@@ -204,6 +205,7 @@ type (
 	recentMsg struct {
 		chatID       string
 		fresh, known []domain.Message
+		gone         []string // ids deleted at the service
 		err          error
 	}
 	memberListMsg struct {
@@ -390,6 +392,9 @@ func (m *Model) Init() tea.Cmd {
 	m.syncing = true
 	m.chatsAsked = true
 	cmds := []tea.Cmd{m.chatsCmd(), m.syncCmd()}
+	if cmd := m.changesInit(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	if cmd := m.typingInit(); cmd != nil {
 		cmds = append(cmds, cmd)
 	}
@@ -468,7 +473,7 @@ func (m *Model) syncCmd() tea.Cmd {
 		// A provider may return what it fetched before failing part-way, and
 		// its cursors already cover those messages: store them regardless.
 		fresh, addErr := st.Add(msgs)
-		known, idErr := st.Identify(msgs)
+		known, idErr := st.Refresh(msgs)
 		if err == nil {
 			err = errors.Join(addErr, idErr)
 		}
@@ -486,9 +491,14 @@ func (m *Model) recentCmd(chatID string, n int) tea.Cmd {
 		if err != nil {
 			return recentMsg{chatID: chatID, err: err}
 		}
+		// The page is the chat's newest history without gaps: copies the
+		// cache holds are brought up to date (edits made elsewhere, the
+		// sender's username) and what it holds inside the page's range but
+		// the page lacks was deleted at the service.
 		fresh, err := st.Add(msgs)
-		known, idErr := st.Identify(msgs)
-		return recentMsg{chatID: chatID, fresh: fresh, known: known, err: errors.Join(err, idErr)}
+		known, refErr := st.Refresh(msgs)
+		gone, pruneErr := st.Prune(chatID, msgs)
+		return recentMsg{chatID: chatID, fresh: fresh, known: known, gone: gone, err: errors.Join(err, refErr, pruneErr)}
 	}
 }
 
@@ -737,6 +747,11 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 	case memberListMsg:
 		m.gotMemberList(msg)
+	case changeMsg:
+		m.applyChange(msg.c)
+		return m, waitChange(m.changeCh)
+	case changeDoneMsg:
+		m.changeCh = nil
 	case recentMsg:
 		delete(m.loading, msg.chatID)
 		_, w := m.winFor(msg.chatID)
@@ -747,6 +762,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// as for a sync: a stored message is never fresh again.
 		empty := w.chatID != "" && len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})) == 0
 		m.identify(msg.known)
+		m.dropMsgs(msg.chatID, msg.gone)
 		for _, x := range msg.fresh { // what a fetch brings first of this session's messages is live too
 			if !x.Time.Before(m.started) {
 				m.live[x.Key()] = true
@@ -1091,7 +1107,8 @@ func (m *Model) absorb(fresh []domain.Message) {
 }
 
 // identify puts the sender ids and usernames that cached messages just
-// learned (Store.Identify) into the same messages in memory.
+// learned (Store.Refresh: an edit made elsewhere, the sender's id and
+// username) into the same messages in memory.
 func (m *Model) identify(known []domain.Message) {
 	if len(known) == 0 {
 		return
@@ -1102,9 +1119,31 @@ func (m *Model) identify(known []domain.Message) {
 	}
 	for i := range m.msgs {
 		if k, ok := byKey[m.msgs[i].Key()]; ok {
-			m.msgs[i].SenderID, m.msgs[i].SenderNick = k.SenderID, k.SenderNick
+			m.msgs[i] = k
 		}
 	}
+	m.rcache = &renderCache{}
+}
+
+// dropMsgs removes messages of chatID from memory: deleted at the service.
+func (m *Model) dropMsgs(chatID string, ids []string) {
+	if len(ids) == 0 {
+		return
+	}
+	gone := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		gone[domain.Message{ChatID: chatID, ID: id}.Key()] = true
+	}
+	kept := m.msgs[:0]
+	for _, x := range m.msgs {
+		if gone[x.Key()] {
+			delete(m.live, x.Key())
+			continue
+		}
+		kept = append(kept, x)
+	}
+	m.msgs = kept
+	m.rcache = &renderCache{}
 }
 
 // arrived handles messages that just came in: windows open for their chats

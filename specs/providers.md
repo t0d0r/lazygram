@@ -30,6 +30,13 @@ dialog list; an error when none is known). `MarkUnread(chatID, unread)`
 sets or clears the chat's unread mark (Telegram: messages.markDialogUnread
 with an inputDialogPeer); the demo keeps no marks.
 
+`provider.ChangeSource` is optional: a provider that hears of edits and
+deletions as they happen implements `Changes() <-chan domain.Change` (an
+edit with the message as it reads now, or deleted ids with their chat,
+or with no chat for chats marked `Chat.SharedIDs`); the feed may drop a
+change when the reader is behind, and closes when the service stops.
+The demo reports none.
+
 `MarkRead` is a read receipt: the chat was read up to and including
 `msgID`. The TUI calls it with read receipts on (on focus), and on an
 explicit request: `/mark-as-read`, the `[read]` button of `/list` and
@@ -213,7 +220,16 @@ account itself; the TUI's group members are built from them (specs/ui.md,
 Members). Posts sent as a channel carry neither. A group's or channel's
 dialog carries its own public username as `Chat.Username` (empty for
 people, whose username is their alias, and for chats without one), so
-its own signature in its posts is not taken for a member. Member lists (`Members`): messages.getFullChat for a basic group, whose
+its own signature in its posts is not taken for a member. Changes (`Changes`): the update stream, beside the typing updates, also
+carries updateEditMessage and updateEditChannelMessage (converted like a
+history message; the TUI keeps the cached sender), updateDeleteMessages
+(ids in the account's shared id space, no chat) and
+updateDeleteChannelMessages (a supergroup's or channel's ids). A feed of
+256 changes; a change that does not fit is dropped, as the next history
+fetch heals it. Dialogs mark private chats and basic groups
+`Chat.SharedIDs`; supergroups and channels number their own messages.
+
+Member lists (`Members`): messages.getFullChat for a basic group, whose
 participants come whole; for a supergroup first channels.getFullChannel,
 because Telegram answers a non-admin of a group with hidden members with
 the admins and bots only, not an error: when the full info says the

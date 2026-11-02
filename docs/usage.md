@@ -109,6 +109,14 @@ the token or `/open` and the picture is painted inside the window from
 memory (nothing is written to disk); `/open out` opens it in the system
 viewer instead.
 
+## Edits and deletions
+
+A message edited or deleted elsewhere, on your phone or by the person who
+wrote it, changes in lazygram as well: at once while lazygram runs, or
+the next time the chat's history is fetched (opening its window,
+`/last 50`) for what happened while it was off. A deleted message leaves
+the screen, the cache and the attachment vault.
+
 ## Members of groups and channels
 
 In a group or channel window, Tab completes its nicks: after `/whois` and

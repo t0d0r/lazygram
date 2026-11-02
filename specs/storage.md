@@ -29,12 +29,24 @@ per (unidentifiable) chat and nothing else. Everything identifying (text,
 sender, the sender's id and username, chat id, alias, title, kind, unread)
 is inside `data`. The sender's id and username are optional JSON fields
 (`sender_id`, `sender_nick`), so rows cached before they existed still
-decode. `Add` never overwrites a stored row; `Identify` is the one
-exception for these two fields: when a fetched copy of a stored message
-carries a sender id and its id or username differs from the stored one,
-the stored row is re-sealed with the new values and every other field as
-it was. A stored row that does not open or decode is skipped, so one bad
-row never fails the fetch around it.
+decode. `Add` never overwrites a stored row. The cache follows the
+service in four ways (specs/ui.md, Edits and deletions):
+- `Refresh(msgs)`: a fetched copy of a stored message that differs
+  (edited text, media or buttons, the sender's name, id or username)
+  replaces the stored row whole; the replacements are returned.
+- `Prune(chatID, page)`: a page of a chat's history has no gaps, so a
+  stored message of that chat whose numeric id lies strictly between the
+  page's lowest and highest and that the page lacks was deleted at the
+  service; it is deleted with its attachment. Non-numeric ids are never
+  pruned.
+- `Edit(msg)`: an edit the service reported live replaces the stored
+  message's text, media and buttons; sender, time and ids stay.
+- `DeleteMessages(chatIDs, ids)`: deletes those ids from any of those
+  chats (a deletion reported without a chat, for the chats sharing one id
+  space), with their attachments.
+A stored row that does not open or decode is skipped by `Refresh` and
+`Edit`, so one bad row never fails the fetch around it. `Delete` (an own
+`/delete`) removes the attachment from the vault as well.
 
 ## Keys
 
@@ -69,7 +81,7 @@ client.
 ## API
 
 `Open(path, secret)`, `Add(msgs) (fresh, err)` (insert-or-ignore by chat
-and id), `Messages(chatID, limit)` (newest limit, oldest first; empty chat
+and id), `Refresh`, `Prune`, `Edit`, `DeleteMessages`, `Delete`, `Replace`, `Messages(chatID, limit)` (newest limit, oldest first; empty chat
 id means all; limit <= 0 means all), `Count`, `Latest`, `Chats`,
 `SetChats` (replaces the list, keeping order), `SetState`/`State` (small
 sealed JSON documents such as the window layout, in `meta`), `Close`.

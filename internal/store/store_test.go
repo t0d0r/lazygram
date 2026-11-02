@@ -264,42 +264,98 @@ func TestDelete(t *testing.T) {
 	}
 }
 
-func TestIdentifyAddsTheSenderOnly(t *testing.T) {
+func TestRefreshBringsCopiesUpToDate(t *testing.T) {
 	s := mustOpen(t, Memory, secret)
-	mustAdd(t, s, m("c", "1", 0, "cached text"), m("c", "2", 1, "other"))
-	fetched := m("c", "1", 0, "text as fetched")
-	fetched.SenderID, fetched.SenderNick = "u1", "nick"
+	mustAdd(t, s, m("c", "1", 0, "cached text"), m("c", "2", 1, "same"))
+	edited := m("c", "1", 0, "edited elsewhere")
+	edited.SenderID, edited.SenderNick = "u1", "nick"
 	unknown := m("c", "9", 2, "not cached")
-	unknown.SenderID = "u2"
-	plain := m("c", "2", 1, "no sender id") // nothing to learn
-	got, err := s.Identify([]domain.Message{fetched, unknown, plain})
-	if err != nil || len(got) != 1 || got[0].ID != "1" || got[0].Text != "cached text" || got[0].SenderNick != "nick" {
-		t.Fatalf("identified %+v, %v", got, err)
+	same := m("c", "2", 1, "same")
+	got, err := s.Refresh([]domain.Message{edited, unknown, same})
+	if err != nil || len(got) != 1 || got[0].ID != "1" || got[0].Text != "edited elsewhere" || got[0].SenderNick != "nick" {
+		t.Fatalf("refreshed %+v, %v", got, err)
 	}
-	if again, err := s.Identify([]domain.Message{fetched}); err != nil || len(again) != 0 {
-		t.Fatalf("already known: %+v, %v", again, err)
-	}
-	renamed := fetched
-	renamed.SenderNick = ""
-	if again, err := s.Identify([]domain.Message{renamed}); err != nil || len(again) != 1 || again[0].SenderNick != "" {
-		t.Fatalf("a dropped username replaces the old one: %+v, %v", again, err)
+	if again, err := s.Refresh([]domain.Message{edited}); err != nil || len(again) != 0 {
+		t.Fatalf("already up to date: %+v, %v", again, err)
 	}
 	all, err := s.Messages("c", 0)
-	if err != nil || len(all) != 2 || all[0].SenderID != "u1" || all[0].Text != "cached text" || all[1].SenderID != "" {
+	if err != nil || len(all) != 2 || all[0].Text != "edited elsewhere" || all[1].Text != "same" {
 		t.Fatalf("stored: %+v, %v", all, err)
 	}
 }
 
-func TestIdentifySkipsARowThatDoesNotOpen(t *testing.T) {
+func TestRefreshSkipsARowThatDoesNotOpen(t *testing.T) {
 	s := mustOpen(t, Memory, secret)
 	mustAdd(t, s, m("a", "1", 1, "x"), m("a", "2", 2, "y"))
 	if _, err := s.db.Exec(`UPDATE messages SET data = (SELECT data FROM messages WHERE id = '2') WHERE id = '1'`); err != nil {
 		t.Fatal(err)
 	}
-	one, two := m("a", "1", 1, "x"), m("a", "2", 2, "y")
-	one.SenderID, two.SenderID = "u1", "u2"
-	got, err := s.Identify([]domain.Message{one, two})
-	if err != nil || len(got) != 1 || got[0].ID != "2" || got[0].SenderID != "u2" {
-		t.Fatalf("the bad row is skipped, the good one learns its sender: %+v, %v", got, err)
+	one, two := m("a", "1", 1, "x2"), m("a", "2", 2, "y2")
+	got, err := s.Refresh([]domain.Message{one, two})
+	if err != nil || len(got) != 1 || got[0].ID != "2" {
+		t.Fatalf("the bad row is skipped, the good one refreshed: %+v, %v", got, err)
+	}
+}
+
+func TestPruneDropsWhatThePageProvesGone(t *testing.T) {
+	s := mustOpen(t, Memory, secret)
+	mustAdd(t, s, m("c", "5", 0, "old, outside the page"), m("c", "10", 1, "kept"), m("c", "11", 2, "deleted"),
+		m("c", "12", 3, "kept"), m("c", "sent-1", 4, "non-numeric"), m("d", "11", 5, "another chat"))
+	if err := s.PutMedia("c", "11", []byte("picture")); err != nil {
+		t.Fatal(err)
+	}
+	gone, err := s.Prune("c", []domain.Message{m("c", "10", 1, "kept"), m("c", "12", 3, "kept")})
+	if err != nil || len(gone) != 1 || gone[0] != "11" {
+		t.Fatalf("gone: %v %v", gone, err)
+	}
+	all, _ := s.Messages("", 0)
+	if len(all) != 5 {
+		t.Fatalf("only the one inside the range: %+v", all)
+	}
+	if _, found, _ := s.Media("c", "11"); found {
+		t.Fatal("its attachment goes too")
+	}
+	if gone, err := s.Prune("c", nil); err != nil || len(gone) != 0 {
+		t.Fatalf("an empty page proves nothing: %v %v", gone, err)
+	}
+}
+
+func TestEditKeepsTheSender(t *testing.T) {
+	s := mustOpen(t, Memory, secret)
+	orig := m("c", "1", 0, "before")
+	orig.SenderID, orig.SenderNick = "u1", "nick"
+	mustAdd(t, s, orig)
+	upd := domain.Message{ID: "1", ChatID: "c", Sender: "user", Text: "after", Media: &domain.Media{Kind: "photo"}}
+	got, ok, err := s.Edit(upd)
+	if err != nil || !ok || got.Text != "after" || got.Sender != "someone" || got.SenderNick != "nick" || got.Media == nil || !got.Time.Equal(orig.Time) {
+		t.Fatalf("edited: %+v %v %v", got, ok, err)
+	}
+	if _, ok, err := s.Edit(domain.Message{ID: "9", ChatID: "c", Text: "x"}); ok || err != nil {
+		t.Fatalf("not stored: %v %v", ok, err)
+	}
+}
+
+func TestDeleteMessagesAcrossChats(t *testing.T) {
+	s := mustOpen(t, Memory, secret)
+	mustAdd(t, s, m("a", "7", 0, "x"), m("b", "8", 1, "y"), m("c", "7", 2, "a channel's own 7"))
+	_ = s.PutMedia("b", "8", []byte("pic"))
+	refs, err := s.DeleteMessages([]string{"a", "b"}, []string{"7", "8", "99"})
+	if err != nil || len(refs) != 2 {
+		t.Fatalf("refs %+v %v", refs, err)
+	}
+	all, _ := s.Messages("", 0)
+	if len(all) != 1 || all[0].ChatID != "c" {
+		t.Fatalf("left: %+v", all)
+	}
+	if _, found, _ := s.Media("b", "8"); found {
+		t.Fatal("attachments go with their messages")
+	}
+	mustAdd(t, s, m("c", "9", 3, "z"))
+	_ = s.PutMedia("c", "9", []byte("pic"))
+	if err := s.Delete("c", "9"); err != nil {
+		t.Fatal(err)
+	}
+	if _, found, _ := s.Media("c", "9"); found {
+		t.Fatal("Delete removes the attachment too")
 	}
 }

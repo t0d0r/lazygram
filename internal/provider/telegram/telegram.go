@@ -59,6 +59,15 @@ func (p *Provider) Typing() <-chan domain.Typing {
 	return nil
 }
 
+// Changes implements provider.ChangeSource when the client reports edits
+// and deletions (the MTProto client does); otherwise the feed is nil.
+func (p *Provider) Changes() <-chan domain.Change {
+	if c, ok := p.client.(provider.ChangeSource); ok {
+		return c.Changes()
+	}
+	return nil
+}
+
 // Close releases the underlying client when it has one.
 func (p *Provider) Close() error {
 	if c, ok := p.client.(io.Closer); ok {

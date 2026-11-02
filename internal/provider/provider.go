@@ -22,6 +22,15 @@ type TypingSource interface {
 	Typing() <-chan domain.Typing
 }
 
+// ChangeSource is implemented by a service that reports edits and
+// deletions as they happen. Changes returns the feed; the service closes
+// it when it shuts down; a nil feed reports nothing. A change may be
+// dropped when the reader is behind: the next fetch of the chat's history
+// brings the cache up to date anyway.
+type ChangeSource interface {
+	Changes() <-chan domain.Change
+}
+
 // ErrMembersHidden says a chat does not show its member list to this
 // account: a broadcast channel, whose subscribers only admins see, or a
 // group whose admins hid its members.

@@ -34,6 +34,11 @@ type Chat struct {
 	// empty for people and for chats without one. Unlike Alias it is
 	// exact: posts that sign with it mention the chat itself.
 	Username string `json:"username,omitempty"`
+	// SharedIDs says the chat's message ids are unique across all the
+	// account's chats that have it (Telegram: private chats and basic
+	// groups), so a deletion the service reports without a chat names a
+	// message of one of them.
+	SharedIDs bool `json:"shared_ids,omitempty"`
 }
 
 // Name is the IRC-style name: @alias for people, #alias otherwise.
@@ -42,6 +47,26 @@ func (c Chat) Name() string {
 		return "@" + c.Alias
 	}
 	return "#" + c.Alias
+}
+
+// ChangeKind says what a Change does.
+type ChangeKind int
+
+// Change kinds.
+const (
+	Edited  ChangeKind = iota // Msg is the message as it reads now
+	Deleted                   // IDs are gone from ChatID
+)
+
+// Change is an edit or a deletion the service reports while lazygram
+// runs, made here or on another device, by the account or someone else.
+type Change struct {
+	Kind ChangeKind
+	// ChatID is the chat; for a deletion it may be "", meaning the one of
+	// the chats with SharedIDs that has the message.
+	ChatID string
+	IDs    []string // Deleted: the message ids
+	Msg    Message  // Edited: text, media and buttons as they are now
 }
 
 // ButtonKind says what pressing a button does.

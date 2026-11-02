@@ -114,6 +114,9 @@ func (s *service) dialogs(ctx context.Context) ([]dialog, error) {
 		if ent.kind != kindUser { // a person's username is in Alias; Self and deleted ones are made up
 			out[len(out)-1].chat.Username = ent.username
 		}
+		// Private chats and basic groups share one id space per account;
+		// supergroups and channels number their own.
+		out[len(out)-1].chat.SharedIDs = ent.channel == nil
 	}
 	// Usernames are unique on Telegram and claim their names first, so a
 	// chat whose title merely slugs to someone's username can never take it.
