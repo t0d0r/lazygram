@@ -110,6 +110,9 @@ type Model struct {
 	input   []rune
 	curBack int // runes to the right of the cursor; 0 puts it at the end
 	comp    *completion
+	inTop   int  // the first input row shown when the input has more rows than the area
+	goal    int  // the column Up and Down keep while they move between input rows
+	goalOn  bool // goal holds: the keys so far only moved between input rows
 
 	history  []string // lines entered: commands and sent text, oldest first
 	histIdx  int      // position while walking the history; len(history) is the new line
@@ -1407,6 +1410,9 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if k.Type != tea.KeyTab {
 		m.comp = nil
 	}
+	if k.Type != tea.KeyUp && k.Type != tea.KeyDown {
+		m.goalOn = false // any other key ends the moves between input rows
+	}
 	page := max(m.contentHeight()-1, 1)
 	w := m.wins[m.cur]
 	// Esc then a digit works like Alt-digit, for terminals without Meta.
@@ -1512,14 +1518,14 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			break
 		}
 		m.curBack = max(m.curBack-1, 0)
-	case tea.KeyCtrlA:
-		m.curBack = len(m.input)
+	case tea.KeyCtrlA: // the start of the cursor's line, not of the whole message
+		m.curBack = len(m.input) - m.lineStart(m.pos())
 	case tea.KeyCtrlE:
-		m.curBack = 0
+		m.curBack = len(m.input) - m.lineEnd(m.pos())
 	case tea.KeyCtrlU:
 		m.input, m.curBack = nil, 0
 	case tea.KeyCtrlK:
-		m.cut(m.pos(), len(m.input))
+		m.cut(m.pos(), m.lineEnd(m.pos()))
 	case tea.KeyCtrlW: // the word before the cursor, with the spaces after it
 		p, i := m.pos(), m.pos()
 		for i > 0 && m.input[i-1] == ' ' {
@@ -1543,8 +1549,10 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.listCur = max(m.listCur-1, 0)
 		case modePager:
 			w.scroll++
-		default:
-			m.historyStep(-1)
+		default: // between the rows of the input first, the history from its first row
+			if !m.inputStep(-1) {
+				m.historyStep(-1)
+			}
 		}
 	case tea.KeyDown:
 		switch m.mode {
@@ -1553,7 +1561,9 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		case modePager:
 			w.scroll = max(w.scroll-1, 0)
 		default:
-			m.historyStep(1)
+			if !m.inputStep(1) {
+				m.historyStep(1)
+			}
 		}
 	case tea.KeyCtrlR:
 		return m, m.refresh()
@@ -1671,10 +1681,13 @@ func (m *Model) historyStep(d int) {
 		return
 	}
 	if m.histIdx >= len(m.history) {
-		m.histIdx = len(m.history)
-		if d < 0 {
-			m.histSave = append([]rune(nil), m.input...)
+		if d > 0 {
+			// Not walking: nothing is newer, and the typed text stays (a
+			// Down past the last input row must not drop a draft).
+			return
 		}
+		m.histIdx = len(m.history)
+		m.histSave = append([]rune(nil), m.input...)
 	}
 	i := m.histIdx + d
 	switch {
@@ -2592,9 +2605,9 @@ func (m *Model) listItems() []domain.Chat {
 	return out
 }
 
-// contentHeight leaves room for the rule, status, window bar and input
-// rows.
-func (m *Model) contentHeight() int { return max(m.height-4, 1) }
+// contentHeight leaves room for the rule, status, window bar and the
+// input area, which takes one row per row of input up to its cap.
+func (m *Model) contentHeight() int { return max(m.height-3-m.inputHeight(), 1) }
 
 func (m *Model) nameWidth() int {
 	w := 4
@@ -2660,9 +2673,11 @@ func (m *Model) View() string {
 	if m.quitting {
 		return ""
 	}
-	h := m.contentHeight()
+	// The input area is laid out first: its height is what the content
+	// gives up, so the rows below it stay where the clicks expect them.
+	input := m.inputArea(m.prompt())
+	h := max(m.height-3-len(input), 1)
 	w := m.wins[m.cur]
-	var prompt string
 	var body []string
 	bodySpans := make([][]span, h) // one entry per content row
 	m.modeInfo = ""
@@ -2675,14 +2690,12 @@ func (m *Model) View() string {
 			m.listCur = min(max(m.listCur, 0), len(m.wins)-1)
 			m.modeInfo = fmt.Sprintf("windows (%d): Up/Down, Left/Right pick focus/read/unread/close, Enter does it, Esc returns", len(m.wins))
 			rows = m.winLines()
-			prompt = "windows > "
 		} else {
 			items := m.listItems()
 			selectable = len(items) > 0
 			m.listCur = min(max(m.listCur, 0), max(len(items)-1, 0))
 			m.modeInfo = fmt.Sprintf("chats (%d): Up/Down, Left/Right pick open/read/unread, Enter does it, Esc returns, type to narrow", len(items))
 			rows = m.listLines(items)
-			prompt = "list > "
 		}
 		// The selected row is highlighted and carries the action buttons;
 		// each button is a click target of its own, and the row's own
@@ -2715,7 +2728,6 @@ func (m *Model) View() string {
 		bodySpans, _ = window(sp, h, w.scroll)
 		m.modeInfo = fmt.Sprintf("history of %s: %d of %d messages; type to search, Esc returns",
 			m.winName(m.cur), len(hits), len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})))
-		prompt = "search > "
 	default:
 		lines, sp := m.richLines()
 		m.lastLines = len(lines)
@@ -2736,13 +2748,9 @@ func (m *Model) View() string {
 			body[h-1] = actStyle.Render(fitLine(strings.Repeat(" ", pad)+marker, m.width))
 			bodySpans[h-1] = []span{{pad, pad + lipgloss.Width(marker), spanEnd, ""}}
 		}
-		prompt = "[" + m.winName(m.cur) + "] "
-		if w.enterSends {
-			prompt = "[" + m.winName(m.cur) + "]> "
-		}
 	}
 
-	rows := make([]string, 0, len(body)+4)
+	rows := make([]string, 0, len(body)+3+len(input))
 	for _, l := range body {
 		rows = append(rows, lipgloss.NewStyle().MaxWidth(m.width).Render(l))
 	}
@@ -2756,9 +2764,10 @@ func (m *Model) View() string {
 			hint = "enter: to send"
 		}
 	}
-	rows = append(rows, m.rule(hint), m.statusLine(), bar, m.inputLine(prompt))
-	// Screen rows: h content rows, rule, status, window bar, input.
-	m.clicks = append(append([][]span{}, bodySpans...), nil, nil, barSpans, nil)
+	rows = append(append(rows, m.rule(hint), m.statusLine(), bar), input...)
+	// Screen rows: h content rows, rule, status, window bar, the input rows.
+	m.clicks = append(append([][]span{}, bodySpans...), nil, nil, barSpans)
+	m.clicks = append(m.clicks, make([][]span, len(input))...)
 	m.screen = rows
 	var b strings.Builder
 	for y, l := range rows {
@@ -2936,29 +2945,6 @@ func (m *Model) rule(label string) string {
 	return dash(2) + " " + msgStyle.Render(msg) + " " + dash(fill) + dimStyle.Render(right)
 }
 
-// inputLine shows the input with line breaks as a return mark and the
-// cursor as a reverse-video cell; a line longer than the row scrolls so
-// the cursor stays in view.
-func (m *Model) inputLine(prompt string) string {
-	room := max(m.width-lipgloss.Width(prompt)-1, 1)
-	in := []rune(strings.ReplaceAll(string(m.input), "\n", "\u21b5"))
-	p := m.pos()
-	start := 0
-	if p >= room {
-		start = p - room + 1
-	}
-	in, p = in[start:min(start+room, len(in))], p-start
-	under := " "
-	if p < len(in) {
-		under = string(in[p])
-	}
-	after := ""
-	if p+1 <= len(in) {
-		after = string(in[min(p+1, len(in)):])
-	}
-	return dimStyle.Render(prompt) + string(in[:p]) + lipgloss.NewStyle().Reverse(true).Render(under) + after
-}
-
 const keyHelp = `Keys
   Tab                    on an empty prompt: next window (Shift-Tab previous);
                          otherwise complete like bash: a command, a @user /
@@ -2975,12 +2961,15 @@ const keyHelp = `Keys
                          sends as text
   Ctrl-N / Ctrl-P        next / previous window (Alt-Right / Alt-Left too)
   Alt-0..9, Esc 0..9     window 0..9 (0 is the server window)
-  Left / Right           move the cursor; Ctrl-A / Ctrl-E line start / end;
-                         Backspace / Delete remove before / under the cursor;
-                         Ctrl-W the word before it, Ctrl-K to the end, Ctrl-U all;
+  Left / Right           move the cursor; Ctrl-A / Ctrl-E start / end of the
+                         cursor's line; Backspace / Delete remove before /
+                         under the cursor; Ctrl-W the word before it, Ctrl-K
+                         to the end of the line, Ctrl-U all;
                          in /list or /win: pick the row's action button
                          (open or focus, read, unread, close), Enter does it
-  Up / Down              walk the input history (commands and sent lines); a
+  Up / Down              in a message of several rows: the row above / below,
+                         keeping the column; on the first / last row: walk
+                         the input history (commands and sent lines); a
                          recalled line is input again: Ctrl-X sends it, Enter
                          runs it when it starts with /
   PgUp / PgDn            scroll a page (the wheel scrolls too)

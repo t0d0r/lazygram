@@ -685,8 +685,9 @@ func TestCtrlXSendsInChatWindowOnly(t *testing.T) {
 		t.Fatalf("Enter adds a line while Ctrl-X sends: %q", string(m.input))
 	}
 	typ(m, "second line")
-	if !strings.Contains(m.View(), "plain text\u21b5second line") {
-		t.Fatal("the input shows the line break")
+	if rows := strings.Split(ansi.Strip(m.View()), "\n"); rows[len(rows)-2] != "[@alice] plain text" ||
+		rows[len(rows)-1] != "         second line " {
+		t.Fatalf("the line break starts a new input row:\n%s", strings.Join(rows[len(rows)-2:], "\n"))
 	}
 	m.lastCtrlX = time.Time{}
 	_, tick = m.Update(tea.KeyMsg{Type: tea.KeyCtrlX})
@@ -2293,24 +2294,33 @@ func TestCursorEditing(t *testing.T) {
 	}
 }
 
-func TestInputLineShowsTheCursor(t *testing.T) {
+func TestInputAreaShowsTheCursor(t *testing.T) {
 	m := setup(t, newFake())
 	m.width = 20
+	area := func() string { return ansi.Strip(strings.Join(m.inputArea("> "), "\n")) }
 	m.input, m.curBack = []rune("abc"), 1 // cursor on "c": no extra cell
-	if got := ansi.Strip(m.inputLine("> ")); got != "> abc" {
+	if got := area(); got != "> abc" {
 		t.Fatalf("%q", got)
 	}
 	m.curBack = 0
-	if got := ansi.Strip(m.inputLine("> ")); got != "> abc " {
+	if got := area(); got != "> abc " {
 		t.Fatalf("cursor cell after the text: %q", got)
 	}
-	m.input, m.curBack = []rune(strings.Repeat("x", 40)+"END"), 1 // long line, cursor near the end
-	got := ansi.Strip(m.inputLine("> "))
-	if !strings.HasSuffix(got, "END") || lipgloss.Width(got) > 20 {
-		t.Fatalf("scrolled to the cursor: %q (%d)", got, lipgloss.Width(got))
+	// A long line wraps instead of scrolling sideways: 17 cells a row (the
+	// width less the prompt and the cursor's cell), the text lined up.
+	m.input, m.curBack = []rune(strings.Repeat("x", 40)+"END"), 1
+	x17 := strings.Repeat("x", 17)
+	want := "> " + x17 + "\n  " + x17 + "\n  xxxxxxEND"
+	if got := area(); got != want {
+		t.Fatalf("wrapped:\n%s\nwant:\n%s", got, want)
 	}
-	m.curBack = len(m.input) // cursor at the start: the head shows
-	if got := ansi.Strip(m.inputLine("> ")); !strings.HasPrefix(got, "> xxx") || strings.Contains(got, "END") {
-		t.Fatalf("scrolled to the start: %q", got)
+	for _, row := range m.inputArea("> ") {
+		if lipgloss.Width(row) > 20 {
+			t.Fatalf("row wider than the screen: %q", row)
+		}
+	}
+	m.curBack = len(m.input) // cursor at the start: the same rows
+	if got := area(); got != want {
+		t.Fatalf("cursor at the start:\n%s", got)
 	}
 }
