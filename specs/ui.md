@@ -419,10 +419,13 @@ in lazygram too:
   Edits carry their edit time and the later one wins, so updates that
   arrive out of order cannot undo a newer edit. An edit that swaps or
   removes the attachment (another photo or document id, kind or name)
-  drops the vault's copy of the old one. A deleted message that arrived
-  this session from someone else takes its count off its window's
-  unread messages. The deletions are remembered for the session, so a
-  history page fetched just before cannot bring a message back.
+  drops the vault's copy of the old one. A deleted message that was
+  counted in its window's unread messages (it arrived while another
+  window was shown, and the window has not been read since) takes its
+  count back; a message already read takes nothing. The deletions are
+  remembered for the session, in the cache and in memory, so a history
+  page or sync fetched just before cannot bring a message back, in any
+  chat of the shared id space.
 - A change made while lazygram was off, one the feed dropped, or one
   lost in a gap the service would not replay (a sleep, a reconnect;
   `updatesTooLong` and `updateChannelTooLong` say so) is healed when the
@@ -435,7 +438,10 @@ in lazygram too:
   range that the page lacks, and those above it older than the fetch
   (`Store.Prune`), since a page of the newest history has no gaps. A
   quiet fetch says nothing unless it brings messages. Older cached
-  messages, outside every page fetched, keep their last known state.
+  messages, outside every page fetched, keep their last known state. A
+  quiet fetch can store a message before the sync does; one newer than
+  everything the window held is handled as an arrival (status, unread
+  count, typing settled), not as older history.
 
 Decision: the polled history only sees new messages, so without the
 update stream an edit never arrived and a deleted message stayed

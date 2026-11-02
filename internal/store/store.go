@@ -470,11 +470,14 @@ func (s *Store) DeleteMessages(chatIDs, ids []string) ([]MessageRef, error) {
 	}
 	for _, r := range out {
 		s.deleteMediaLocked(r.ChatID, r.ID)
-		s.deleted[string(s.chatKey(r.ChatID))+"\x00"+r.ID] = true
 	}
-	if len(chatIDs) == 1 { // a named chat: remember even what was not stored yet
+	// Remember every pair, stored or not: a page fetched before the
+	// deletion may still be on its way. Ids are unique across the chats
+	// of a shared id space, so the pairs in the other chats name nothing.
+	for _, chatID := range chatIDs {
+		ck := string(s.chatKey(chatID))
 		for _, id := range ids {
-			s.deleted[string(s.chatKey(chatIDs[0]))+"\x00"+id] = true
+			s.deleted[ck+"\x00"+id] = true
 		}
 	}
 	return out, nil

@@ -36,6 +36,15 @@
   message kept its unread count; deleted rows stayed in SQLite free
   pages (secure_delete on).
 
+- A second review of the fixes found and fixed: a deletion could take
+  the unread count of another message (windows now track which arrived
+  messages they counted); a heal running beside a sync could store a
+  new message first and present it as older history (a heal's messages
+  newer than the window's newest go through the arrival path); a
+  deletion without a chat remembered only stored rows, and a late fetch
+  result could put a deleted message back on screen (every pair is
+  remembered in the store, and the TUI keeps its own session set).
+
 ## Decisions
 
 - No notice for a message deleted elsewhere: it is gone, as in the
@@ -73,5 +82,6 @@ a note in Saved Messages on the phone while lazygram shows it.
 ## State and next
 
 - Branch `feature/live-edits` (worktree `../lazygram-live-edits`) from
-  master; not merged or pushed.
-- Next: review, merge into master when approved.
+  master, three local commits; not merged into master or pushed.
+- Next: merge into master when approved; master is ahead of
+  origin/master and unpushed.

@@ -409,3 +409,13 @@ func TestSecureDeleteIsOn(t *testing.T) {
 		t.Fatalf("secure_delete = %d, %v", on, err)
 	}
 }
+
+func TestDeleteWithoutAChatRemembersEveryPair(t *testing.T) {
+	s := mustOpen(t, Memory, secret)
+	if _, err := s.DeleteMessages([]string{"a", "b"}, []string{"9"}); err != nil {
+		t.Fatal(err)
+	}
+	if fresh := mustAdd(t, s, m("b", "9", 1, "a page from before the deletion")); len(fresh) != 0 {
+		t.Fatal("not stored again, whichever shared chat it was in")
+	}
+}

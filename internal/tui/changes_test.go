@@ -131,3 +131,53 @@ func TestHealFetchesAShownWindowAgain(t *testing.T) {
 		t.Fatal("a reported gap heals the shown window at once")
 	}
 }
+
+func TestDeletionTakesBackOnlyItsOwnUnread(t *testing.T) {
+	m := setup(t, newFake())
+	enter(m, "/win @alice")
+	a := mk("c2", "100", "alice", "seen at once", 10)
+	m.arrived([]domain.Message{a}) // shown: not counted
+	m.input = nil
+	enter(m, "/win #dev")
+	b := mk("c2", "101", "alice", "still unread", 11)
+	m.arrived([]domain.Message{b})
+	_, w := m.winFor("c2")
+	if w.unread != 1 {
+		t.Fatalf("one unread: %d", w.unread)
+	}
+	m.applyChange(domain.Change{Kind: domain.Deleted, ChatID: "c2", IDs: []string{"100"}})
+	if w.unread != 1 {
+		t.Fatalf("deleting a read message leaves the unread one counted: %d", w.unread)
+	}
+	m.applyChange(domain.Change{Kind: domain.Deleted, ChatID: "c2", IDs: []string{"101"}})
+	if w.unread != 0 {
+		t.Fatalf("deleting the unread one takes its count: %d", w.unread)
+	}
+}
+
+func TestLateFetchDoesNotBringBackADeletion(t *testing.T) {
+	m := setup(t, newFake())
+	enter(m, "/win #dev")
+	x := mk("c1", "77", "ada", "deleted before the sync answered", 9)
+	m.applyChange(domain.Change{Kind: domain.Deleted, ChatID: "c1", IDs: []string{"77"}})
+	m.Update(syncedMsg{fresh: []domain.Message{x}})
+	m.Update(recentMsg{chatID: "c1", fresh: []domain.Message{x}})
+	if strings.Contains(body(m), "deleted before the sync answered") {
+		t.Fatalf("a late fetch result stays out:\n%s", body(m))
+	}
+}
+
+func TestHealBringsArrivalsAsArrivals(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	runAll(m, enter(m, "/win #dev"))
+	seen := m.seen
+	newer := mk("c1", "88", "alan", "brand new", 30)
+	m.Update(recentMsg{chatID: "c1", quiet: true, fresh: []domain.Message{newer}})
+	if m.seen != seen+1 || !strings.Contains(m.status, "1 new message") {
+		t.Fatalf("an arrival, as from a sync: seen %d->%d status %q", seen, m.seen, m.status)
+	}
+	if strings.Contains(body(m), "fetched 1 older") {
+		t.Fatalf("not called older history:\n%s", body(m))
+	}
+}

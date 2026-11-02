@@ -50,7 +50,8 @@ service in four ways (specs/ui.md, Edits and deletions):
   the vault's copy is dropped.
 - Deletions (`Delete`, `DeleteMessages`, `Prune`) are remembered for the
   session; `Add` does not insert a message deleted this session, so a
-  page fetched before the deletion cannot bring it back.
+  page fetched before the deletion cannot bring it back. A deletion
+  across several chats remembers every chat and id pair, stored or not.
 - The database runs with `PRAGMA secure_delete = ON`: deleted and
   replaced rows are overwritten, not left in free pages.
 - `DeleteMessages(chatIDs, ids)`: deletes those ids from any of those

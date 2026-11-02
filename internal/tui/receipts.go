@@ -86,7 +86,7 @@ func (m *Model) markAsRead() (tea.Model, tea.Cmd) {
 		m.setErr("no message of " + m.nameOf(w.chatID) + " is known yet, nothing to report; /last fetches some")
 		return m, nil
 	}
-	w.unread = 0
+	w.clearUnread()
 	m.setInfo("reporting " + m.nameOf(w.chatID) + " read...")
 	return m, m.report(w.chatID, "read", id)
 }

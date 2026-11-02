@@ -133,14 +133,20 @@ func (m *Model) dropAcross(chats, ids []string) {
 	for _, id := range ids {
 		isID[id] = true
 	}
+	for _, c := range chats { // remembered, so a late fetch result does not bring them back
+		for _, id := range ids {
+			m.gone[domain.Message{ChatID: c, ID: id}.Key()] = true
+		}
+	}
 	kept := m.msgs[:0]
 	for _, x := range m.msgs {
 		if !inChat[x.ChatID] || !isID[x.ID] {
 			kept = append(kept, x)
 			continue
 		}
-		if m.live[x.Key()] && x.Sender != "me" {
-			if _, w := m.winFor(x.ChatID); w != nil && w.unread > 0 {
+		if _, w := m.winFor(x.ChatID); w != nil && w.counted[x.Key()] {
+			delete(w.counted, x.Key())
+			if w.unread > 0 {
 				w.unread--
 			}
 		}

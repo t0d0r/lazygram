@@ -74,7 +74,7 @@ func (m *Model) runListAction() (tea.Model, tea.Cmd) {
 			m.input, m.curBack = nil, 0
 			return m, m.switchTo(i)
 		case "read":
-			w.unread = 0
+			w.clearUnread()
 			m.setInfo("marked " + m.winName(i) + " read" + reporting(w.chatID))
 			return m, m.report(w.chatID, "read", "") // up to the service's newest: the cache may be behind
 		case "unread":
@@ -104,7 +104,7 @@ func (m *Model) runListAction() (tea.Model, tea.Cmd) {
 		return m, m.switchTo(i)
 	case "read":
 		if w != nil {
-			w.unread = 0
+			w.clearUnread()
 		}
 		m.setChatUnread(c.ID, 0)
 		m.setInfo("marked " + m.nameOf(c.ID) + " read" + reporting(c.ID))

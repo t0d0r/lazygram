@@ -84,7 +84,8 @@ type win struct {
 	notes  []note
 	loaded bool // recent history fetched once
 
-	healed time.Time // when its history was last fetched; changes may have been missed since
+	healed  time.Time       // when its history was last fetched; changes may have been missed since
+	counted map[string]bool // keys of the arrived messages counted in unread, so a deletion takes back only its own
 
 	enterSends bool // Enter sends plain text (toggled by a double Ctrl-X)
 
@@ -92,6 +93,9 @@ type win struct {
 	revealed    int  // rendered lines shown so far while revealing
 	revealTotal int  // rendered lines at the last View, for the step size
 }
+
+// clearUnread marks the window read: no unread count, nothing counted.
+func (w *win) clearUnread() { w.unread, w.counted = 0, nil }
 
 // Model is the bubbletea model.
 type Model struct {
@@ -191,6 +195,7 @@ type Model struct {
 	chatsAsked   bool // a chat list request is on its way
 	autojoin     bool
 	sharedChats  map[string]bool // every chat ever marked SharedIDs, kept: where a chat-less deletion looks
+	gone         map[string]bool // keys deleted at the service this session; a late fetch result does not bring them back
 	reportNext   map[string]pendingReport
 	status       string
 	isErr        bool
@@ -266,7 +271,7 @@ func New(opt Options) *Model {
 	}
 	m := &Model{opt: opt, width: 100, height: 30, loading: map[string]bool{}, visited: map[string]bool{},
 		listed: map[string][]domain.Participant{}, listAsked: map[string]bool{}, listHidden: map[string]bool{},
-		live: map[string]bool{}, reporting: map[string]bool{}, reportNext: map[string]pendingReport{},
+		live: map[string]bool{}, reporting: map[string]bool{}, reportNext: map[string]pendingReport{}, gone: map[string]bool{},
 		wins: []*win{{}}, status: "type /help for commands", started: time.Now(), fx: true, rcache: &renderCache{},
 		now: time.Now, typing: domain.NewTypingState(domain.DefaultTypingTTL)}
 	if found, err := opt.Store.State(fxKey, &m.fx); !found || err != nil {
@@ -783,12 +788,29 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		empty := w.chatID != "" && len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})) == 0
 		m.identify(msg.known)
 		m.dropMsgs(msg.chatID, msg.gone)
-		for _, x := range msg.fresh { // what a fetch brings first of this session's messages is live too
+		fresh := msg.fresh
+		if msg.quiet && w.loaded {
+			// A heal can store a message before the sync does: one newer
+			// than everything the window had is an arrival, with its status,
+			// unread count and typing settled, not older history.
+			newest := domain.Latest(domain.Filter(m.msgs, domain.Query{ChatID: msg.chatID}))
+			var older, news []domain.Message
+			for _, x := range fresh {
+				if x.Time.After(newest) {
+					news = append(news, x)
+				} else {
+					older = append(older, x)
+				}
+			}
+			m.arrived(news)
+			fresh = older
+		}
+		for _, x := range fresh { // what a fetch brings first of this session's messages is live too
 			if !x.Time.Before(m.started) {
 				m.live[x.Key()] = true
 			}
 		}
-		m.absorb(msg.fresh)
+		m.absorb(fresh)
 		if msg.err != nil {
 			m.fail("history for " + m.nameOf(msg.chatID) + ": " + errText(msg.err))
 			break
@@ -797,8 +819,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if _, cw := m.winFor(msg.chatID); cw != nil {
 			cw.healed = m.now()
 		}
-		if !msg.quiet || len(msg.fresh) > 0 {
-			m.note(w, fmt.Sprintf("fetched %d older message(s)", len(msg.fresh)))
+		if !msg.quiet || len(fresh) > 0 {
+			m.note(w, fmt.Sprintf("fetched %d older message(s)", len(fresh)))
 		}
 		if empty && len(msg.fresh) > 0 { // a window's first content prints like at start-up
 			w.revealing, w.revealed = true, 0
@@ -1124,6 +1146,7 @@ func (m *Model) note(w *win, text string) {
 
 // absorb merges messages into the in-memory mirror.
 func (m *Model) absorb(fresh []domain.Message) {
+	fresh = m.notGone(fresh)
 	if len(fresh) == 0 {
 		return
 	}
@@ -1160,9 +1183,25 @@ func (m *Model) dropMsgs(chatID string, ids []string) {
 	}
 }
 
+// notGone leaves out the messages deleted at the service this session: a
+// fetch taken before the deletion can answer after it.
+func (m *Model) notGone(msgs []domain.Message) []domain.Message {
+	if len(m.gone) == 0 {
+		return msgs
+	}
+	out := make([]domain.Message, 0, len(msgs))
+	for _, x := range msgs {
+		if !m.gone[x.Key()] {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
 // arrived handles messages that just came in: windows open for their chats
 // and activity is counted.
 func (m *Model) arrived(fresh []domain.Message) {
+	fresh = m.notGone(fresh)
 	for _, msg := range fresh {
 		m.live[msg.Key()] = true
 	}
@@ -1185,6 +1224,10 @@ func (m *Model) arrived(fresh []domain.Message) {
 		}
 		if i != m.cur {
 			w.unread++
+			if w.counted == nil {
+				w.counted = map[string]bool{}
+			}
+			w.counted[msg.Key()] = true
 		}
 		if count[i] == 0 {
 			order = append(order, i)
@@ -1284,7 +1327,7 @@ func (m *Model) switchTo(i int) tea.Cmd {
 	m.lastCtrlX = time.Time{} // a double Ctrl-X never spans two windows
 	w := m.wins[i]
 	receipt := m.readCmd(w) // a focus that clears unread messages is what a receipt reports
-	w.unread = 0
+	w.clearUnread()
 	if w.chatID != "" {
 		m.visited[w.chatID] = true
 	}
