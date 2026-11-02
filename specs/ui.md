@@ -160,10 +160,12 @@ member list from the service. Three things make a member:
 - **Being mentioned.** An `@username` in the text of any of the chat's
   messages, own ones and channel posts included (`domain.MentionsIn`: an
   `@` at the start or after a character that is no letter or digit in
-  any script, no underscore and none of `/ . @ = &`, then a letter and 3
-  to 31 more letters, digits or underscores, then the end or a character
-  that is no letter, digit or `/`; an `@` in a space-separated word that
-  holds `://` or starts with `www.` is part of a link, which Telegram
+  any script, no underscore and none of `/ . @ = &`, then the whole run
+  of Latin letters, digits and underscores after it, which must start
+  with a letter and be 4 to 32 long (so `@nickя` is none), then the end
+  or a character that is no letter, digit or `/`; an `@` in a
+  space-separated word that holds `://` or starts with `www.` (ignoring
+  case) is part of a link, which Telegram
   reads as one: so `mail@example.com`, `имейл@example.com`,
   `youtube.com/@name` and `@ab` are none). A mention counts for the
   member with that username, ignoring case; otherwise it makes a member
@@ -525,6 +527,17 @@ lines (the cursor in a list). Opening happens only on a click or an
 `/open <link>`, only for http and https links with a host (the opener's
 own rule, `opener.IsLink`, for both); nothing is opened automatically.
 
+A link runs from `http://` or `https://` to the next white space (any
+Unicode space, the no-break space included), quote (`"` `'` or a
+backtick) or angle bracket, then ends as a double-clicked word does
+(Selection and clipboard): trailing `.` `,` `;` `:` `!` `?` is dropped,
+and a closing bracket at the end is dropped when the link holds more of
+it than of its opening bracket, so `Go_(game)` keeps its bracket. A
+scheme with nothing left after it (`https://!`) is no link. The link a
+click opens, the one Tab offers after `/open` and the text a double
+click on it copies are the same (for a link that starts its word apart
+from leading brackets and quotes).
+
 ### Selection and clipboard
 
 A left-button drag selects text, so the mouse mode costs nothing that
@@ -880,10 +893,14 @@ Shift-Tab to the previous one. With text typed, Tab completes the word
 before the cursor like bash and keeps what follows the cursor. A line that is one
 word starting with `/` completes command names; after `/theme ` theme
 names; after `/send ` (and its aliases) local paths: entries of the typed
-directory that start with the typed base name, `~` expanded, hidden files
-only when a dot is typed, directories filled in with a trailing `/` and no
-space so the next Tab descends; the caption after the path is free text
-and never completed. After `/open` (and `/fetch`, `/download`): `out` as
+directory that start with the typed base name, `~` expanded (a lone `~`
+completes to `~/`; the typed directory part is kept as typed and only
+the base name after the last `/` is matched), hidden files only when a
+dot is typed, directories filled in with a trailing `/` and no space so
+the next Tab descends; the caption after the path is free text and never
+completed. Decision, after a crash: the typed text is split before `~`
+is expanded, because the expanded `~/` loses its trailing slash and the
+home directory's name would be taken for the typed base name. After `/open` (and `/fetch`, `/download`): `out` as
 the first word, the chat's ten most recent distinct `http(s)` links
 (newest message first, taken from the same sanitised text a click uses,
 so no control character reaches the input and trailing punctuation is

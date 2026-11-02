@@ -92,6 +92,7 @@
 ## Next
 
 - [ ] cap the media vault size (specs/storage.md)
+- [x] fuzz targets for the parsers and sanitizers that see untrusted input, `make fuzz`; the bugs they found are fixed (specs/security.md; session/2026-11-02-fuzzing.md)
 
 - [ ] sending messages (post-v0.1)
 - [ ] unread markers and mention highlight
@@ -99,6 +100,7 @@
 - [ ] gitleaks pre-commit hook
 - [x] CI: Linux and macOS workflows with README badges (specs/ci.md)
 - [x] OpenSSF Scorecard workflow, results published, score and workflow badges in the README (specs/ci.md)
+- [x] fix: Tab after `/send ~/` or `/send ~` panicked (slice out of range) since v0.4.7; regression test and FuzzPathCandidates (specs/ui.md, Completion; session/2026-11-02-path-completion.md)
 - [x] input cursor: Left/Right, Ctrl-A/E, Delete, Ctrl-K, Ctrl-W before the cursor; completion at the cursor (specs/ui.md)
 - [x] mouse drag selects text and copies it on release: OSC 52 in the frame plus a system tool, /clip modes kept, clicks act on release (specs/ui.md, docs/clipboard.md)
 - [x] double click selects a word, triple a row; Shift-click extends (specs/ui.md, Selection and clipboard)

@@ -178,7 +178,9 @@ func (c *Client) fetch(v Version, name string) ([]byte, error) {
 }
 
 // ExtractBinary returns the regular file DIR/lazygram from a release
-// tarball, where DIR is the tarball's name without .tar.gz.
+// tarball, where DIR is the tarball's name without .tar.gz. A file over
+// the download cap is refused, never cut short: a cut binary would be
+// installed over the running one.
 func ExtractBinary(tgz []byte, dir string) ([]byte, error) {
 	zr, err := gzip.NewReader(bytes.NewReader(tgz))
 	if err != nil {
@@ -200,7 +202,18 @@ func ExtractBinary(tgz []byte, dir string) ([]byte, error) {
 		if h.Typeflag != tar.TypeReg {
 			return nil, fmt.Errorf("%s in the tarball is not a regular file", want)
 		}
-		return io.ReadAll(io.LimitReader(tr, maxFile))
+		tooBig := fmt.Errorf("%s in the tarball is larger than %d MiB", want, maxFile>>20)
+		if h.Size > maxFile {
+			return nil, tooBig
+		}
+		bin, err := io.ReadAll(io.LimitReader(tr, maxFile+1)) // the header's size is not trusted
+		if err != nil {
+			return nil, err
+		}
+		if len(bin) > maxFile {
+			return nil, tooBig
+		}
+		return bin, nil
 	}
 }
 

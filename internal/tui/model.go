@@ -2526,9 +2526,15 @@ func extends(prefix, typed string) bool {
 
 // pathCandidates lists the local files and directories that start with
 // the typed path (~ expands; directories end with /), the way a shell does.
+// It splits what was typed, not the expanded path: expanding "~/" drops
+// the trailing slash, so the home directory's own name would pass for
+// the typed file name.
 func pathCandidates(typed string) []string {
-	dir, base := filepath.Split(expandHome(typed))
-	shown := typed[:len(typed)-len(base)] // keep ~/ as typed
+	if typed == "~" {
+		return []string{"~/"}
+	}
+	shown, base := filepath.Split(typed) // keep ~/ as typed
+	dir := expandHome(shown)
 	if dir == "" {
 		dir = "."
 	}

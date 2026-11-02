@@ -7,9 +7,11 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/rivo/uniseg"
 
 	"lazygram/internal/domain"
 	"lazygram/internal/logo"
@@ -65,18 +67,45 @@ type span struct {
 
 func (s span) hit(x int) bool { return x >= s.x0 && x < s.x1 }
 
-var urlRE = regexp.MustCompile(`https?://[^\s<>"']+`)
+// urlRE ends a link at any Unicode white space (\s is ASCII only; \p{Z},
+// \v and U+0085 add the rest of unicode.IsSpace), the blank that ends a
+// word for /open and for selection, so a no-break space after a link is
+// not taken into it; and at a quote, a backtick or an angle bracket,
+// which the word rule drops too.
+var urlRE = regexp.MustCompile("https?://[^\\s\\p{Z}\\v\\x{85}<>\"'`]+")
 
-// urlLocs finds links in s without the sentence punctuation that often
-// follows them.
+// urlLocs finds links in s. A link ends as a double-clicked word does
+// (trimWord; specs/ui.md, Mouse): trailing sentence punctuation is dropped, and
+// a closing bracket at the end is dropped when the link closes it more
+// often than it opens it, so "(https://example.org/a_(b))." gives
+// https://example.org/a_(b) and a click opens what a double click copies.
+// A match with nothing left after the scheme ("https://!") is no link.
 func urlLocs(s string) [][]int {
-	locs := urlRE.FindAllStringIndex(s, -1)
-	for _, loc := range locs {
-		for loc[1] > loc[0]+8 && strings.ContainsRune(".,;:!?)]'\"", rune(s[loc[1]-1])) {
-			loc[1]--
+	var out [][]int
+	for _, loc := range urlRE.FindAllStringIndex(s, -1) {
+		u := s[loc[0]:loc[1]]
+		for u != "" && !linkEnds(u) {
+			u = u[:len(u)-1]
+		}
+		if u != "http://" && u != "https://" {
+			out = append(out, []int{loc[0], loc[0] + len(u)})
 		}
 	}
-	return locs
+	return out
+}
+
+// linkEnds reports whether u may end in its last byte: not sentence
+// punctuation, and a closing bracket only when u opens it at least as
+// often. The scheme's "//" always stays.
+func linkEnds(u string) bool {
+	c := u[len(u)-1:]
+	switch {
+	case strings.Contains(wordStop, c):
+		return false
+	case strings.Contains(wordClose, c):
+		return strings.Count(u, partner(c)) >= strings.Count(u, c)
+	}
+	return true
 }
 
 // urlsOf lists the links in s.
@@ -471,23 +500,51 @@ func buttonLine(m domain.Message) string {
 
 // highlight marks case-insensitive occurrences of needle in s.
 func highlight(s, needle string) string {
-	needle = strings.ToLower(needle)
-	low := strings.ToLower(s)
-	if needle == "" || len(low) != len(s) || !strings.Contains(low, needle) {
+	hits := hitSpans(s, needle)
+	if len(hits) == 0 {
 		return s
 	}
 	var b strings.Builder
-	for {
-		i := strings.Index(low, needle)
-		if i < 0 {
-			b.WriteString(s)
-			break
-		}
-		b.WriteString(s[:i])
-		b.WriteString(hiStyle.Render(s[i : i+len(needle)]))
-		s, low = s[i+len(needle):], low[i+len(needle):]
+	last := 0
+	for _, h := range hits {
+		b.WriteString(s[last:h[0]])
+		b.WriteString(hiStyle.Render(s[h[0]:h[1]]))
+		last = h[1]
 	}
+	b.WriteString(s[last:])
 	return b.String()
+}
+
+// hitSpans lists the byte ranges of s, left to right and not overlapping,
+// that equal needle lower-cased rune by rune (as strings.ToLower does).
+// It compares on s itself: lower-casing changes the byte length of some
+// letters (U+0130, U+212A, U+023A), so offsets into strings.ToLower(s)
+// are not offsets into s and could cut a character in two.
+func hitSpans(s, needle string) [][2]int {
+	want := []rune(needle)
+	for k, r := range want {
+		want[k] = unicode.ToLower(r)
+	}
+	var out [][2]int
+	for i := 0; i < len(s) && len(want) > 0; {
+		j := i
+		for _, w := range want {
+			r, n := utf8.DecodeRuneInString(s[j:])
+			if n == 0 || unicode.ToLower(r) != w {
+				j = -1
+				break
+			}
+			j += n
+		}
+		if j >= 0 {
+			out = append(out, [2]int{i, j})
+			i = j
+			continue
+		}
+		_, n := utf8.DecodeRuneInString(s[i:])
+		i += n
+	}
+	return out
 }
 
 // wrapText wraps text: the first output line may use first columns, every
@@ -550,15 +607,22 @@ func wrapText(text string, first, width int) []string {
 	return out
 }
 
-// splitAt splits s after at most width display columns (at least one rune).
+// splitAt splits s after at most width display columns (at least one
+// character). It steps by grapheme clusters, measured with lipgloss.Width
+// as wrapText measures lines: counted rune by rune, an emoji with a
+// variation selector (U+2764 U+FE0F) came out one column short, so a row
+// of them overflowed the line.
 func splitAt(s string, width int) (string, string) {
-	w := 0
-	for i, r := range s {
-		rw := lipgloss.Width(string(r))
-		if w+rw > width && i > 0 {
-			return s[:i], s[i:]
+	w, at, state := 0, 0, -1
+	for rest := s; rest != ""; {
+		var c string
+		c, rest, _, state = uniseg.FirstGraphemeClusterInString(rest, state)
+		cw := lipgloss.Width(c)
+		if w+cw > width && at > 0 {
+			return s[:at], s[at:]
 		}
-		w += rw
+		w += cw
+		at += len(c)
 	}
 	return s, ""
 }
