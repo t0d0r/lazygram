@@ -21,14 +21,31 @@
   messages inside the fetched range that the page lacks (`Store.Prune`).
 - `Store.Delete` (own `/delete`) now removes the attachment too.
 
+- A review found and fixed: an edit that swapped an attachment left the
+  old one in the vault (`Media.ID` now tells attachments apart and the
+  vault copy is dropped); missed updates were never recovered (the shown
+  window now quietly fetches its last 10 messages every 2 minutes, on
+  switching to it when older, and at once after `updatesTooLong` or
+  `updateChannelTooLong`); deletions without a chat reached only the
+  recent dialogs (the chats ever marked shared are kept); a chat's
+  deleted newest message was never pruned (Prune now covers ids above
+  the page older than the fetch); edits could apply out of order and a
+  stale page could undo a live edit or bring back a deleted message
+  (edit times, session-long deletion memory); a bulk deletion ran
+  row by row in the UI loop (one transaction, in a command); a deleted
+  message kept its unread count; deleted rows stayed in SQLite free
+  pages (secure_delete on).
+
 ## Decisions
 
 - No notice for a message deleted elsewhere: it is gone, as in the
   official apps; a deleted-for-everyone message should not outlive the
   deletion in lazygram.
-- A dropped change (feed full, lazygram off) is healed by the next fetch
-  of the chat; messages older than every fetched page keep their last
-  known state.
+- A dropped change (feed full, lazygram off, a gap) is healed by the
+  next fetch of the chat; the shown window is fetched again quietly
+  every 2 minutes; messages older than every fetched page keep their
+  last known state. No getDifference replay: the periodic fetch is
+  simpler and bounded (one history request per 2 minutes).
 
 ## Open
 

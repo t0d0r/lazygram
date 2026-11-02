@@ -56,6 +56,7 @@ type ChangeKind int
 const (
 	Edited  ChangeKind = iota // Msg is the message as it reads now
 	Deleted                   // IDs are gone from ChatID
+	Stale                     // ChatID, or every chat when "", may have missed changes: fetch again
 )
 
 // Change is an edit or a deletion the service reports while lazygram
@@ -92,6 +93,10 @@ type Button struct {
 type Media struct {
 	Kind string `json:"kind"`           // "photo", "image" (a file that is an image) or "file"
 	Name string `json:"name,omitempty"` // file name, when the service gives one
+	// ID is the service's id of the attachment itself (Telegram: the photo
+	// or document id), so an edit that swaps it for another is told apart
+	// from one that keeps it; empty when unknown.
+	ID string `json:"id,omitempty"`
 }
 
 // IsImageName reports whether a file name has a raster image extension.
@@ -127,6 +132,9 @@ type Message struct {
 	Time       time.Time `json:"time"`
 	Buttons    []Button  `json:"buttons,omitempty"` // numbered from 1 in this order
 	Media      *Media    `json:"media,omitempty"`
+	// Edited is when the message was last edited at the service; zero
+	// when never (or not known). Of two copies the later edit wins.
+	Edited time.Time `json:"edited,omitempty"`
 }
 
 // PressAnswer is what a provider reports after a button was pressed.

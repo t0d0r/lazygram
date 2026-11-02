@@ -53,6 +53,8 @@ const (
 	namesKey       = "names"               // store state key for showing chats by name
 	receiptsKey    = "read_receipts"       // store state key for read receipts; absent means off
 	autojoinKey    = "autojoin"            // store state key for opening unread chats at start; absent means on
+	sharedKey      = "shared_chats"        // store state key for the chats with shared message ids
+	healEvery      = 2 * time.Minute       // a shown window's history is fetched again after this, in case changes were missed
 	fxTick         = 30 * time.Millisecond
 	maxHistory     = 200
 	doubleCtrlX    = 600 * time.Millisecond
@@ -81,6 +83,8 @@ type win struct {
 	scroll int // lines above the bottom
 	notes  []note
 	loaded bool // recent history fetched once
+
+	healed time.Time // when its history was last fetched; changes may have been missed since
 
 	enterSends bool // Enter sends plain text (toggled by a double Ctrl-X)
 
@@ -186,6 +190,7 @@ type Model struct {
 	startChecked bool
 	chatsAsked   bool // a chat list request is on its way
 	autojoin     bool
+	sharedChats  map[string]bool // every chat ever marked SharedIDs, kept: where a chat-less deletion looks
 	reportNext   map[string]pendingReport
 	status       string
 	isErr        bool
@@ -206,6 +211,7 @@ type (
 		chatID       string
 		fresh, known []domain.Message
 		gone         []string // ids deleted at the service
+		quiet        bool     // a heal: no notice unless something came
 		err          error
 	}
 	memberListMsg struct {
@@ -276,6 +282,12 @@ func New(opt Options) *Model {
 	_, _ = opt.Store.State(receiptsKey, &m.receipts) // absent or unreadable: off
 	if found, err := opt.Store.State(autojoinKey, &m.autojoin); !found || err != nil {
 		m.autojoin = true
+	}
+	var shared []string
+	_, _ = opt.Store.State(sharedKey, &shared)
+	m.sharedChats = map[string]bool{}
+	for _, id := range shared {
+		m.sharedChats[id] = true
 	}
 	m.chats, _ = opt.Store.Chats()
 	m.msgs, _ = opt.Store.Messages("", opt.Backlog)
@@ -481,15 +493,22 @@ func (m *Model) syncCmd() tea.Cmd {
 	}
 }
 
-func (m *Model) recentCmd(chatID string, n int) tea.Cmd {
+func (m *Model) recentCmd(chatID string, n int) tea.Cmd { return m.fetchRecent(chatID, n, false) }
+
+// fetchRecent fetches a chat's last n messages; quiet ones (a heal) say
+// nothing in the window unless they fail or bring something.
+func (m *Model) fetchRecent(chatID string, n int, quiet bool) tea.Cmd {
 	p, st := m.opt.Provider, m.opt.Store
 	m.loading[chatID] = true
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 		defer cancel()
+		// A cached message above the page newer than this may simply have
+		// arrived after the page was taken; the margin covers clock skew.
+		asked := time.Now().Add(-2 * time.Minute)
 		msgs, err := p.Recent(ctx, chatID, n)
 		if err != nil {
-			return recentMsg{chatID: chatID, err: err}
+			return recentMsg{chatID: chatID, quiet: quiet, err: err}
 		}
 		// The page is the chat's newest history without gaps: copies the
 		// cache holds are brought up to date (edits made elsewhere, the
@@ -497,8 +516,8 @@ func (m *Model) recentCmd(chatID string, n int) tea.Cmd {
 		// the page lacks was deleted at the service.
 		fresh, err := st.Add(msgs)
 		known, refErr := st.Refresh(msgs)
-		gone, pruneErr := st.Prune(chatID, msgs)
-		return recentMsg{chatID: chatID, fresh: fresh, known: known, gone: gone, err: errors.Join(err, refErr, pruneErr)}
+		gone, pruneErr := st.Prune(chatID, msgs, asked)
+		return recentMsg{chatID: chatID, quiet: quiet, fresh: fresh, known: known, gone: gone, err: errors.Join(err, refErr, pruneErr)}
 	}
 }
 
@@ -728,6 +747,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 		m.chats = msg.chats
+		m.learnShared()
 		if !m.startChecked { // the first chat list from the service this session; a cached one does not count
 			m.startChecked = true
 			m.startCheck()
@@ -748,8 +768,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case memberListMsg:
 		m.gotMemberList(msg)
 	case changeMsg:
-		m.applyChange(msg.c)
-		return m, waitChange(m.changeCh)
+		cmd := m.applyChange(msg.c)
+		return m, tea.Batch(cmd, waitChange(m.changeCh))
 	case changeDoneMsg:
 		m.changeCh = nil
 	case recentMsg:
@@ -774,7 +794,12 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			break
 		}
 		w.loaded = true
-		m.note(w, fmt.Sprintf("fetched %d older message(s)", len(msg.fresh)))
+		if _, cw := m.winFor(msg.chatID); cw != nil {
+			cw.healed = m.now()
+		}
+		if !msg.quiet || len(msg.fresh) > 0 {
+			m.note(w, fmt.Sprintf("fetched %d older message(s)", len(msg.fresh)))
+		}
 		if empty && len(msg.fresh) > 0 { // a window's first content prints like at start-up
 			w.revealing, w.revealed = true, 0
 		}
@@ -816,6 +841,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.syncing {
 			m.syncing = true
 			cmds = append(cmds, m.syncCmd())
+		}
+		if cmd := m.healCmd(m.wins[m.cur]); cmd != nil {
+			cmds = append(cmds, cmd)
 		}
 		if !m.startChecked && !m.chatsAsked { // the first chat list failed: ask again, so the start check runs on connect
 			m.chatsAsked = true
@@ -1127,23 +1155,9 @@ func (m *Model) identify(known []domain.Message) {
 
 // dropMsgs removes messages of chatID from memory: deleted at the service.
 func (m *Model) dropMsgs(chatID string, ids []string) {
-	if len(ids) == 0 {
-		return
+	if len(ids) > 0 {
+		m.dropAcross([]string{chatID}, ids)
 	}
-	gone := make(map[string]bool, len(ids))
-	for _, id := range ids {
-		gone[domain.Message{ChatID: chatID, ID: id}.Key()] = true
-	}
-	kept := m.msgs[:0]
-	for _, x := range m.msgs {
-		if gone[x.Key()] {
-			delete(m.live, x.Key())
-			continue
-		}
-		kept = append(kept, x)
-	}
-	m.msgs = kept
-	m.rcache = &renderCache{}
 }
 
 // arrived handles messages that just came in: windows open for their chats
@@ -1285,6 +1299,8 @@ func (m *Model) switchTo(i int) tea.Cmd {
 		n := m.firstFetch(w.chatID)
 		m.note(w, fmt.Sprintf("fetching the last %d messages", n))
 		cmds = append(cmds, m.recentCmd(w.chatID, n))
+	} else if cmd := m.healCmd(w); cmd != nil {
+		cmds = append(cmds, cmd)
 	}
 	if cmd := m.memberListCmd(w.chatID); cmd != nil {
 		cmds = append(cmds, cmd)

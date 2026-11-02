@@ -22,8 +22,8 @@ import (
 func mediaOf(m *tg.Message) *domain.Media {
 	switch media := m.Media.(type) {
 	case *tg.MessageMediaPhoto:
-		if _, ok := media.Photo.(*tg.Photo); ok {
-			return &domain.Media{Kind: "photo"}
+		if p, ok := media.Photo.(*tg.Photo); ok {
+			return &domain.Media{Kind: "photo", ID: strconv.FormatInt(p.ID, 10)}
 		}
 	case *tg.MessageMediaDocument:
 		doc, ok := media.Document.(*tg.Document)
@@ -34,7 +34,7 @@ func mediaOf(m *tg.Message) *domain.Media {
 		if imageExt(doc.MimeType) != "" {
 			kind = "image"
 		}
-		return &domain.Media{Kind: kind, Name: fileName(doc)}
+		return &domain.Media{Kind: kind, Name: fileName(doc), ID: strconv.FormatInt(doc.ID, 10)}
 	}
 	return nil
 }

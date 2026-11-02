@@ -79,3 +79,32 @@ func TestDialogsSayWhichChatsShareIDs(t *testing.T) {
 		}
 	}
 }
+
+func TestGapsAreReportedStale(t *testing.T) {
+	if c, ok := changeEvent(&tg.UpdateChannelTooLong{ChannelID: 9}, tg.Entities{}); !ok || c.Kind != domain.Stale || c.ChatID != "telegram:-1000000000009" {
+		t.Fatalf("channel too long: %+v %v", c, ok)
+	}
+	f := newChangeFeed()
+	h := gapHandler{next: tg.NewUpdateDispatcher(), changes: f}
+	if err := h.Handle(context.Background(), &tg.UpdatesTooLong{}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case c := <-f.feed():
+		if c.Kind != domain.Stale || c.ChatID != "" {
+			t.Fatalf("updates too long: %+v", c)
+		}
+	default:
+		t.Fatal("updatesTooLong reports every chat stale")
+	}
+}
+
+func TestEditCarriesTheEditTimeAndAttachmentID(t *testing.T) {
+	m := &tg.Message{ID: 1, PeerID: &tg.PeerUser{UserID: 7}, Message: "x",
+		Media: &tg.MessageMediaPhoto{Photo: &tg.Photo{ID: 555}}}
+	m.SetEditDate(1700000000)
+	c, ok := changeEvent(&tg.UpdateEditMessage{Message: m}, tg.Entities{})
+	if !ok || c.Msg.Edited.Unix() != 1700000000 || c.Msg.Media == nil || c.Msg.Media.ID != "555" {
+		t.Fatalf("%+v", c.Msg)
+	}
+}

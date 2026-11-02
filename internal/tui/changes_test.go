@@ -3,6 +3,7 @@ package tui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"lazygram/internal/domain"
 )
@@ -40,7 +41,9 @@ func TestLiveEditsAndDeletions(t *testing.T) {
 		t.Fatal("an edit of a message not held adds nothing")
 	}
 	// A deletion the service names without a chat: the shared id space.
-	m.Update(changeMsg{c: domain.Change{Kind: domain.Deleted, IDs: []string{"2"}}})
+	if cmd := m.applyChange(domain.Change{Kind: domain.Deleted, IDs: []string{"2"}}); cmd != nil {
+		cmd()
+	}
 	if strings.Contains(body(m), "second dev line") {
 		t.Fatalf("deleted in #dev:\n%s", body(m))
 	}
@@ -49,7 +52,9 @@ func TestLiveEditsAndDeletions(t *testing.T) {
 	}
 	m.input = nil
 	enter(m, "/win @alice")
-	m.Update(changeMsg{c: domain.Change{Kind: domain.Deleted, ChatID: "c2", IDs: []string{"7"}}})
+	if cmd := m.applyChange(domain.Change{Kind: domain.Deleted, ChatID: "c2", IDs: []string{"7"}}); cmd != nil {
+		cmd()
+	}
 	if strings.Contains(body(m), "deploy?") {
 		t.Fatalf("deleted in a named chat:\n%s", body(m))
 	}
@@ -77,5 +82,52 @@ func TestFetchHealsEditsAndDeletions(t *testing.T) {
 	cached, _ := m.opt.Store.Messages("c1", 0)
 	if len(cached) != 2 || cached[0].Text != "first dev line (edited)" {
 		t.Fatalf("and so does the cache: %+v", cached)
+	}
+}
+
+func TestDeletionTakesBackItsUnreadAndReachesOldChats(t *testing.T) {
+	f := &changingFake{fake: newFake(), ch: make(chan domain.Change, 1)}
+	f.chats[1].SharedIDs = true
+	m := setupProvider(t, f)
+	m.sharedChats["c-old"] = true // a private chat no longer among the recent dialogs
+	if _, err := m.opt.Store.Add([]domain.Message{mk("c-old", "50", "ann", "old line", -100)}); err != nil {
+		t.Fatal(err)
+	}
+	_, w := m.winFor("c2")
+	w.unread = 2
+	m.live[domain.Message{ChatID: "c2", ID: "1"}.Key()] = true // arrived this session
+	if cmd := m.applyChange(domain.Change{Kind: domain.Deleted, IDs: []string{"1", "50"}}); cmd != nil {
+		cmd()
+	}
+	if w.unread != 1 {
+		t.Errorf("the deleted message is no longer unread: %d", w.unread)
+	}
+	if left, _ := m.opt.Store.Messages("c-old", 0); len(left) != 0 {
+		t.Errorf("a kept shared chat is reached: %+v", left)
+	}
+}
+
+func TestHealFetchesAShownWindowAgain(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	step := pinClock(m)
+	runAll(m, enter(m, "/win #dev"))
+	calls := len(f.calls)
+	_, cmd := m.Update(tickMsg(m.now()))
+	_ = cmd
+	if len(f.calls) != calls {
+		t.Fatal("no heal before healEvery")
+	}
+	step(healEvery + time.Second)
+	if cmd := m.healCmd(m.wins[m.cur]); cmd == nil {
+		t.Fatal("a heal is due")
+	} else {
+		m.Update(cmd())
+	}
+	if len(f.calls) != calls+1 || strings.Count(body(m), "fetched 0 older") != 1 {
+		t.Fatalf("one quiet fetch: %v", f.calls)
+	}
+	if cmd := m.applyChange(domain.Change{Kind: domain.Stale}); cmd == nil {
+		t.Fatal("a reported gap heals the shown window at once")
 	}
 }

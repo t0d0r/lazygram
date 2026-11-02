@@ -34,13 +34,25 @@ service in four ways (specs/ui.md, Edits and deletions):
 - `Refresh(msgs)`: a fetched copy of a stored message that differs
   (edited text, media or buttons, the sender's name, id or username)
   replaces the stored row whole; the replacements are returned.
-- `Prune(chatID, page)`: a page of a chat's history has no gaps, so a
-  stored message of that chat whose numeric id lies strictly between the
-  page's lowest and highest and that the page lacks was deleted at the
-  service; it is deleted with its attachment. Non-numeric ids are never
-  pruned.
+- `Prune(chatID, page, before)`: a page of a chat's newest history has
+  no gaps, so a stored message of that chat whose numeric id lies
+  strictly between the page's lowest and highest and that the page lacks
+  was deleted at the service, and so was one above the page's highest
+  stored before `before` (the fetch time less a margin; a newer one may
+  have arrived after the page was taken); it is deleted with its
+  attachment. Non-numeric ids and anything below the page are never
+  pruned (a short page may only have skipped service messages).
 - `Edit(msg)`: an edit the service reported live replaces the stored
-  message's text, media and buttons; sender, time and ids stay.
+  message's text, media, buttons and edit time; sender, time and ids
+  stay. An edit older than the stored copy's changes nothing, and
+  `Refresh` skips a fetched copy older than the stored edit. When the
+  attachment was swapped or removed (`Media.ID`, kind or name differ),
+  the vault's copy is dropped.
+- Deletions (`Delete`, `DeleteMessages`, `Prune`) are remembered for the
+  session; `Add` does not insert a message deleted this session, so a
+  page fetched before the deletion cannot bring it back.
+- The database runs with `PRAGMA secure_delete = ON`: deleted and
+  replaced rows are overwritten, not left in free pages.
 - `DeleteMessages(chatIDs, ids)`: deletes those ids from any of those
   chats (a deletion reported without a chat, for the chats sharing one id
   space), with their attachments.

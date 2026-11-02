@@ -98,7 +98,7 @@ func (c *MTProto) run(ctx context.Context) error {
 	d := tg.NewUpdateDispatcher()
 	c.typing.register(d, c.names, time.Now)
 	c.changes.register(d)
-	cl, err := newGotdClient(c.cfg, gotd.Options{UpdateHandler: d})
+	cl, err := newGotdClient(c.cfg, gotd.Options{UpdateHandler: gapHandler{next: d, changes: c.changes}})
 	if err != nil {
 		return err
 	}

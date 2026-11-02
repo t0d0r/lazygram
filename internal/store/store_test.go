@@ -304,7 +304,7 @@ func TestPruneDropsWhatThePageProvesGone(t *testing.T) {
 	if err := s.PutMedia("c", "11", []byte("picture")); err != nil {
 		t.Fatal(err)
 	}
-	gone, err := s.Prune("c", []domain.Message{m("c", "10", 1, "kept"), m("c", "12", 3, "kept")})
+	gone, err := s.Prune("c", []domain.Message{m("c", "10", 1, "kept"), m("c", "12", 3, "kept")}, time.Time{})
 	if err != nil || len(gone) != 1 || gone[0] != "11" {
 		t.Fatalf("gone: %v %v", gone, err)
 	}
@@ -315,7 +315,7 @@ func TestPruneDropsWhatThePageProvesGone(t *testing.T) {
 	if _, found, _ := s.Media("c", "11"); found {
 		t.Fatal("its attachment goes too")
 	}
-	if gone, err := s.Prune("c", nil); err != nil || len(gone) != 0 {
+	if gone, err := s.Prune("c", nil, time.Now()); err != nil || len(gone) != 0 {
 		t.Fatalf("an empty page proves nothing: %v %v", gone, err)
 	}
 }
@@ -357,5 +357,55 @@ func TestDeleteMessagesAcrossChats(t *testing.T) {
 	}
 	if _, found, _ := s.Media("c", "9"); found {
 		t.Fatal("Delete removes the attachment too")
+	}
+}
+
+func TestPruneAboveThePageOnlyWhatIsOld(t *testing.T) {
+	s := mustOpen(t, Memory, secret)
+	mustAdd(t, s, m("c", "10", 1, "on the page"), m("c", "11", 2, "deleted newest"), m("c", "12", 500, "arrived after the page"))
+	before := time.Unix(1000+100, 0) // between the two
+	gone, err := s.Prune("c", []domain.Message{m("c", "10", 1, "on the page")}, before)
+	if err != nil || len(gone) != 1 || gone[0] != "11" {
+		t.Fatalf("gone: %v %v", gone, err)
+	}
+	if fresh := mustAdd(t, s, m("c", "11", 2, "the stale page again")); len(fresh) != 0 {
+		t.Fatal("a deletion this session is not undone by a stale page")
+	}
+}
+
+func TestEditsKeepTheirOrderAndDropAReplacedAttachment(t *testing.T) {
+	s := mustOpen(t, Memory, secret)
+	orig := m("c", "1", 0, "v0")
+	orig.Media = &domain.Media{Kind: "photo", ID: "p1"}
+	mustAdd(t, s, orig)
+	_ = s.PutMedia("c", "1", []byte("first picture"))
+	v2 := domain.Message{ID: "1", ChatID: "c", Text: "v2", Media: &domain.Media{Kind: "photo", ID: "p1"}, Edited: time.Unix(2000, 0)}
+	if got, _, _ := s.Edit(v2); got.Text != "v2" {
+		t.Fatalf("applied: %+v", got)
+	}
+	if _, found, _ := s.Media("c", "1"); !found {
+		t.Fatal("the same attachment keeps its vault copy")
+	}
+	v1 := v2
+	v1.Text, v1.Edited = "v1", time.Unix(1500, 0)
+	if got, _, _ := s.Edit(v1); got.Text != "v2" {
+		t.Fatalf("an older edit arriving late changes nothing: %+v", got)
+	}
+	if got, _ := s.Refresh([]domain.Message{v1}); len(got) != 0 {
+		t.Fatalf("nor does an older page copy: %+v", got)
+	}
+	v3 := v2
+	v3.Text, v3.Edited, v3.Media = "v3", time.Unix(3000, 0), &domain.Media{Kind: "photo", ID: "p2"}
+	_, _, _ = s.Edit(v3)
+	if _, found, _ := s.Media("c", "1"); found {
+		t.Fatal("a swapped attachment drops the old vault copy")
+	}
+}
+
+func TestSecureDeleteIsOn(t *testing.T) {
+	s := mustOpen(t, Memory, secret)
+	var on int
+	if err := s.db.QueryRow(`PRAGMA secure_delete`).Scan(&on); err != nil || on != 1 {
+		t.Fatalf("secure_delete = %d, %v", on, err)
 	}
 }

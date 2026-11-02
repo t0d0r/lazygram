@@ -51,6 +51,10 @@ type Store struct {
 
 	mediaDir string            // sealed attachments next to the file; empty for Memory
 	memMedia map[string][]byte // attachments of a Memory store
+
+	// deleted remembers this session's deletions (chat key + id), so a
+	// history page fetched before a deletion cannot bring the message back.
+	deleted map[string]bool
 }
 
 // Open opens or creates the cache at path (Memory for none on disk). secret
@@ -79,7 +83,7 @@ func Open(path string, secret []byte) (*Store, error) {
 	}
 	db.SetMaxOpenConns(1)
 	db.SetMaxIdleConns(1)
-	s := &Store{db: db, memMedia: map[string][]byte{}}
+	s := &Store{db: db, memMedia: map[string][]byte{}, deleted: map[string]bool{}}
 	if path != Memory {
 		s.mediaDir = filepath.Join(filepath.Dir(path), "media")
 	}
@@ -94,6 +98,9 @@ func (s *Store) init(secret []byte) error {
 	for _, q := range []string{
 		`PRAGMA journal_mode = DELETE`,
 		`PRAGMA synchronous = NORMAL`,
+		// A deleted or replaced row is overwritten on disk, not left in a
+		// free page for someone with the key to read back.
+		`PRAGMA secure_delete = ON`,
 		`CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value BLOB NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS chats (chat_key BLOB PRIMARY KEY, pos INTEGER NOT NULL, data BLOB NOT NULL)`,
 		`CREATE TABLE IF NOT EXISTS messages (
@@ -212,6 +219,9 @@ func (s *Store) Add(msgs []domain.Message) ([]domain.Message, error) {
 	var fresh []domain.Message
 	for _, m := range msgs {
 		ck := s.chatKey(m.ChatID)
+		if s.deleted[string(ck)+"\x00"+m.ID] { // deleted this session: a stale page brings it back
+			continue
+		}
 		plain, err := json.Marshal(m)
 		if err != nil {
 			return nil, err
@@ -290,6 +300,9 @@ func (s *Store) Refresh(msgs []domain.Message) ([]domain.Message, error) {
 		if !ok {
 			continue
 		}
+		if old.Edited.After(m.Edited) { // a live edit newer than this page's copy
+			continue
+		}
 		a, _ := json.Marshal(old)
 		b, _ := json.Marshal(m)
 		if string(a) == string(b) {
@@ -297,6 +310,9 @@ func (s *Store) Refresh(msgs []domain.Message) ([]domain.Message, error) {
 		}
 		if err := s.putLocked(tx, m); err != nil {
 			return nil, err
+		}
+		if mediaChanged(old.Media, m.Media) {
+			s.deleteMediaLocked(m.ChatID, m.ID)
 		}
 		out = append(out, m)
 	}
@@ -307,12 +323,16 @@ func (s *Store) Refresh(msgs []domain.Message) ([]domain.Message, error) {
 }
 
 // Prune deletes the stored messages of chatID that a fetched page proves
-// gone: the page is a chat's history without gaps (the service's newest
-// messages, or a range of them), so a stored message whose numeric id
-// lies between the page's lowest and highest and that the page lacks was
-// deleted at the service. Their attachments go with them. It returns the
-// deleted ids. Non-numeric ids are never pruned.
-func (s *Store) Prune(chatID string, page []domain.Message) ([]string, error) {
+// gone: the page is a chat's newest history without gaps, so a stored
+// message whose numeric id lies between the page's lowest and highest and
+// that the page lacks was deleted at the service, and so was one above
+// the page's highest that is older than before (the time the page was
+// asked for: a message newer than that may simply have arrived after the
+// page was taken). Their attachments go with them, and the deletions are
+// remembered for the session. It returns the deleted ids. Non-numeric ids
+// are never pruned, nor anything below the page: a page shorter than
+// asked for may only have skipped service messages.
+func (s *Store) Prune(chatID string, page []domain.Message, before time.Time) ([]string, error) {
 	in := map[int64]bool{}
 	lo, hi := int64(0), int64(0)
 	for _, m := range page {
@@ -337,18 +357,25 @@ func (s *Store) Prune(chatID string, page []domain.Message) ([]string, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ck := s.chatKey(chatID)
-	rows, err := s.db.Query(`SELECT id FROM messages WHERE chat_key = ?`, ck)
+	rows, err := s.db.Query(`SELECT id, time FROM messages WHERE chat_key = ?`, ck)
 	if err != nil {
 		return nil, err
 	}
 	var gone []string
 	for rows.Next() {
 		var id string
-		if err := rows.Scan(&id); err != nil {
+		var at int64
+		if err := rows.Scan(&id, &at); err != nil {
 			_ = rows.Close()
 			return nil, err
 		}
-		if n, err := strconv.ParseInt(id, 10, 64); err == nil && n > lo && n < hi && !in[n] {
+		n, err := strconv.ParseInt(id, 10, 64)
+		if err != nil || in[n] {
+			continue
+		}
+		inside := n > lo && n < hi
+		above := n > hi && !before.IsZero() && time.Unix(0, at).Before(before)
+		if inside || above {
 			gone = append(gone, id)
 		}
 	}
@@ -361,14 +388,17 @@ func (s *Store) Prune(chatID string, page []domain.Message) ([]string, error) {
 			return nil, err
 		}
 		s.deleteMediaLocked(chatID, id)
+		s.deleted[string(ck)+"\x00"+id] = true
 	}
 	return gone, nil
 }
 
 // Edit applies an edit the service reported to the stored message: its
-// text, attachment and buttons become m's; who sent it, when and its ids
-// stay. It returns the message as stored now, or ok false when it is not
-// stored.
+// text, attachment, buttons and edit time become m's; who sent it, when
+// and its ids stay. An edit older than the stored copy's (updates can
+// arrive out of order) changes nothing. When the attachment was swapped
+// or removed, the vault's copy of the old one is dropped. It returns the
+// message as stored now, or ok false when it is not stored.
 func (s *Store) Edit(m domain.Message) (domain.Message, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -376,11 +406,30 @@ func (s *Store) Edit(m domain.Message) (domain.Message, bool, error) {
 	if err != nil || !ok {
 		return domain.Message{}, false, err
 	}
-	old.Text, old.Media, old.Buttons = m.Text, m.Media, m.Buttons
+	if old.Edited.After(m.Edited) { // an older edit arriving late
+		return old, true, nil
+	}
+	swapped := mediaChanged(old.Media, m.Media)
+	old.Text, old.Media, old.Buttons, old.Edited = m.Text, m.Media, m.Buttons, m.Edited
 	if err := s.putLocked(s.db, old); err != nil {
 		return domain.Message{}, false, err
 	}
+	if swapped { // the vault's copy is of the attachment that was replaced
+		s.deleteMediaLocked(m.ChatID, m.ID)
+	}
 	return old, true, nil
+}
+
+// mediaChanged reports whether an edit took the attachment away or put
+// another in its place: a different id, kind or name.
+func mediaChanged(old, now *domain.Media) bool {
+	switch {
+	case old == nil:
+		return false // nothing in the vault for it
+	case now == nil:
+		return true
+	}
+	return old.ID != now.ID || old.Kind != now.Kind || old.Name != now.Name
 }
 
 // MessageRef names one stored message.
@@ -393,18 +442,39 @@ type MessageRef struct{ ChatID, ID string }
 func (s *Store) DeleteMessages(chatIDs, ids []string) ([]MessageRef, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	stmt, err := tx.Prepare(`DELETE FROM messages WHERE chat_key = ? AND id = ?`)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = stmt.Close() }()
 	var out []MessageRef
 	for _, chatID := range chatIDs {
 		ck := s.chatKey(chatID)
 		for _, id := range ids {
-			res, err := s.db.Exec(`DELETE FROM messages WHERE chat_key = ? AND id = ?`, ck, id)
+			res, err := stmt.Exec(ck, id)
 			if err != nil {
-				return out, err
+				return nil, err
 			}
 			if n, _ := res.RowsAffected(); n > 0 {
 				out = append(out, MessageRef{chatID, id})
-				s.deleteMediaLocked(chatID, id)
 			}
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	for _, r := range out {
+		s.deleteMediaLocked(r.ChatID, r.ID)
+		s.deleted[string(s.chatKey(r.ChatID))+"\x00"+r.ID] = true
+	}
+	if len(chatIDs) == 1 { // a named chat: remember even what was not stored yet
+		for _, id := range ids {
+			s.deleted[string(s.chatKey(chatIDs[0]))+"\x00"+id] = true
 		}
 	}
 	return out, nil
@@ -433,6 +503,7 @@ func (s *Store) Delete(chatID, msgID string) error {
 	_, err := s.db.Exec(`DELETE FROM messages WHERE chat_key = ? AND id = ?`, s.chatKey(chatID), msgID)
 	if err == nil {
 		s.deleteMediaLocked(chatID, msgID)
+		s.deleted[string(s.chatKey(chatID))+"\x00"+msgID] = true
 	}
 	return err
 }

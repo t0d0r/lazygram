@@ -659,6 +659,9 @@ func convert(chatID string, chat entity, m *tg.Message, ents entities) domain.Me
 		Time:   time.Unix(int64(m.Date), 0).UTC(),
 	}
 	out.SenderID, out.SenderNick = senderUser(m, ents)
+	if d, ok := m.GetEditDate(); ok && d > 0 {
+		out.Edited = time.Unix(int64(d), 0).UTC()
+	}
 	if mk, ok := m.GetReplyMarkup(); ok {
 		out.Buttons = buttons(mk)
 	}

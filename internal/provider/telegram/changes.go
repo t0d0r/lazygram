@@ -85,6 +85,26 @@ func (f *changeFeed) register(d tg.UpdateDispatcher) {
 		handle(e, u)
 		return nil
 	})
+	d.OnChannelTooLong(func(_ context.Context, e tg.Entities, u *tg.UpdateChannelTooLong) error {
+		handle(e, u)
+		return nil
+	})
+}
+
+// gapHandler passes updates to the dispatcher and reports updatesTooLong,
+// which the dispatcher drops: the service had more updates than it would
+// send, so every chat may have missed changes. lazygram does not replay
+// the gap (no getDifference); the TUI fetches the shown history again.
+type gapHandler struct {
+	next    tg.UpdateDispatcher
+	changes *changeFeed
+}
+
+func (h gapHandler) Handle(ctx context.Context, u tg.UpdatesClass) error {
+	if _, ok := u.(*tg.UpdatesTooLong); ok {
+		h.changes.emit(domain.Change{Kind: domain.Stale})
+	}
+	return h.next.Handle(ctx, u)
 }
 
 // changeEvent maps one update to a change; ok is false for anything else
@@ -100,6 +120,8 @@ func changeEvent(u tg.UpdateClass, e tg.Entities) (domain.Change, bool) {
 	case *tg.UpdateDeleteChannelMessages:
 		return domain.Change{Kind: domain.Deleted, ChatID: chatID(entity{id: channelBase - u.ChannelID}), IDs: ids(u.Messages)},
 			len(u.Messages) > 0
+	case *tg.UpdateChannelTooLong: // the channel's updates were cut short
+		return domain.Change{Kind: domain.Stale, ChatID: chatID(entity{id: channelBase - u.ChannelID})}, true
 	}
 	return domain.Change{}, false
 }

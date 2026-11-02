@@ -226,7 +226,12 @@ history message; the TUI keeps the cached sender), updateDeleteMessages
 (ids in the account's shared id space, no chat) and
 updateDeleteChannelMessages (a supergroup's or channel's ids). A feed of
 256 changes; a change that does not fit is dropped, as the next history
-fetch heals it. Dialogs mark private chats and basic groups
+fetch heals it. `updateChannelTooLong` (a channel's updates were cut
+short) and `updatesTooLong` (the dispatcher drops it, so a wrapping
+handler reports it) become `domain.Stale` changes, for one chat or all:
+lazygram does not replay the gap with getDifference, the TUI fetches the
+history again. Messages carry their `edit_date` as `Message.Edited` and
+an attachment's photo or document id as `Media.ID`. Dialogs mark private chats and basic groups
 `Chat.SharedIDs`; supergroups and channels number their own messages.
 
 Member lists (`Members`): messages.getFullChat for a basic group, whose

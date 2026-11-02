@@ -412,16 +412,30 @@ in lazygram too:
   the cache, its attachment from the vault, and the line from the
   windows, without a notice: a deleted message is gone. A deletion the
   service reports without a chat (Telegram's private chats and basic
-  groups share one id space) removes the id from the chats marked
-  `Chat.SharedIDs`, where it is unique. An edit of a message lazygram
-  does not hold changes nothing.
-- A change made while lazygram was off, or one the feed dropped, is
-  healed when the chat's history is fetched (a window's first show,
-  `/last N`): the fetched page replaces cached copies that differ
-  (`Store.Refresh`) and removes the cached messages inside the page's
-  range that the page lacks (`Store.Prune`), since a page has no gaps.
-  Older cached messages, outside every page fetched, keep their last
-  known state.
+  groups share one id space) removes the id from every chat ever marked
+  `Chat.SharedIDs` (kept in the state store under `shared_chats`, so a
+  chat no longer among the recent dialogs is reached too), where it is
+  unique. An edit of a message lazygram does not hold changes nothing.
+  Edits carry their edit time and the later one wins, so updates that
+  arrive out of order cannot undo a newer edit. An edit that swaps or
+  removes the attachment (another photo or document id, kind or name)
+  drops the vault's copy of the old one. A deleted message that arrived
+  this session from someone else takes its count off its window's
+  unread messages. The deletions are remembered for the session, so a
+  history page fetched just before cannot bring a message back.
+- A change made while lazygram was off, one the feed dropped, or one
+  lost in a gap the service would not replay (a sleep, a reconnect;
+  `updatesTooLong` and `updateChannelTooLong` say so) is healed when the
+  chat's history is fetched: a window's first show, `/last N`, and a
+  quiet fetch of the shown window's last 10 messages whenever it was last
+  fetched more than 2 minutes ago (on each poll and on switching to it),
+  at once after a reported gap. The fetched page replaces cached copies
+  that differ unless the cached copy carries a later edit
+  (`Store.Refresh`), and removes the cached messages inside the page's
+  range that the page lacks, and those above it older than the fetch
+  (`Store.Prune`), since a page of the newest history has no gaps. A
+  quiet fetch says nothing unless it brings messages. Older cached
+  messages, outside every page fetched, keep their last known state.
 
 Decision: the polled history only sees new messages, so without the
 update stream an edit never arrived and a deleted message stayed
