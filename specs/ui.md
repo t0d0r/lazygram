@@ -1,7 +1,9 @@
 # UI
 
 Layout, top to bottom: content, a thin rule, the status line, the window
-bar, the input line. The rule carries the message at its left (what the
+bar, the input area (one row for one short line of input; it grows upward
+one row per row of input, see Input area, and the content gives up the
+rows). The rule carries the message at its left (what the
 list or pager holds, an error in the error colour, or the last notice,
 truncated with "..." when long) and the send hint (`ctrl-x: to send` or
 `enter: to send`) at its right end; the status line holds only the
@@ -271,7 +273,8 @@ style, and empty lines inside a message are dropped. Notices: `HH:MM -!- text`. 
 whose text starts with `* ` is an action line (`/me`) and renders as
 `HH:MM * sender text`. Long lines
 wrap as described above; a long line that starts with spaces keeps that
-indent on every piece, so help columns survive narrow windows. A dim separator marks a change of local day.
+indent on every piece. The `/help` and `/keys` references have a layout
+of their own (see `/help` under Modes). A dim separator marks a change of local day.
 Chat and sender colors derive from a hash so they are stable. Sender, text,
 titles and notices are stripped of control characters before rendering.
 
@@ -322,24 +325,52 @@ titles and notices are stripped of control characters before rendering.
   highlighted; the status line shows `N of M messages`; Esc returns.
 `/help` and F1 focus the server window (window 0) and print the command
 reference there as plain lines (no time stamp or marker; command lines
-start after two spaces), one line every 28 ms like a terminal on a slow
-serial line; there is no separate help view. The command reference lists
-the slash commands only, each as its `/name` with every short form the
-parser accepts spelled out (see Short forms below), wrapped so no line
-passes 70 columns, and ends with a line that says to type `/keys` for
-the keyboard shortcuts. `/keys` prints the key
-reference (the Keys table below, plus the notes on themes, mouse and
-windows) the same way, into the server window, slowly, as plain lines.
+start after two spaces), one logical line every 28 ms like a terminal on
+a slow serial line; there is no separate help view. The command
+reference lists the slash commands only, each as its `/name` with every
+short form the parser accepts spelled out (see Short forms below), and
+ends with a line that says to type `/keys` for the keyboard shortcuts.
+`/keys` prints the key reference the same way, into the server window,
+slowly, as plain lines: first the notes on themes, the mouse, selection
+and windows (under the heading `Mouse, themes and windows`), then the
+Keys table below (under `Keys`), last, so that when printing ends the
+table is what the window shows (the window follows the newest line).
 The two are separate so that `/help` stays short enough to read on one
 screen; F1 keeps printing the command reference, and that reference
 names `/keys`, so the keys are one step away from either.
+
+Both references are kept as logical lines and wrapped when drawn, to
+the server window's text width, so they use the whole width of any
+terminal and re-flow on resize:
+
+- An entry is one line: two spaces, the names (single spaces inside),
+  spaces to the description column (column 25; at least two spaces
+  after names that reach it), then the whole description. Drawn, the
+  description wraps with its continuation rows indented to the column
+  where it starts on the first row (a hanging indent).
+- When that leaves the description fewer than 20 columns beside the
+  names, the names take their own row (wrapped, keeping their two-space
+  indent, if the window is narrower than they are) and the description
+  goes on the rows under them, indented 4.
+- Any other line (a heading, a note) is a paragraph wrapped to the
+  width.
+
+No row is wider than the window (at least 10 columns), and no word is
+dropped or reordered; only a word wider than its room is broken.
+Decision: the references were wrapped by hand at 70 columns, which left
+most of a wide terminal empty, could not follow a resize, and broke
+oddly in a narrow window; laying them out when drawn uses whatever width
+there is. `/keys` printed the table first and about 20 lines of notes
+after it, so the notes filled the screen and the table had to be
+scrolled back to; the table is what `/keys` is asked for, so it comes
+last and the notes are one scroll up.
 
 ## Commands
 
 | command                       | action                                               |
 |-------------------------------|------------------------------------------------------|
 | `/help`, `/?`                 | focus the server window and print the command reference there; it ends by naming `/keys` |
-| `/keys`, `/shortcuts`         | focus the server window and print the key reference there |
+| `/keys`, `/shortcuts`         | focus the server window and print the key reference there: the notes first, the key table last |
 | `/redraw`, `/clear`           | drop the window's notices, help text, pictures and banner; the messages stay; a slow print still queued for it is dropped |
 | `/quit`, `/q`                 | leave                                                |
 | `/refresh`, `/r`              | sync now                                             |
@@ -363,7 +394,7 @@ names `/keys`, so the keys are one step away from either.
 | `/open out [msg]`             | the same, but a picture goes to the system viewer    |
 | `/open <link>`                | hand one `http(s)` link with a host to the browser, as a click does (any window; a link with more words after it, or one without a host, is refused); Tab after `/open` offers the chat's ten most recent distinct links, newest first, beside `out` and the attachment ids |
 | `/theme [name]`               | list the colour themes or switch (see Themes)        |
-| `/about`, `/version`          | version, author, repository, license, build, libraries, uptime |
+| `/about`, `/version`          | version, author, repository, license, thanks to the people whose feedback shaped it, build, libraries, uptime |
 | `/fx`                         | running lights over clickable text on or off (kept) |
 | `/mouse`                      | mouse reporting on or off; off lets the terminal select text (kept) |
 | `/clip [mode]`                | where a mouse selection is copied: `auto`, `osc52`, `tool`, `off`; no argument shows the mode and the tool (kept) |
@@ -555,7 +586,7 @@ the terminal's own drag gave: the selection is a stream from the cell
 where the button went down to the cell under the pointer, in reading
 order (the first row from the anchor to its end, whole rows between,
 the last row up to and including the pointer's cell), over any screen
-row including the status rows and the input line. While the button is
+row including the status rows and the rows of the input area. While the button is
 down the selected cells show in reverse video. On release the text is
 put on the clipboard and the status says `copied N characters` (one
 row; `copied 1 character` for one) or `copied N lines`, naming the
@@ -696,8 +727,9 @@ that window cancels the send, puts the text back into the input and only
 toggles "Enter sends". The status says "sending", and a sync is triggered
 so the line appears as `<me>` as soon as the service has it. By default
 Enter never sends: on plain text in a chat window it adds a line break to
-the message (shown as a return mark in the input line), so messages can
-have several lines; the whole text goes out with Ctrl-X. A pasted text
+the message, and typing goes on in a new row of the input area (see
+Input area), so messages can have several lines and show them while they
+are written; the whole text goes out with Ctrl-X. A pasted text
 keeps its line breaks (a CR LF pair is one break; other control
 characters are dropped as always); in a list or the pager a pasted line
 break is dropped, since the filter is one line. With "Enter
@@ -725,6 +757,74 @@ trick and a wrong key never runs a command; the cost is that a command
 typed and sent with Ctrl-X goes out as text, which the 600 ms hold and
 the status line make visible and a second Ctrl-X takes back. Send errors
 go to the status line and the window.
+
+## Input area
+
+The input area is the bottom of the screen. Each line of the input (a
+line break from Enter, from Ctrl-X with "Enter sends" on, or from a
+paste) is a row of its own; there is no return mark. The first row
+starts after the prompt (`[@name] `, `[@name]> `, `list > `, `windows > `,
+`search > `); every later row is indented to the prompt's width, so the
+text lines up under the first. A row holds the screen width less the
+prompt's width and one cell, the cell the cursor takes past the end of a
+line. A longer line wraps onto further rows between characters (grapheme
+clusters, as the screen lays them out), so a wide CJK character or an
+emoji sequence is never split, and no row is wider than the screen (a
+character wider than the room left gets a row to itself). The cursor is a
+reverse-video cell on its row: on the character under it (the whole
+character, also when the cursor stands between the runes of an emoji
+sequence), or one cell past the text at the end of a line. At the place
+where a line wraps the cursor shows at the start of the next row.
+
+The area grows upward by one row per row of input, up to a cap: at most 8
+rows and at most a third of the screen height, never less than one. The
+content area above it shrinks by the same number of rows; the rule, the
+status line and the window bar stay directly above the input area, in
+that order, and are drawn as before. With one row of input the screen is
+exactly as it was when the input was always one line. Past the cap the area
+scrolls: the rows shown stay put while the cursor moves among them, and
+when the cursor leaves them they move just far enough to show its row
+again; the prompt scrolls away with the first row. On a screen of at
+least 5 rows the frame has exactly the screen's height (the cap of a
+third of the screen always leaves the content area a row), and clicks,
+the running light under the pointer, drags and double and triple clicks
+map screen rows through the rows of that frame (content, rule, status
+line, window bar, then the input rows), so they hit the row they point
+at whatever the height of the input area; a drag over the input rows
+copies them as shown, prompt and indent included. The content area and
+the input area each keep at least one row, so on a screen of fewer than
+5 rows the frame still has 5 rows; the terminal shows only its bottom
+rows, and the mouse misses by the rows it hides, as it did before the
+input area could grow. The list filter and the pager search take no line
+breaks, so they stay one row unless they are longer than a row.
+
+In a window (not in a list or the pager), when the input has more than
+one row, Up and Down move the cursor to the row above or below, keeping
+its column (counted in cells from the start of the text) as far as that
+row allows: on the last row of a line the cursor can stand past the
+text; a wrapped row, whose end is the next row's start, ends on its last
+character, and a column inside a wide character goes to its start. A run
+of Up and Down presses keeps the column it started from, so passing a
+short row does not lose it; any other key ends the run. Up on the first
+row and Down on the last row walk the input history as before (see Input
+history), so with one row they always do. Ctrl-A and Ctrl-E go to the
+start and the end of the cursor's line (the text between line breaks,
+not one row of a wrap), and Ctrl-K deletes from the cursor to the end of
+that line (at its end it deletes nothing; Delete or Backspace remove a
+line break). The other editing keys are unchanged: Ctrl-U clears the
+whole input, Ctrl-W deletes the word before the cursor, Left and Right
+move one rune and cross line breaks.
+
+Decision: the input shows the message as it will be sent, line for line,
+so a message of several lines can be read and corrected while it is
+written; a long line wraps rather than scrolling sideways for the same
+reason. The cap keeps the messages in view on any screen. The content
+height is computed from the real height of the input area, and the click
+rows come from the same frame, so the mouse hits what is drawn. A screen
+of fewer than 5 rows keeps the 5-row frame rather than dropping the one
+message row or the one input row, because without either the screen has
+nothing to work with; the mouse is not corrected for the rows such a
+screen hides.
 
 ## Typing indicators
 
@@ -862,7 +962,7 @@ match the plain comparison would find.
 | Ctrl-X twice         | toggle "Enter sends" for this window (Ctrl-X then adds a line break to plain text) |
 | Ctrl-N / Ctrl-P      | next / previous window (Alt-Right / Alt-Left too) |
 | Alt-0 .. Alt-9       | window 0 .. 9; Esc followed by the digit does the same (the typed input survives) |
-| Up / Down            | walk the input history (commands and sent lines; in the pager they scroll) |
+| Up / Down            | with several input rows: the row above / below, keeping the column (see Input area); on the first / last row: walk the input history (commands and sent lines); in a list they move, in the pager they scroll |
 | PgUp / PgDn          | scroll a page (the wheel scrolls three lines)     |
 | mouse drag           | select text; copied to the clipboard on release (see Mouse) |
 | double / triple click | select the word / the screen row under the pointer and copy it; on clickable text the first click acts, the next ones only select (see Mouse) |
@@ -875,28 +975,35 @@ match the plain comparison would find.
 | Ctrl-X               | send the typed text to this window's chat, as typed: a line starting with `/` is sent, not run (Enter runs commands); with "Enter sends" on it still sends such a line |
 | Ctrl-U / Ctrl-W      | clear the input / delete the word before the cursor (and the spaces after it) |
 | Left / Right         | move the cursor one rune; never past the ends; in `/list` or `/win`: pick the row's action button (open or focus, read, unread, close), Enter runs it |
-| Ctrl-A / Ctrl-E      | cursor to the start / end of the input            |
-| Delete / Ctrl-K      | delete the rune under the cursor (at the end of the line Delete acts as Backspace, since some terminals send it for that key) / to the end |
+| Ctrl-A / Ctrl-E      | cursor to the start / end of the cursor's line (between line breaks) |
+| Delete / Ctrl-K      | delete the rune under the cursor (at the end of the input Delete acts as Backspace, since some terminals send it for that key) / to the end of the cursor's line |
 | Ctrl-C               | quit                                              |
 
 ## Input history
 
 Every entered line (a command, or text sent with Ctrl-X or Enter) goes
 into a per-session history of up to 200 lines, immediate duplicates
-collapsed. In a window, Up walks back through it and Down forward; past
-the newest entry the line that was being typed comes back. Typing leaves
-the walk. In a list Up/Down move the cursor, in the pager they scroll.
+collapsed. In a window, Up walks back through it and Down forward (from
+the first and the last row of an input of several rows; between its
+rows they move the cursor, see Input area); past the newest entry the
+line that was being typed comes back. Typing leaves the walk. Down with
+no walk under way changes nothing: the typed text stays. Decision: Down
+used to put back the text saved when the last walk began (nothing after
+a send), which dropped what was typed since; with several rows a Down
+too many on the last row would have thrown a draft away. In a list
+Up/Down move the cursor, in the pager they scroll.
 A recalled line is input like a typed one, and the next key decides:
 Ctrl-X sends it as text, Enter runs it when it starts with `/` (in both
 modes). To resend a slash line, recall it and press Ctrl-X.
 
 ## Completion
 
-The input line has a cursor, drawn as a reverse-video cell (on the rune
-under it, or one past the text at the end); typing inserts at the
-cursor, Backspace deletes before it, Delete under it. A line longer
-than the row scrolls so the cursor stays in view. History recall, Esc,
-Enter and the list and pager prompts put the cursor at the end.
+The input has a cursor, drawn as a reverse-video cell (on the character
+under it, or one past the text at the end of a line); typing inserts at
+the cursor, Backspace deletes before it, Delete under it. A line longer
+than a row of the input area wraps onto the next row (see Input area).
+History recall, Esc, Enter and the list and pager prompts put the cursor
+at the end.
 
 On an empty prompt in a window, Tab switches to the next window and
 Shift-Tab to the previous one. With text typed, Tab completes the word

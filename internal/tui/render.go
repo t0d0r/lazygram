@@ -29,7 +29,7 @@ type note struct {
 	at    time.Time
 	text  string
 	raw   bool // the banner: coloured lines, no stamp
-	plain bool // text as it is in the note colour, no stamp or marker (help)
+	plain bool // a /help or /keys line in the note colour, no stamp or marker; laid out by refRows
 	pre   bool // lines already styled (a picture): emitted as they are, indented
 }
 
@@ -296,7 +296,7 @@ func renderRich(msgs []domain.Message, notes []note, o lineOpts) ([]string, [][]
 			if notes[j].plain {
 				text := sanitize(notes[j].text, true)
 				full := urlsOf(text)
-				for _, l := range wrapText(text, max(o.width, 10), max(o.width, 10)) {
+				for _, l := range refRows(text, max(o.width, 10)) {
 					add(noteStyle.Render(l), linkSpans(l, 0, full)...)
 				}
 				j++
@@ -450,6 +450,59 @@ func renderMessage(m domain.Message, o lineOpts, add func(string, ...span)) bool
 		}
 	}
 	return anim
+}
+
+// minDescRoom is the fewest columns a reference entry's description gets
+// beside its names; with less it goes on the rows under them instead.
+const minDescRoom = 20
+
+// refEntry splits a line of the /help or /keys reference into the lead
+// (two spaces, the names and the spaces after them) and the description.
+// An entry starts with exactly two spaces and ends its names at the
+// first run of two or more spaces; any other line is no entry, and so is
+// one holding a line break, which would split the lead's row.
+func refEntry(l string) (lead, names, desc string, ok bool) {
+	if !strings.HasPrefix(l, "  ") || len(l) < 3 || l[2] == ' ' || strings.Contains(l, "\n") {
+		return "", "", "", false
+	}
+	names, rest, found := strings.Cut(l[2:], "  ")
+	desc = strings.TrimLeft(rest, " ")
+	if !found || desc == "" {
+		return "", "", "", false
+	}
+	return l[:len(l)-len(desc)], names, desc, true
+}
+
+// refRows lays out one logical line of the /help or /keys reference in a
+// window width columns wide. An entry's description wraps with its
+// continuation rows indented to where it starts (a hanging indent), so it
+// uses the whole width and re-flows on resize; when the description would
+// get fewer than minDescRoom columns beside the names, it goes on the rows
+// under them, indented 4. Any other line is a paragraph wrapped to the
+// width.
+func refRows(l string, width int) []string {
+	lead, names, desc, ok := refEntry(l)
+	if !ok {
+		return wrapText(l, width, width)
+	}
+	hang := lipgloss.Width(lead)
+	if width-hang < minDescRoom {
+		rows := wrapText("  "+names, width, width)
+		room := max(width-4, 1)
+		for _, d := range wrapText(desc, room, room) {
+			rows = append(rows, "    "+d)
+		}
+		return rows
+	}
+	rows := wrapText(desc, width-hang, width-hang)
+	for k := range rows {
+		if k == 0 {
+			rows[k] = lead + rows[k]
+		} else {
+			rows[k] = strings.Repeat(" ", hang) + rows[k]
+		}
+	}
+	return rows
 }
 
 // linkSpans finds the links in one plain line of text that starts at

@@ -1,6 +1,7 @@
 package command
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -110,7 +111,7 @@ func hasSlashWord(text, name string) bool {
 }
 
 // TestHelpTextCoversEveryName keeps /help and the parser table in step:
-// a spelling added to the table without a line in HelpText fails here.
+// a spelling added to the table without an entry in HelpText fails here.
 func TestHelpTextCoversEveryName(t *testing.T) {
 	for name := range table {
 		if !hasSlashWord(HelpText, name) {
@@ -120,12 +121,69 @@ func TestHelpTextCoversEveryName(t *testing.T) {
 	if hasSlashWord("/win /edit", "w") || hasSlashWord("/win /edit", "e") || !hasSlashWord("also /w, /e", "e") {
 		t.Fatal("hasSlashWord must match whole words only")
 	}
-	for _, l := range strings.Split(HelpText, "\n") {
-		if len(l) > 70 {
-			t.Errorf("help line over 70 columns (%d): %q", len(l), l)
-		}
-	}
 	if !strings.HasSuffix(HelpText, "type /keys.") || strings.Contains(HelpText, "Ctrl-") {
 		t.Fatal("help names /keys for the shortcuts and holds no key listing")
+	}
+}
+
+// TestHelpTextIsOneLinePerEntry keeps the reference unwrapped: the window
+// wraps it to its own width when drawn (specs/ui.md, /help), so a line
+// wrapped here by hand would come out as a stray row of its own.
+func TestHelpTextIsOneLinePerEntry(t *testing.T) {
+	for _, l := range strings.Split(HelpText, "\n") {
+		if p := entryProblem(l); p != "" {
+			t.Errorf("%s: %q", p, l)
+		}
+	}
+}
+
+// entryProblem says what is wrong with one line of HelpText, or "" for a
+// well-formed entry, heading or note. It checks the length before
+// indexing, so a malformed line fails the test instead of panicking it.
+func entryProblem(l string) string {
+	if !strings.HasPrefix(l, " ") {
+		return "" // a heading or a note
+	}
+	if strings.TrimSpace(l) == "" {
+		return "a blank line holds spaces"
+	}
+	if !strings.HasPrefix(l, "  ") || l[2] == ' ' {
+		return "an entry starts with exactly two spaces, no continuation lines"
+	}
+	names, rest, ok := strings.Cut(l[2:], "  ")
+	desc := strings.TrimLeft(rest, " ")
+	if !ok || desc == "" {
+		return "no description after the names"
+	}
+	col := len(l) - len(desc)
+	if want := max(25, 2+len(names)+2); col != want {
+		return fmt.Sprintf("description at column %d, want %d", col, want)
+	}
+	return ""
+}
+
+// TestEntryProblem covers the malformed lines HelpText does not hold today,
+// so the check above reports them rather than panicking on a short line.
+func TestEntryProblem(t *testing.T) {
+	ok := "  /help" + strings.Repeat(" ", 25-7) + "this list"
+	for _, c := range []struct {
+		line, want string
+	}{
+		{"", ""},
+		{"Commands", ""},
+		{ok, ""},
+		{"  /a-very-long-command-name  its description", ""},
+		{" ", "a blank line holds spaces"},
+		{"  ", "a blank line holds spaces"},
+		{"     ", "a blank line holds spaces"},
+		{" /help  one space", "an entry starts with exactly two spaces, no continuation lines"},
+		{"    wrapped continuation", "an entry starts with exactly two spaces, no continuation lines"},
+		{"  /help", "no description after the names"},
+		{"  /help   ", "no description after the names"},
+		{"  /help  this list", "description at column 9, want 25"},
+	} {
+		if got := entryProblem(c.line); got != c.want {
+			t.Errorf("entryProblem(%q) = %q, want %q", c.line, got, c.want)
+		}
 	}
 }

@@ -106,6 +106,8 @@
 - [x] input cursor: Left/Right, Ctrl-A/E, Delete, Ctrl-K, Ctrl-W before the cursor; completion at the cursor (specs/ui.md)
 - [x] mouse drag selects text and copies it on release: OSC 52 in the frame plus a system tool, /clip modes kept, clicks act on release (specs/ui.md, docs/clipboard.md)
 - [x] double click selects a word, triple a row; Shift-click extends (specs/ui.md, Selection and clipboard)
+- [x] multi-line input area: each line of the input on its own row (no return mark), growing up to 8 rows or a third of the screen, Up/Down between rows and to the history at the edges, rows on the status background (specs/ui.md, Input area; session/2026-11-03-multiline-input.md)
+- [ ] input area follow-ups to decide: Ctrl-W across a line break, Ctrl-K at a line's end joining the next line, word instead of character wrapping, a marker for rows scrolled out of the area
 - [x] typing indicators: Telegram typing updates to domain.TypingState with expiry, status line with a running light (specs/ui.md, specs/providers.md); released in v0.4.18 (assets verified against SHA256SUMS); formula and the Arch recipe still at 0.4.14
 - [x] Ctrl-X sends a line starting with / as text, bypassing the command parser; Enter keeps running commands (specs/ui.md); released in v0.4.17 (assets verified against SHA256SUMS); formula and the Arch recipe still at 0.4.14
 - [x] release v0.4.15 with the mouse selection and the self-update refusal (v0.4.15 and v0.4.16 released 2026-10-31; formula still at 0.4.14)
@@ -113,6 +115,7 @@
 - [x] Ctrl-L performs /redraw (specs/ui.md; attribution: Yanko Simeonov); released in v0.4.20
 - [x] /open autocompletes the 10 most recent links in the current chat (specs/ui.md); released in v0.4.20
 - [x] /open http://... opens an explicitly supplied URL (specs/ui.md); released in v0.4.20
+- [x] /help and /keys use the window's width (one logical line per entry, wrapped when drawn with a hanging indent, re-flowed on resize); /keys prints the notes first and ends with the key table; /about thanks @zechkata and @pau4o for their feedback (specs/ui.md, Commands; session/2026-11-03-help-keys-width.md)
 - [x] one process per data/state folder: a second lazygram started on the same folder notifies the user and refuses to run (force-closes itself) instead of sharing the session, cache and settings; reason: two MTProto sessions on one auth key trigger AUTH_KEY_DUPLICATED, which invalidates the login and wipes the cache (specs/security.md); released in v0.4.20
 - [x] /win list actions: mark the selected window unread, mark it read, close it (specs/ui.md): a button strip on the selected row, Left/Right pick, Enter runs, clickable; released in v0.4.19
 - [x] /list actions: mark the selected chat read or unread, as in the /win list (specs/ui.md); released in v0.4.19

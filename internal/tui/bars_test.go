@@ -20,11 +20,15 @@ func TestBottomRowsAreOnTheStatusBackground(t *testing.T) {
 	t.Cleanup(func() { lipgloss.SetColorProfile(old); applyTheme(themes["default"]) })
 	m := setup(t, newFake())
 	m.width = 90
-	m.input, m.curBack = []rune("hello"), 2
+	m.input, m.curBack = []rune("hello\nworld"), 2 // two input rows
 	for _, name := range themeNames() {
 		applyTheme(themes[name])
 		bar, _ := m.windowBar()
-		for row, line := range map[string]string{"status line": m.statusLine(), "window bar": bar, "prompt": m.inputLine("[0:server] ")} {
+		area := m.inputArea("[0:server] ")
+		if len(area) != 2 {
+			t.Fatalf("%s: %d input rows, want 2", name, len(area))
+		}
+		for row, line := range map[string]string{"status line": m.statusLine(), "window bar": bar, "prompt row": area[0], "second input row": area[1]} {
 			if w := lipgloss.Width(line); w != m.width {
 				t.Errorf("%s: %s is %d wide, want %d", name, row, w, m.width)
 			}
