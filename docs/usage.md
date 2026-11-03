@@ -61,11 +61,11 @@ remembered across restarts. On exit lazygram prints the session statistics
 (time wasted, messages, windows, commands) and, for a release build, a hint
 when a newer release exists; `/about` shows version, author and build.
 When a chat gets a message (or has unread messages at start) a window opens
-for it; the status line shows `[Act: 2,3]` for windows with unread. People
-are `@name`, groups and channels are `#name`. lazygram shows what arrives
-while it runs; opening a chat's window fetches its last 10 messages (100
-in a group whose cached messages still lack their senders' usernames), and
-`/last N` fetches more.
+for it; the status line shows `[Act: 2,3]` for windows with unread, and
+`/unread` goes to the next of them. People are `@name`, groups and channels
+are `#name`. lazygram shows what arrives while it runs; opening a chat's
+window fetches its last 10 messages (100 in a group whose cached messages
+still lack their senders' usernames), and `/last N` fetches more.
 
 ## Commands
 
@@ -76,6 +76,7 @@ in a group whose cached messages still lack their senders' usernames), and
 | `/win last`                | back to the window you were in before this one; again goes back, so it toggles between two windows (Tab twice fast on an empty prompt does the same); a chat named last is `/win @last` |
 | `/move N`                  | move this window to position N                |
 | `/win @user`, `/win #chan` | open or switch to that chat's window          |
+| `/unread`                  | the next window with unread messages after this one, in window order, wrapping round (the windows `[Act: ...]` lists); `no unread window` when there is none |
 | `/win`, `/win list`        | selectable list of the open windows; Left/Right pick `[read]`, `[unread]` or `[close]` for the row, Enter applies it (`[read]` and `[unread]` tell Telegram once, as in `/list`) |
 | `/close [N]`               | close a window                                |
 | `/last [N]`                | fetch the last N messages of this chat        |

@@ -187,7 +187,7 @@ completion, and an activity indicator.
 - The last focused window is the window that was current before the
   current one, Alt-Tab style. Every focus change sets it: Tab, Shift-Tab,
   Ctrl-N / Ctrl-P, Alt-N, Esc N, `/win N`, `/win @name`, `/win last`,
-  `/msg` opening or focusing a window, a click on a window tag, a chat
+  `/unread`, `/msg` opening or focusing a window, a click on a window tag, a chat
   name or a nick, Enter or a click in `/list` and `/win`, and `/help`,
   F1, `/keys` and `/settings`, which focus window 0; only the first Tab of
   a double Tab does not (below). It is the window, not its number: `/move`
@@ -247,6 +247,24 @@ completion, and an activity indicator.
   marked read here without being reported read once it is read. Only an
   empty-prompt Tab holds its receipt back, and only for 400 ms; every
   other way of focusing reports at once, as before.
+- `/unread` focuses the next window with unread messages: the first chat
+  window after the current one, in window order and wrapping round past
+  the last one and window 0 to window 1, whose unread count is above 0
+  (the windows `Act` lists). Window 0 keeps no unread count of its own
+  and is never one, not even after `[unread]` on its row of `/win`
+  (which tells nobody there). The current window comes last: it is the
+  target only when no other window has unread messages and it is marked
+  `[unread]` itself, and `/unread` then reads it, as `/win N` on it
+  would. It is a focus like `/win N` (code: `internal/tui/lastwin.go`,
+  `nextUnread`): the read receipt at once (see Read receipts), the last
+  focused window, the first fetch, and a window an empty-prompt Tab
+  showed that it leaves within 400 ms of that Tab gets its unread count
+  back and is not reported (see above). With no window with unread
+  messages it is the error `no unread window` and nothing changes. It
+  takes no argument (one typed is ignored, as after `/keys`) and has no
+  short form; Tab completes it. Decision: it goes in window order from
+  the current window, as Tab and Ctrl-N do, so repeated it visits the
+  windows `Act` lists in turn and never stops on a read one.
 - The status line shows `[Act: 2,3]`: the windows with unread messages.
   When a sync brings messages from others the status message (on the
   rule) says where they went: `3 new messages in 2:#dev (2), 3:@alice`,
@@ -583,6 +601,7 @@ last, as the table does in `/keys`.
 | `/win N`                      | switch to window N (0 is the server window)          |
 | `/move N`                     | move this window to position N                       |
 | `/win @user`, `/win #chan`    | open or switch to that chat's window                 |
+| `/unread`                     | focus the next window with unread messages after the current one, in window order and wrapping round (never window 0; the current window last); a focus like `/win N`; `no unread window` when there is none, and nothing changes (see Windows) |
 | `/close [N]`                  | close window N or the current one                    |
 | `/last [N]`                   | fetch the last N messages (default 10, max 100)      |
 | `/search [text]`              | pager over the current window's local history        |
@@ -1355,7 +1374,7 @@ argument says so. `/read-receipts on` (kept in the state store under
 `read_receipts`; absent or unreadable means off) makes lazygram report a
 chat read at the moments it marks the chat read itself: when a window
 with unread messages is focused (`/win N`, `/win @name`, `/win last`,
-Alt-N, Ctrl-N, a click on the window bar or a list row, and Tab, 400 ms
+`/unread`, Alt-N, Ctrl-N, a click on the window bar or a list row, and Tab, 400 ms
 later as below). The report covers the newest message lazygram holds
 for the chat (`Provider.MarkRead` with that message id), so what
 lazygram has not shown stays unread at the service; with no message of

@@ -2044,6 +2044,8 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.setFeed(c.Arg)
 	case command.Vim:
 		m.setVim(c.Arg)
+	case command.Unread:
+		return m, m.unreadWindow()
 	case command.MarkRead:
 		return m.markAsRead()
 	case command.Fx:
@@ -3356,7 +3358,7 @@ Double click copies the word under the pointer, triple click the row; on a link 
 Mouse: click a chat name or nick in window 0 to open its window, a tag in the window bar to focus it, a row in /list or /win to open it, a row of /settings to set its next value, a link or a [photo] / [file] token to open it with the system; the wheel scrolls.
 Window 0 is the server window: every chat interleaved, plus notices (/feed off: the notices only); it stays at 0 and cannot be closed. /move N puts this window at N.
 Reactions show after a message as [emoji count ...], yours highlighted; window 0 says when someone adds one (with /feed on). The messages on screen are asked about every 20 seconds.
-A window opens for a chat when it gets a message or has unread ones; [Act: 1,2] in the status line lists windows with unread messages.
+A window opens for a chat when it gets a message or has unread ones; [Act: 1,2] in the status line lists windows with unread messages, and /unread goes to the next of them.
 People are @name, groups and channels are #name.`
 
 // keyHelp is what /keys prints: the Keys table alone. Entries are one

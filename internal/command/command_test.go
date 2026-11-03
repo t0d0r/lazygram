@@ -69,6 +69,9 @@ func TestParse(t *testing.T) {
 		{"/vim on", Command{Vim, "on"}, false},
 		{"/VIM  off ", Command{Vim, "off"}, false},
 		{"/vi", Command{}, true}, // one spelling only
+		{"/unread", Command{Unread, ""}, false},
+		{"/UNREAD ", Command{Unread, ""}, false},
+		{"/unr", Command{}, true}, // one spelling only
 		{"/redraw", Command{Redraw, ""}, false},
 		{"/clear", Command{Redraw, ""}, false},
 		{"/keys", Command{Keys, ""}, false},

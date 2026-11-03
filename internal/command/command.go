@@ -44,6 +44,7 @@ const (
 	Feed          // chat messages in the server window: Arg is on or off; empty shows the setting
 	Settings      // the menu of every kept setting, in the server window: Arg narrows its rows
 	Vim           // vi keys (Normal and Insert modes) on the input, the lists and the pager: Arg is on or off; empty shows the setting
+	Unread        // focus the next window with unread messages after the current one, wrapping round
 )
 
 // Command is a parsed slash command.
@@ -85,6 +86,7 @@ var table = map[string]Kind{
 	"feed":         Feed,
 	"settings":     Settings,
 	"vim":          Vim,
+	"unread":       Unread,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -132,6 +134,7 @@ const HelpText = `Commands
   /win last              back to the window focused before this one; again goes back (Tab twice fast does it too); a chat named last is /win @last
   /win N                 switch to window N (0 is the server window)
   /win @user | #chan     open or switch to that chat's window; /win is also /w, /window, /j, /join, /query
+  /unread                the next window with unread messages after this one, in window order, wrapping round; none: an error
   /close [N]             close a window; also /wc, /part
   /move N                move this window to position N; also /mv
   /last [N]              fetch the last N messages here (default 10); also /history, /hist

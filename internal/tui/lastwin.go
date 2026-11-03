@@ -17,6 +17,9 @@ import (
 // is left again within tabGap, by the second Tab of a double Tab or by any
 // other focus, is left as it was: its unread count comes back and its
 // read receipt, held back for tabGap, is never sent. Session only.
+//
+// /unread is the other jump: to the next window with unread messages
+// after the current one (nextUnread), focused as /win N focuses.
 
 // tabGap is the longest pause between the two presses of a double Tab, as
 // clickGap is for a double click.
@@ -64,6 +67,34 @@ func (m *Model) lastWindow() int {
 		return i
 	}
 	return -1
+}
+
+// nextUnread is the window /unread goes to from window from: the first
+// chat window with unread messages after it, in window order and wrapping
+// round; window 0 has no unread count and is never one, and from itself
+// comes last (it is current and so read, unless marked [unread] from
+// /win). -1: no window has unread messages.
+func (m *Model) nextUnread(from int) int {
+	n := len(m.wins)
+	for k := 1; k <= n; k++ {
+		if i := (from + k) % n; i != 0 && m.wins[i].unread > 0 {
+			return i
+		}
+	}
+	return -1
+}
+
+// unreadWindow implements /unread: the next window with unread messages,
+// focused as /win N focuses (its read receipt, the last window, a
+// window a Tab showed left as it was); with none, an error and nothing
+// changes.
+func (m *Model) unreadWindow() tea.Cmd {
+	i := m.nextUnread(m.cur)
+	if i < 0 {
+		m.setErr("no unread window")
+		return nil
+	}
+	return m.switchTo(i)
 }
 
 // tab is Tab on an empty prompt: the next window, at once. A second Tab
