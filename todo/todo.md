@@ -133,6 +133,8 @@
 - [x] cached messages learn their sender's id and username when the service sends them again (Store.Identify), so members from an older cache get usernames (specs/ui.md, Members; specs/storage.md)
 - [x] the second Tab lists members separated by commas: display names have spaces (specs/ui.md, Members)
 - [x] Tab completion matches chat names and members in Cyrillic or Latin, like search (domain.PrefixMatch; specs/ui.md, Search in either script)
+- [x] Tab completes a chat by its title too and fills in the name as /names shows it, a title across words included; /win, /msg and /whois resolve the exact title and the exact and prefix tiers in either script; /msg takes a name with spaces (specs/ui.md, Names: nick or title, Search in either script; session/2026-11-03-complete-titles.md)
+- [ ] decide: name completion in name mode resolves every candidate (quadratic in the chat count: about 1 ms at 100 chats, 0.9 s at 2000); index the names if the chat list grows past the provider's 100
 - [x] mentions: links (youtube.com/@name), e-mail addresses in any script and the chat's own username are no members; a moved username stays with its newest holder; one member scan per Tab (specs/ui.md, Members)
 - [x] group members beyond the senders seen: the participant list where the account may read it (specs/ui.md, Members); done as the member list below
 - [ ] a mention by name for members without a username: Tab fills in the display name, and Send passes an inputMessageEntityMentionName (offset and length in UTF-16 units, the user as inputUserFromMessage: the chat, one of their message ids, their user id) so Telegram links and notifies them; needs an entities argument on Provider.Send
