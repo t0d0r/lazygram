@@ -1335,6 +1335,11 @@ because a chat client is mostly typing.
   and PgDn, F1, Ctrl-A, Ctrl-K, Ctrl-W, Ctrl-L, Ctrl-R, Ctrl-N, Ctrl-P,
   Ctrl-C, Alt-N, Alt-Left and Alt-Right, the mouse and a paste. Sending,
   running a command and switching windows leave the mode as it was.
+- With "Enter sends" on, the line break a single Ctrl-X adds goes in
+  after the character under the cursor in Normal: where Insert's cursor
+  stood before Esc stepped back onto that character. So `hello`, Esc,
+  Ctrl-X gives `hello` and a new empty line, as in Insert, and Ctrl-X
+  twice leaves `hello` as typed, toggling "Enter sends" (see Sending).
 - In Normal the cursor stands on a character, as vi's does: never past
   the end of a line that has text (an empty line has none). A key that
   left it past the end (a recalled line, a delete at the end, `l`, `$`,
@@ -1413,7 +1418,11 @@ Normal cannot type or send anything; a paste still goes in, since no
 paste happens by a stray key. Decision: Enter does in both modes what it
 does with vim off (sends with "Enter sends" on, else adds a line or runs
 a command), and so does Ctrl-X, so sending never depends on the mode.
-Decision: the cursor stands on a character, Esc steps back, `$` and `l`
+Decision: in Normal Ctrl-X's line break goes after the character under
+the cursor, not before it, because Esc stepped back onto the last typed
+character: before it, the break would split that character off, and the
+double Ctrl-X, which removes only a break at the end, would leave the
+draft changed. Decision: the cursor stands on a character, Esc steps back, `$` and `l`
 stop on the last character, `^` and `I` skip leading blanks, `cw` keeps
 the blank after the word and a second `u` puts the change back: these
 follow vi, so a vi habit does here what it does in vi. Decision: `dd`,

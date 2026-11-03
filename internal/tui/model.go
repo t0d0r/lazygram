@@ -1539,6 +1539,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// with "/" is the exception: Enter would run it as a command,
 			// so Ctrl-X sends it as text. With a leading space Enter sends
 			// it as text too, so that form keeps the line break.
+			m.vimBreakPoint() // in vim's Normal mode: after the character under the cursor (vim.go)
 			m.insert('\n')
 			m.setInfo("line added; Enter sends the message")
 			return m, nil

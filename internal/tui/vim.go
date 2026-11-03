@@ -454,6 +454,21 @@ func (m *Model) listLen() int {
 // vimMove puts the cursor before rune p.
 func (m *Model) vimMove(p int) { m.curBack = len(m.input) - p }
 
+// vimBreakPoint readies the cursor for the line break Ctrl-X adds with
+// "Enter sends" on. In Normal mode it goes after the character under the
+// cursor, where Insert's cursor stood before Esc stepped back onto it, so
+// a draft left with Esc gets the break at its end, as in Insert, and a
+// fast second Ctrl-X finds it there and removes it. Elsewhere the break
+// goes in at the cursor, as with vim off.
+func (m *Model) vimBreakPoint() {
+	if !m.inNormal() {
+		return
+	}
+	t := m.vimText()
+	p := t.charAt(m.pos())
+	m.vimMove(t.next(p, m.lineEnd(p)))
+}
+
 // vimSave keeps the input as it is now for u: the next change is the one
 // u takes back.
 func (m *Model) vimSave() {

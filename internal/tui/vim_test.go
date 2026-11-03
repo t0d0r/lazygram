@@ -801,6 +801,52 @@ func TestVimSendingKeepsTheMode(t *testing.T) {
 	}
 }
 
+// TestVimCtrlXLineBreakAsInInsert: with "Enter sends" on, the line break
+// a Ctrl-X adds in Normal goes after the character under the cursor,
+// where Insert's cursor stood before Esc, so the input is what Insert
+// gives, and Ctrl-X twice leaves the draft as typed and toggles.
+func TestVimCtrlXLineBreakAsInInsert(t *testing.T) {
+	m := vimChat(t)
+	w := m.wins[m.cur]
+	for _, c := range []struct {
+		esc   bool
+		twice bool
+		want  string
+		sends bool
+	}{
+		{false, false, "hello\n|", true},
+		{true, false, "hello\n|", true},
+		{false, true, "hello|", false},
+		{true, true, "hell|o", false}, // the same text; Normal's cursor stands on its last character
+	} {
+		w.enterSends, m.lastCtrlX, m.vi.normal = true, time.Time{}, false
+		m.input, m.curBack = nil, 0
+		typ(m, "hello")
+		if c.esc {
+			press(m, tea.KeyEsc)
+		}
+		press(m, tea.KeyCtrlX)
+		if !c.twice && m.status != "line added; Enter sends the message" {
+			t.Fatalf("Esc %v: one Ctrl-X adds a line: %q", c.esc, m.status)
+		}
+		if c.twice {
+			press(m, tea.KeyCtrlX)
+		}
+		if curText(m) != c.want || w.enterSends != c.sends || m.vi.normal != c.esc || m.pending != nil {
+			t.Fatalf("Esc %v, twice %v: %q enterSends=%v normal=%v; want %q enterSends=%v",
+				c.esc, c.twice, curText(m), w.enterSends, m.vi.normal, c.want, c.sends)
+		}
+	}
+	// Elsewhere in the line the break follows the character under the
+	// cursor, as Ctrl-X at Insert's cursor after a does.
+	w.enterSends, m.lastCtrlX = true, time.Time{}
+	normalAt(m, "hello", 1)
+	press(m, tea.KeyCtrlX)
+	if curText(m) != "he\n|llo" || !m.vi.normal {
+		t.Fatalf("Ctrl-X on the e: %q", curText(m))
+	}
+}
+
 // TestVimNormalTag: the status line says NORMAL, styled as its segments,
 // only while the input is in Normal mode.
 func TestVimNormalTag(t *testing.T) {
