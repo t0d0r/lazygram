@@ -64,6 +64,10 @@ func TestParse(t *testing.T) {
 		{"/SET  mouse ", Command{Settings, "mouse"}, false},
 		{"/options read receipts", Command{Settings, "read receipts"}, false},
 		{"/setting", Command{}, true}, // the three spellings only
+		{"/vim", Command{Vim, ""}, false},
+		{"/vim on", Command{Vim, "on"}, false},
+		{"/VIM  off ", Command{Vim, "off"}, false},
+		{"/vi", Command{}, true}, // one spelling only
 		{"/redraw", Command{Redraw, ""}, false},
 		{"/clear", Command{Redraw, ""}, false},
 		{"/keys", Command{Keys, ""}, false},

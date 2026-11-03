@@ -21,7 +21,7 @@ import (
 )
 
 // menuOrder is the order of the settings menu's rows.
-var menuOrder = []string{"feed", "autojoin", "read-receipts", "names", "theme", "fx", "mouse", "clip"}
+var menuOrder = []string{"feed", "autojoin", "read-receipts", "names", "theme", "fx", "mouse", "clip", "vim"}
 
 // menuRows are the rows the menu shows, as name and value, in order.
 func menuRows(m *Model) [][2]string {
@@ -132,16 +132,16 @@ func TestSettingsOpensInWindow0FromAChatWindow(t *testing.T) {
 	if !strings.HasPrefix(input, "settings > ") || m.prompt() != "settings > " {
 		t.Fatalf("the prompt: %q", input)
 	}
-	if !strings.Contains(v, "settings (8): Up/Down, Enter or Right next value, Left previous, Esc closes, type to narrow") {
+	if !strings.Contains(v, "settings (9): Up/Down, Enter or Right next value, Left previous, Esc closes, type to narrow") {
 		t.Fatalf("the rule explains the keys:\n%s", v)
 	}
 	if strings.Contains(v, "[open]") || strings.Contains(v, "[focus]") || strings.Contains(v, "first dev line") {
 		t.Fatalf("the menu has no buttons and covers window 0's lines:\n%s", v)
 	}
 	want := [][2]string{{"feed", "on"}, {"autojoin", "on"}, {"read-receipts", "off"}, {"names", "nick"},
-		{"theme", "default"}, {"fx", "off"}, {"mouse", "on"}, {"clip", "auto"}}
+		{"theme", "default"}, {"fx", "off"}, {"mouse", "on"}, {"clip", "auto"}, {"vim", "off"}}
 	if got := menuRows(m); !reflect.DeepEqual(got, want) {
-		t.Fatalf("the eight rows in order with their values:\n%q\nwant\n%q", got, want)
+		t.Fatalf("the nine rows in order with their values:\n%q\nwant\n%q", got, want)
 	}
 	// The columns line up (whatever the values, see
 	// TestSettingsDescriptionsStayPut).
@@ -338,6 +338,7 @@ func TestSettingsChangeAsTheirCommandsDo(t *testing.T) {
 		"read-receipts": func(v string) string { return "/read-receipts " + v }, "names": func(string) string { return "/names" },
 		"theme": func(v string) string { return "/theme " + v }, "fx": func(string) string { return "/fx" },
 		"mouse": func(string) string { return "/mouse" }, "clip": func(v string) string { return "/clip " + v },
+		"vim": func(v string) string { return "/vim " + v },
 	}
 	for _, name := range menuOrder {
 		menu, typed := setup(t, newFake()), setup(t, newFake())
@@ -372,13 +373,13 @@ func TestSettingsChangeAsTheirCommandsDo(t *testing.T) {
 				t.Fatalf("%s: kept as %v, the command keeps %v", name, a, b)
 			}
 			// The rule shows what was said, until the next key.
-			if v := ansi.Strip(menu.View()); !strings.Contains(v, ansi.Truncate(menu.status, 60, "")) || strings.Contains(v, "settings (8)") {
+			if v := ansi.Strip(menu.View()); !strings.Contains(v, ansi.Truncate(menu.status, 60, "")) || strings.Contains(v, "settings (9)") {
 				t.Fatalf("%s: the rule shows the change's status %q:\n%s", name, menu.status, v)
 			}
 		}
 		press(menu, tea.KeyDown)
 		press(menu, tea.KeyUp)
-		if v := ansi.Strip(menu.View()); !strings.Contains(v, "settings (8): Up/Down") {
+		if v := ansi.Strip(menu.View()); !strings.Contains(v, "settings (9): Up/Down") {
 			t.Fatalf("%s: after another key the rule explains the keys again:\n%s", name, v)
 		}
 	}
@@ -728,7 +729,7 @@ func TestSettingsRowsFollowTheSettings(t *testing.T) {
 			out = append(out, r[1])
 		}
 		return out
-	}(); !reflect.DeepEqual(values, []string{"off", "off", "on", "name", "nord", "on", "off", "tool"}) {
+	}(); !reflect.DeepEqual(values, []string{"off", "off", "on", "name", "nord", "on", "off", "tool", "off"}) {
 		t.Fatalf("the values after the commands: %q", values)
 	}
 	// A command typed in the open menu: it stays open, the row follows and
@@ -747,7 +748,7 @@ func TestSettingsRowsFollowTheSettings(t *testing.T) {
 		t.Fatalf("so does a line that is no command:\n%s", v)
 	}
 	press(m, tea.KeyDown)
-	if v := ansi.Strip(m.View()); !strings.Contains(v, "settings (8): ") {
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "settings (9): ") {
 		t.Fatalf("the next key brings the keys back:\n%s", v)
 	}
 	press(m, tea.KeyEsc)

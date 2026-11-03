@@ -162,8 +162,10 @@ type Model struct {
 	typingAnim   bool                 // a typingAnimMsg is scheduled
 	typingStep   int                  // the running light's clock
 
+	vi vimState // vim mode: Normal and Insert on the input (vim.go)
+
 	escPending bool         // an Esc was just pressed: a digit now switches windows
-	escSaved   []rune       // the input as it was before that Esc cleared it
+	escSaved   []rune       // the input as it was before that Esc cleared it; nil when it cleared nothing
 	lastCtrlX  time.Time    // for the double Ctrl-X toggle
 	pending    *pendingSend // text waiting out the double Ctrl-X window before it is sent
 	pendingSeq int
@@ -305,6 +307,9 @@ func New(opt Options) *Model {
 	}
 	if found, err := opt.Store.State(feedKey, &m.feed); !found || err != nil {
 		m.feed = true
+	}
+	if found, err := opt.Store.State(vimKey, &m.vi.on); !found || err != nil {
+		m.vi.on = false // absent or unreadable: off; on starts in Insert
 	}
 	var shared []string
 	_, _ = opt.Store.State(sharedKey, &shared)
@@ -1442,6 +1447,17 @@ func (m *Model) refresh() tea.Cmd {
 }
 
 func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Vim mode (vim.go) looks first: Normal mode reads a run of typed
+	// characters one at a time and j and k as Down and Up, and keeps its
+	// cursor on a character once the key is done.
+	var vop rune
+	if m.vi.on {
+		if m.inNormal() && k.Type == tea.KeyRunes && len(k.Runes) > 1 && !k.Paste && !k.Alt {
+			return m.vimEach(k)
+		}
+		k, vop = m.vimBegin(k)
+		defer m.vimSettle()
+	}
 	if k.Type != tea.KeyTab {
 		m.comp = nil
 	}
@@ -1460,7 +1476,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 	case digit && (k.Alt || escPending):
-		if escPending {
+		if escPending && m.escSaved != nil {
 			m.input, m.curBack = m.escSaved, 0 // the Esc was a prefix, not a clear
 		}
 		n := int(k.Runes[0] - '0') // 0 is the server window
@@ -1473,6 +1489,11 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.switchTo((m.cur + 1) % len(m.wins))
 	case k.Alt && k.Type == tea.KeyLeft, k.Type == tea.KeyCtrlP:
 		return m, m.switchTo((m.cur + len(m.wins) - 1) % len(m.wins))
+	}
+	if m.vi.on {
+		if done, cmd := m.vimKey(k, vop); done { // Esc in Insert, the keys of Normal mode
+			return m, cmd
+		}
 	}
 	switch k.Type {
 	case tea.KeyEsc:
@@ -1888,6 +1909,8 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.setAutojoin(c.Arg)
 	case command.Feed:
 		m.setFeed(c.Arg)
+	case command.Vim:
+		m.setVim(c.Arg)
 	case command.MarkRead:
 		return m.markAsRead()
 	case command.Fx:
@@ -2394,6 +2417,7 @@ var argWords = map[command.Kind][]string{
 	command.Receipts: {"on", "off"},
 	command.AutoJoin: {"on", "off"},
 	command.Feed:     {"on", "off"},
+	command.Vim:      {"on", "off"},
 	command.Clip:     {"auto", "osc52", "tool", "off"},
 }
 
@@ -3077,6 +3101,9 @@ func (m *Model) statusLine() string {
 		seg(time.Now().Format("15:04"), 5, false) + gap +
 		seg(m.opt.Provider.Name(), 0, false) + gap +
 		seg(fmt.Sprintf("[%d:%s]", m.cur, m.winName(m.cur)), 3, true) + gap
+	if tag := m.vimTag(); tag != "" { // NORMAL, while the input is in vim's Normal mode
+		head += seg(tag, 4, true) + gap
+	}
 	if act := m.activity(); act != "" {
 		head += actStyle.Render(act) + gap
 	}
