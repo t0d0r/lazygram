@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"maps"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -558,6 +559,22 @@ func TestDoubleTabCompletesAndIsDescribed(t *testing.T) {
 	} {
 		if !strings.Contains(pool, want) {
 			t.Errorf("the start hints lack %q", want)
+		}
+	}
+}
+
+// TestHelpMatchesTheDoubleTabRangeAndTheMenuName: /help's /doubletab line
+// gives the range and default the code uses, and no line offers /set or
+// /options for the settings menu.
+func TestHelpMatchesTheDoubleTabRangeAndTheMenuName(t *testing.T) {
+	ms := func(d time.Duration) string { return strconv.FormatInt(d.Milliseconds(), 10) }
+	want := ms(minTabGap) + " to " + ms(maxTabGap) + " (default " + ms(defaultTabGap) + ")"
+	if !strings.Contains(command.HelpText, want) {
+		t.Errorf("/help does not say %q", want)
+	}
+	for _, alias := range []string{"/set,", "/set ", "/set)", "/options"} {
+		if strings.Contains(command.HelpText, alias) {
+			t.Errorf("/help still offers %q", alias)
 		}
 	}
 }
