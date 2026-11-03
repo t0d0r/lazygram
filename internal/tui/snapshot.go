@@ -11,5 +11,8 @@ func Snapshot(opt Options, width, height int) string {
 	for _, c := range []tea.Cmd{m.chatsCmd(), m.syncCmd()} {
 		m.Update(c())
 	}
+	if m.heldSync != nil { // the sync waits for a chat list it asked for (awaitNames)
+		m.Update(m.chatsCmd()())
+	}
 	return m.View()
 }

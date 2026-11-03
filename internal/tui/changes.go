@@ -61,6 +61,7 @@ func (m *Model) applyChange(c domain.Change) tea.Cmd {
 			return nil // not cached: nothing shows it
 		}
 		m.identify([]domain.Message{now})
+		m.heldPatch(now)
 		m.react.learn([]domain.Message{now})
 	case domain.Reacted:
 		m.reacted(c)

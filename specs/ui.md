@@ -146,6 +146,31 @@ completion, and an activity indicator.
   first run only, so unread chats silently stopped opening at start;
   it now keys on the first answer from the service. `/win @user`,
   `/win #chan` and Enter in `/list` open one on demand.
+- A sync whose new messages include one from someone else in a chat the
+  chat list does not have waits for the chat list before anything of it
+  shows, so the windows it opens, their `window N opened for` notices
+  and the status name the chat, never its id, and a deleted account
+  opens no window. At start the chat list and the first sync are asked
+  for at once and the sync can answer first: it waits for that chat
+  list, and the start check's windows open before the arrivals'. A chat
+  that writes for the first time later in the session is not in the
+  list yet: the sync asks for the chat list, once per such chat a
+  session, so a chat the service never lists costs one request, not one
+  a poll, and is named by its id. With no chat list yet this session
+  and none on its way (it failed) nothing waits, and when the chat list
+  fails the waiting sync goes ahead, chats named by their ids, and the
+  chat list's error stays on the status line (the sync's own error, if
+  any, is told too). While a sync waits it counts as running: no second
+  one starts, and `/refresh` says a sync is running. An edit or a
+  reaction reported while it waits shows when it goes ahead, as the
+  store already has it, and a reaction poll that came due while it
+  waited goes out then, as after any sync (see Reactions).
+  Smoke mode, which runs no commands, lets a waiting sync go ahead after
+  one more chat list. What the account sent itself opens no window and
+  waits for nothing. Decision: notices and the status are written
+  once and keep their text, so a name must be known when they are
+  written; on a first start (nothing cached) the sync usually answered
+  first, and `window 1 opened for demo-1` stayed in window 0.
 - The server window is number 0, permanent: it cannot be closed or moved.
   Chat windows are numbered from 1 in opening order, renumbered on
   `/close`, and `/move N` puts the current window at position N (1..last),
