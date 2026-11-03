@@ -43,6 +43,7 @@ const (
 	AutoJoin      // open windows for unread chats at start: Arg is on or off; empty shows the setting
 	Feed          // chat messages in the server window: Arg is on or off; empty shows the setting
 	Settings      // the menu of every kept setting, in the server window: Arg narrows its rows
+	Vim           // vi keys (Normal and Insert modes) on the input, the lists and the pager: Arg is on or off; empty shows the setting
 )
 
 // Command is a parsed slash command.
@@ -83,6 +84,7 @@ var table = map[string]Kind{
 	"mark-as-read": MarkRead,
 	"feed":         Feed,
 	"settings":     Settings, "set": Settings, "options": Settings,
+	"vim": Vim,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -127,6 +129,7 @@ const HelpText = `Commands
   /refresh, /r           sync now; also /sync
   /list [text]           chat list: @people and #channels; also /ls, /chats
   /win, /win list        list of the open windows
+  /win last              back to the window focused before this one; again goes back (Tab twice fast does it too); a chat named last is /win @last
   /win N                 switch to window N (0 is the server window)
   /win @user | #chan     open or switch to that chat's window; /win is also /w, /window, /j, /join, /query
   /close [N]             close a window; also /wc, /part
@@ -155,5 +158,6 @@ const HelpText = `Commands
   /mark-as-read          one receipt for this window's chat, now, whatever /read-receipts says
   /autojoin [on|off]     at start open a window for every chat with unread messages; on by default, kept
   /feed [on|off]         window 0 shows every chat's messages as they arrive (on, the default) or only its notices (off); kept; no argument shows
+  /vim [on|off]          vi keys: Normal and Insert modes on the input, in the lists and the pager (Esc enters Normal, i returns to typing; /keys lists the keys); off by default, kept; no argument shows
   /settings [text]       a menu of every kept setting, in window 0: Enter or Right sets the next value, Left the previous, typing narrows; also /set, /options
 Keyboard shortcuts: type /keys.`
