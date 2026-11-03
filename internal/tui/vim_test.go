@@ -726,7 +726,8 @@ func TestVimTabAndCtrlWAsAppend(t *testing.T) {
 		want string
 	}{
 		{"hi @ali", 6, []tea.KeyType{tab}, "hi @alice| "},
-		{"hi @ali", 6, []tea.KeyType{tab, tab}, "hi @alice| "}, // the second Tab lists every chat
+		{"hi @ali", 6, []tea.KeyType{tab, tab}, "hi @alice| "}, // the second Tab, on an empty word, does nothing
+		{"/wi", 2, []tea.KeyType{tab, tab}, "/w|i"},            // the second Tab lists the commands
 		{"hi @ali there", 6, []tea.KeyType{tab}, "hi @alice|  there"},
 		{"hi @ali there", 5, []tea.KeyType{tab}, "hi @alice| i there"},
 		{"hello world", 10, []tea.KeyType{ctrlW}, "hello| "},
@@ -736,6 +737,8 @@ func TestVimTabAndCtrlWAsAppend(t *testing.T) {
 		{"ab\ncd", 3, []tea.KeyType{ctrlW}, "|d"},
 		{"ab\n", 3, []tea.KeyType{ctrlW}, "|"}, // an empty line has no character to take
 		{"ab\n", 3, []tea.KeyType{tab}, "ab\n|"},
+		{"ab\n\ncd", 3, []tea.KeyType{ctrlW}, "|\ncd"}, // an empty line inside: the break after it stays
+		{"ab\n\ncd", 3, []tea.KeyType{tab}, "ab\n|\ncd"},
 		{"", 0, []tea.KeyType{ctrlW}, "|"},
 		{"", 0, []tea.KeyType{tab}, "|"}, // an empty prompt: Tab walks the windows
 	} {
@@ -763,6 +766,19 @@ func TestVimTabAndCtrlWAsAppend(t *testing.T) {
 		if curText(on) != c.want {
 			t.Errorf("%q on %d, %v: %q, want %q", c.text, c.p, c.keys, curText(on), c.want)
 		}
+	}
+	// A character is a grapheme cluster: Ctrl-W takes the whole e with its
+	// accent, and Tab steps back onto the whole emoji, skin tone and all.
+	m := vimChat(t)
+	normalAt(m, "café", 3)
+	press(m, ctrlW)
+	if curText(m) != "|" || !m.vi.normal {
+		t.Fatalf("Ctrl-W on an accented e: %q", curText(m))
+	}
+	normalAt(m, "hi \U0001F44D\U0001F3FD", 3)
+	press(m, tab)
+	if curText(m) != "hi |\U0001F44D\U0001F3FD" || !m.vi.normal {
+		t.Fatalf("Tab on an emoji with a skin tone: %q", curText(m))
 	}
 }
 

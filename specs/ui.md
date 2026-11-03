@@ -1508,7 +1508,8 @@ the input as it was left.
   mode.
 - With vim on, in both modes: Enter, Ctrl-X, Tab and Shift-Tab, Alt-N,
   Esc then a digit, Ctrl-N and Ctrl-P, Ctrl-C, PgUp and PgDn, the mouse
-  and a paste.
+  and a paste. On the input in Normal, Tab, Ctrl-W and Ctrl-X's line
+  break take the character under the cursor first (above).
 - Insert, on the input and in a list or the pager, is the vim-off key
   map except Esc; tests compare the two key for key.
 - Nothing typed in Normal reaches the input, the filter or the service.
