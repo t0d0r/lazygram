@@ -46,8 +46,8 @@ selection yet.
 3. The server window interleaves chats in time order with time, chat name,
    sender and text; people show as `@name`, groups and channels as `#name`.
 4. A window opens for a chat with a new message or with unread messages;
-   `[Act: ...]` lists windows with unread; `/win N`, `/win @user`, Ctrl-N/P
-   and Alt-digits switch; opening a chat window fetches its last 10
+   `[Act: ...]` lists windows with unread and `/unread` goes to the next
+   of them; `/win N`, `/win @user`, Ctrl-N/P and Alt-digits switch; opening a chat window fetches its last 10
    messages; `/last N` fetches more.
 5. `/list` is a selectable list; Enter opens the chat's window; deleted
    accounts are hidden unless `--show-deleted`.

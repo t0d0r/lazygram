@@ -120,6 +120,7 @@
 - [x] /read-receipts on|off (off by default, kept) and /mark-as-read: a read receipt when a window with unread messages is focused or marked read in a list, or once on request (specs/ui.md, specs/security.md); released in v0.4.19 (assets verified against SHA256SUMS)
 - [x] Ctrl-L performs /redraw (specs/ui.md; attribution: Yanko Simeonov); released in v0.4.20
 - [x] /win last and a fast double Tab jump to the last focused window; a window a Tab only passed through keeps its unread count and sends no read receipt (specs/ui.md, Windows, Read receipts; session/2026-11-03-win-last.md)
+- [x] /unread focuses the next window with unread messages; /doubletab [off|last|unread|<ms>], off by default: Tab twice fast jumps as /win last or /unread, within a time of 150 to 1000 ms (default 400) that also times the pass-through protection; two /settings rows; /set and /options removed, /settings is the only name of the menu (specs/ui.md, Windows, Settings menu; session/2026-11-04-doubletab.md)
 - [x] /open autocompletes the 10 most recent links in the current chat (specs/ui.md); released in v0.4.20
 - [x] /open http://... opens an explicitly supplied URL (specs/ui.md); released in v0.4.20
 - [x] /help and /keys use the window's width (one logical line per entry, wrapped when drawn with a hanging indent, re-flowed on resize); /keys prints the notes first and ends with the key table; /about thanks @zechkata and @pau4o for their feedback (specs/ui.md, Commands; session/2026-11-03-help-keys-width.md)

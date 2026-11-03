@@ -171,7 +171,9 @@ type Model struct {
 	pending    *pendingSend // text waiting out the double Ctrl-X window before it is sent
 	pendingSeq int
 
-	lastWin *win                                 // the window current before this one (/win last, a double Tab); nil: none yet (lastwin.go)
+	lastWin *win                                 // the window current before this one (/win last, a double Tab of last); nil: none yet (lastwin.go)
+	dblTab  doubleTab                            // /doubletab: what Tab twice fast does, off, last or unread (kept; off by default; doubletab.go)
+	tabGap  time.Duration                        // the double Tab's time, also how long a Tab's window must stay to be read (kept; defaultTabGap)
 	tabAt   time.Time                            // when an empty-prompt Tab switched windows: a second one within tabGap is a double Tab
 	tabGo   tabHop                               // what that Tab left behind, for the second one
 	held    *tabHeld                             // the window an empty-prompt Tab showed, until it is left or its receipt goes
@@ -323,6 +325,7 @@ func New(opt Options) *Model {
 	if found, err := opt.Store.State(vimKey, &m.vi.on); !found || err != nil {
 		m.vi.on = false // absent or unreadable: off; on starts in Insert
 	}
+	m.loadDoubleTab()
 	var shared []string
 	_, _ = opt.Store.State(sharedKey, &shared)
 	m.sharedChats = map[string]bool{}
@@ -1481,9 +1484,10 @@ func (m *Model) openWin(chatID string) (int, *win) {
 // switchTo makes window i current and fetches its recent history once.
 func (m *Model) switchTo(i int) tea.Cmd { return m.focus(i, false) }
 
-// focus is switchTo; held (an empty-prompt Tab) holds the read receipt
-// back until the window has stayed current for tabGap, and puts back what
-// it cleared when the window is left sooner (lastwin.go).
+// focus is switchTo; held (an empty-prompt Tab, whatever /doubletab
+// says) holds the read receipt back until the window has stayed current
+// for tabGap, and puts back what it cleared when the window is left
+// sooner (lastwin.go).
 func (m *Model) focus(i int, held bool) tea.Cmd {
 	i = min(max(i, 0), len(m.wins)-1)
 	var left tea.Cmd
@@ -1683,8 +1687,8 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case tea.KeyTab:
 		// An empty prompt: Tab walks the windows, from the settings menu
 		// too, which is window 0's view (the switch closes it), and twice
-		// fast goes back to the last window; in /list and /win it
-		// completes the filter.
+		// fast does what /doubletab says (lastwin.go); in /list and /win
+		// it completes the filter.
 		if (m.mode == modeWin || m.settingsOpen()) && len(m.input) == 0 {
 			return m, m.tab()
 		}
@@ -2044,6 +2048,10 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.setFeed(c.Arg)
 	case command.Vim:
 		m.setVim(c.Arg)
+	case command.Unread:
+		return m, m.unreadWindow()
+	case command.DoubleTab:
+		m.setDoubleTab(c.Arg)
 	case command.MarkRead:
 		return m.markAsRead()
 	case command.Fx:
@@ -2564,13 +2572,14 @@ type completion struct {
 // argWords are the fixed words a command takes as its first argument,
 // whatever its spelling (/win, /w, /j list; /clip, /clipboard tool).
 var argWords = map[command.Kind][]string{
-	command.Win:      {"list", "last"},
-	command.List:     {"--show-deleted"},
-	command.Receipts: {"on", "off"},
-	command.AutoJoin: {"on", "off"},
-	command.Feed:     {"on", "off"},
-	command.Vim:      {"on", "off"},
-	command.Clip:     {"auto", "osc52", "tool", "off"},
+	command.Win:       {"list", "last"},
+	command.List:      {"--show-deleted"},
+	command.Receipts:  {"on", "off"},
+	command.AutoJoin:  {"on", "off"},
+	command.Feed:      {"on", "off"},
+	command.Vim:       {"on", "off"},
+	command.DoubleTab: doubleTabWords,
+	command.Clip:      {"auto", "osc52", "tool", "off"},
 }
 
 // chatArgs says where a command's words complete chat names: its first
@@ -3356,14 +3365,14 @@ Double click copies the word under the pointer, triple click the row; on a link 
 Mouse: click a chat name or nick in window 0 to open its window, a tag in the window bar to focus it, a row in /list or /win to open it, a row of /settings to set its next value, a link or a [photo] / [file] token to open it with the system; the wheel scrolls.
 Window 0 is the server window: every chat interleaved, plus notices (/feed off: the notices only); it stays at 0 and cannot be closed. /move N puts this window at N.
 Reactions show after a message as [emoji count ...], yours highlighted; window 0 says when someone adds one (with /feed on). The messages on screen are asked about every 20 seconds.
-A window opens for a chat when it gets a message or has unread ones; [Act: 1,2] in the status line lists windows with unread messages.
+A window opens for a chat when it gets a message or has unread ones; [Act: 1,2] in the status line lists windows with unread messages, and /unread goes to the next of them.
 People are @name, groups and channels are #name.`
 
 // keyHelp is what /keys prints: the Keys table alone. Entries are one
 // logical line each, laid out as in command.HelpText and wrapped when
 // drawn.
 const keyHelp = `Keys
-  Tab                    on an empty prompt: next window (Shift-Tab previous), twice fast: back to the last window, as /win last; otherwise complete like bash: a command, a @user / #chan or a theme (in a group or channel window its @nicks, in the text and after /whois); Tab again lists the possibilities
+  Tab                    on an empty prompt: next window (Shift-Tab previous); twice fast: as /doubletab says (off, /win last or /unread); otherwise complete like bash: a command, a @user / #chan or a theme (in a group or channel window its @nicks, in the text and after /whois); Tab again lists them
   Ctrl-X                 send the typed text to this chat (after a short pause), as typed: a line starting with / goes out as a message, never as a command (Enter runs commands); Enter then adds a line to the message
   Ctrl-X twice (fast)    toggle "Enter sends" for this window; nothing is sent; Ctrl-X then adds a line instead, except to a line starting with / (no leading space), which it still sends as text
   Ctrl-N / Ctrl-P        next / previous window (Alt-Right / Alt-Left too)

@@ -13,9 +13,10 @@ import (
 // Read receipts are opt-in and off by default. With them on, lazygram
 // tells the service that a chat was read when it marks the chat read
 // itself: when a window with unread messages is focused (focus). After an
-// empty-prompt Tab the receipt waits until the window has stayed current
-// for tabGap; a window left sooner was only passed through, gets its
-// unread count back and is not reported for that Tab (lastwin.go).
+// empty-prompt Tab, whatever /doubletab says, the receipt waits until the
+// window has stayed current for tabGap (the double Tab's time); a window
+// left sooner was only passed through, gets its unread count back and is
+// not reported for that Tab (lastwin.go).
 // Nothing is sent for opening a list, filtering, searching, a message
 // arriving in the window already shown, or a window without unread
 // messages. /mark-as-read and the [read] button of /list and /win send one
