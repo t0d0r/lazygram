@@ -3007,7 +3007,7 @@ Themes: /theme lists the colour schemes, /theme <name> switches (kept).
 Clickable text is bright and underlined; a running light plays over the one under the mouse pointer. /fx turns the light on or off (kept).
 Drag with the left button to select text; on release it is copied to the clipboard: through the terminal (OSC 52) and the system tool when there is one (pbcopy, wl-copy, xclip, xsel, clip); /clip picks (kept).
 Double click copies the word under the pointer, triple click the row; on a link or a name the first click acts and the next ones only select. Shift-click extends the selection where the terminal passes Shift on; most Linux terminals keep Shift-drag (Option on macOS) for their own selection, as does /mouse off.
-Mouse: click a chat name or nick in window 0 to open its window, a tag in the window bar to focus it, a row in a list to open it, a link or a [photo] / [file] token to open it with the system; the wheel scrolls.
+Mouse: click a chat name or nick in window 0 to open its window, a tag in the window bar to focus it, a row in /list or /win to open it, a row of /settings to set its next value, a link or a [photo] / [file] token to open it with the system; the wheel scrolls.
 Window 0 is the server window: every chat interleaved, plus notices (/feed off: the notices only); it stays at 0 and cannot be closed. /move N puts this window at N.
 A window opens for a chat when it gets a message or has unread ones; [Act: 1,2] in the status line lists windows with unread messages.
 People are @name, groups and channels are #name.`

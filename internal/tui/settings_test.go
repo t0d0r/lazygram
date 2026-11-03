@@ -284,6 +284,39 @@ func TestSettingsMouseRowTurnsReportingOffAndOn(t *testing.T) {
 	}
 }
 
+// TestHelpAndKeysDescribeFeedAndSettings: the notes /help prints and the
+// table /keys prints say what /feed off leaves in window 0 and what a
+// click, Left / Right and Esc do in the settings menu.
+func TestHelpAndKeysDescribeFeedAndSettings(t *testing.T) {
+	printed := func(line string) string {
+		m := setup(t, newFake())
+		enter(m, line)
+		drain(m)
+		var out []string
+		for _, n := range m.wins[0].notes {
+			out = append(out, n.text)
+		}
+		return strings.Join(out, "\n")
+	}
+	help, keys := printed("/help"), printed("/keys")
+	for _, want := range []string{
+		"Window 0 is the server window: every chat interleaved, plus notices (/feed off: the notices only)",
+		"a row in /list or /win to open it, a row of /settings to set its next value",
+	} {
+		if !strings.Contains(help, want) {
+			t.Errorf("/help lacks %q", want)
+		}
+	}
+	for _, want := range []string{
+		"in /settings: the selected setting's previous / next value",
+		"close the list, the pager or the settings menu; clear the input",
+	} {
+		if !strings.Contains(keys, want) {
+			t.Errorf("/keys lacks %q", want)
+		}
+	}
+}
+
 func TestSettingsThemeRowSwitchesAndWraps(t *testing.T) {
 	defaultTheme(t)
 	m := setup(t, newFake())
