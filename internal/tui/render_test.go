@@ -67,7 +67,7 @@ func refRowsAt(l string, width int) []string {
 // the names, indented 4, when there is not; a note is a wrapped paragraph.
 // No row is wider than the window and no word is lost or moved.
 func TestReferenceFollowsTheWidth(t *testing.T) {
-	for _, ref := range []string{command.HelpText, keyHelp} {
+	for _, ref := range []string{helpNotes, command.HelpText, keyHelp} {
 		for _, width := range []int{40, 80, 160} {
 			wider := false
 			for _, l := range strings.Split(ref, "\n") {

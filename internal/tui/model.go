@@ -2218,13 +2218,15 @@ func (m *Model) redraw(w *win) {
 	m.setInfo("")
 }
 
-// help prints the command reference into the server window, line by line
-// with a small delay, like a terminal on a slow line, and focuses that
-// window so the text is in view wherever /help was typed. The keys are
-// a separate list (/keys), and the last help line says so.
+// help prints the notes on the mouse, themes and windows and then the
+// command reference into the server window, line by line with a small
+// delay, like a terminal on a slow line, and focuses that window so the
+// text is in view wherever /help was typed. The commands come last, so
+// they are what the window shows when printing ends. The keys are a
+// separate list (/keys), and the last help line says so.
 func (m *Model) help() tea.Cmd {
 	cmd := m.switchTo(0)
-	m.slowPrint(m.wins[0], strings.Split(command.HelpText, "\n"))
+	m.slowPrint(m.wins[0], append(strings.Split(helpNotes, "\n"), strings.Split(command.HelpText, "\n")...))
 	return cmd
 }
 
@@ -2956,11 +2958,10 @@ func (m *Model) rule(label string) string {
 	return dash(2) + " " + msgStyle.Render(msg) + " " + dash(fill) + dimStyle.Render(right)
 }
 
-// keyHelp is what /keys prints: the notes first and the Keys table last,
-// so the table is what the window shows when printing ends (the window
-// follows the newest line). Entries are one logical line each, laid out
-// as in command.HelpText and wrapped when drawn.
-const keyHelp = `Mouse, themes and windows
+// helpNotes is what /help prints before the command reference: how the
+// client is used beyond its commands (themes, the mouse, selection,
+// windows). One logical line each, wrapped when drawn.
+const helpNotes = `Mouse, themes and windows
 Themes: /theme lists the colour schemes, /theme <name> switches (kept).
 Clickable text is bright and underlined; a running light plays over the one under the mouse pointer. /fx turns the light on or off (kept).
 Drag with the left button to select text; on release it is copied to the clipboard: through the terminal (OSC 52) and the system tool when there is one (pbcopy, wl-copy, xclip, xsel, clip); /clip picks (kept).
@@ -2968,8 +2969,12 @@ Double click copies the word under the pointer, triple click the row; on a link 
 Mouse: click a chat name or nick in window 0 to open its window, a tag in the window bar to focus it, a row in a list to open it, a link or a [photo] / [file] token to open it with the system; the wheel scrolls.
 Window 0 is the server window: every chat interleaved, plus notices; it stays at 0 and cannot be closed. /move N puts this window at N.
 A window opens for a chat when it gets a message or has unread ones; [Act: 1,2] in the status line lists windows with unread messages.
-People are @name, groups and channels are #name.
-Keys
+People are @name, groups and channels are #name.`
+
+// keyHelp is what /keys prints: the Keys table alone. Entries are one
+// logical line each, laid out as in command.HelpText and wrapped when
+// drawn.
+const keyHelp = `Keys
   Tab                    on an empty prompt: next window (Shift-Tab previous); otherwise complete like bash: a command, a @user / #chan or a theme (in a group or channel window its @nicks, in the text and after /whois); Tab again lists the possibilities
   Ctrl-X                 send the typed text to this chat (after a short pause), as typed: a line starting with / goes out as a message, never as a command (Enter runs commands); Enter then adds a line to the message
   Ctrl-X twice (fast)    toggle "Enter sends" for this window; nothing is sent; Ctrl-X then adds a line instead, except to a line starting with / (no leading space), which it still sends as text
@@ -2981,6 +2986,6 @@ Keys
   Home / End             oldest / newest
   Ctrl-R                 sync now
   Ctrl-L                 redraw: drop notices and pictures (/redraw)
-  F1                     the command list (/help); /keys prints this
+  F1                     the notes and the command list (/help); /keys prints this
   Esc                    close the list or pager; clear the input
   Ctrl-C                 quit`

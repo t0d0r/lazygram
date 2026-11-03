@@ -117,7 +117,7 @@ func Names() []string {
 // the whole description: the window wraps it to its width when drawn, so
 // nothing here is wrapped by hand (specs/ui.md, /help).
 const HelpText = `Commands
-  /help, /?              this command list (F1 too); also /h
+  /help, /?              the notes on the mouse, themes and windows, then this command list (F1 too); also /h
   /keys                  the keyboard shortcuts; also /shortcuts, /bindings
   /quit, /q              leave lazygram; also /exit
   /refresh, /r           sync now; also /sync
