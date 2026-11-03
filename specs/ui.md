@@ -358,21 +358,21 @@ titles and notices are stripped of control characters before rendering.
   (a Latin query finds Cyrillic text by its transliteration and a
   Cyrillic one finds Latin text, see Search in either script), with matches
   highlighted; the status line shows `N of M messages`; Esc returns.
-`/help` and F1 focus the server window (window 0) and print the command
-reference there as plain lines (no time stamp or marker; command lines
-start after two spaces), one logical line every 28 ms like a terminal on
-a slow serial line; there is no separate help view. The command
+`/help` and F1 focus the server window (window 0) and print there, as
+plain lines (no time stamp or marker; command lines start after two
+spaces), one logical line every 28 ms like a terminal on a slow serial
+line, first the notes on themes, the mouse, selection and windows (under
+the heading `Mouse, themes and windows`), then the command reference
+(under `Commands`), last, so that when printing ends the commands are
+what the window shows (the window follows the newest line) and the
+notes are one scroll up; there is no separate help view. The command
 reference lists the slash commands only, each as its `/name` with every
 short form the parser accepts spelled out (see Short forms below), and
 ends with a line that says to type `/keys` for the keyboard shortcuts.
 `/keys` prints the key reference the same way, into the server window,
-slowly, as plain lines: first the notes on themes, the mouse, selection
-and windows (under the heading `Mouse, themes and windows`), then the
-Keys table below (under `Keys`), last, so that when printing ends the
-table is what the window shows (the window follows the newest line).
-The two are separate so that `/help` stays short enough to read on one
-screen; F1 keeps printing the command reference, and that reference
-names `/keys`, so the keys are one step away from either.
+slowly, as plain lines: the Keys table below (under `Keys`) and nothing
+else. F1 prints what `/help` prints, and that reference names `/keys`,
+so the keys are one step away from either.
 
 Both references are kept as logical lines and wrapped when drawn, to
 the server window's text width, so they use the whole width of any
@@ -398,14 +398,18 @@ oddly in a narrow window; laying them out when drawn uses whatever width
 there is. `/keys` printed the table first and about 20 lines of notes
 after it, so the notes filled the screen and the table had to be
 scrolled back to; the table is what `/keys` is asked for, so it comes
-last and the notes are one scroll up.
+last and the notes are one scroll up. Later the notes moved to `/help`:
+they describe using the client (themes, the mouse, selection, windows),
+not keys, and `/help` (or F1) is where a new user looks first; `/keys`
+is the table alone. `/help` is longer for it, so its commands come
+last, as the table does in `/keys`.
 
 ## Commands
 
 | command                       | action                                               |
 |-------------------------------|------------------------------------------------------|
-| `/help`, `/?`                 | focus the server window and print the command reference there; it ends by naming `/keys` |
-| `/keys`, `/shortcuts`         | focus the server window and print the key reference there: the notes first, the key table last |
+| `/help`, `/?`                 | focus the server window and print the notes on the mouse, themes and windows there, then the command reference; it ends by naming `/keys` |
+| `/keys`, `/shortcuts`         | focus the server window and print the key table there |
 | `/redraw`, `/clear`           | drop the window's notices, help text, pictures and banner; the messages stay; a slow print still queued for it is dropped |
 | `/quit`, `/q`                 | leave                                                |
 | `/refresh`, `/r`              | sync now                                             |

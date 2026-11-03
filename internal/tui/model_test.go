@@ -467,7 +467,7 @@ func TestHelpPrintsSlowlyWithoutIndent(t *testing.T) {
 		t.Fatal("help starts a slow print, nothing shown yet")
 	}
 	m.Update(slowTickMsg{})
-	if n := m.wins[0].notes; !n[len(n)-1].plain || n[len(n)-1].text != "Commands" {
+	if n := m.wins[0].notes; !n[len(n)-1].plain || n[len(n)-1].text != "Mouse, themes and windows" {
 		t.Fatalf("first line: %+v", n[len(n)-1])
 	}
 	drain(m)
@@ -475,11 +475,14 @@ func TestHelpPrintsSlowlyWithoutIndent(t *testing.T) {
 	if !strings.Contains(v, "\n  /quit, /q") || !strings.Contains(v, "\nCommands") {
 		t.Fatalf("command lines start after two spaces, headers at the margin:\n%s", v)
 	}
-	if strings.Contains(v, "-!- Commands") {
+	if strings.Contains(v, "-!- Commands") || strings.Contains(v, "-!- Mouse") {
 		t.Fatal("no marker on help lines")
 	}
-	if strings.Contains(v, "\nKeys") || strings.Contains(v, "Ctrl-N / Ctrl-P") || strings.Contains(v, "People are @name") {
-		t.Fatalf("/help lists the commands only, the keys are /keys:\n%s", v)
+	if !strings.Contains(v, "People are @name") || strings.Index(v, "Mouse, themes and windows") > strings.Index(v, "\nCommands") {
+		t.Fatalf("/help prints the notes on the mouse, themes and windows first:\n%s", v)
+	}
+	if strings.Contains(v, "\nKeys") || strings.Contains(v, "Ctrl-N / Ctrl-P") {
+		t.Fatalf("/help holds no key table, the keys are /keys:\n%s", v)
 	}
 	if !strings.Contains(v, "\n  /keys ") || !strings.Contains(v, "type /keys") {
 		t.Fatalf("/help names /keys as the key reference:\n%s", v)
@@ -515,18 +518,23 @@ func TestKeysPrintsIntoServerWindow(t *testing.T) {
 		t.Fatalf("/keys focuses the server window (cur=%d mode=%v)", m.cur, m.mode)
 	}
 	m.Update(slowTickMsg{})
-	if n := m.wins[0].notes; !n[len(n)-1].plain || n[len(n)-1].text != "Mouse, themes and windows" {
+	if n := m.wins[0].notes; !n[len(n)-1].plain || n[len(n)-1].text != "Keys" {
 		t.Fatalf("first line: %+v", n[len(n)-1])
 	}
 	drain(m)
 	v := strings.Join(m.lines(), "\n")
-	for _, want := range []string{"\nKeys", "\n  Ctrl-X ", "Ctrl-N / Ctrl-P", "\n  F1 ", "People are @name"} {
+	for _, want := range []string{"\nKeys", "\n  Ctrl-X ", "Ctrl-N / Ctrl-P", "\n  F1 "} {
 		if !strings.Contains(v, want) {
 			t.Fatalf("missing %q in the key reference:\n%s", want, v)
 		}
 	}
 	if strings.Contains(v, "-!- Keys") || strings.Contains(v, "\nCommands") || strings.Contains(v, "/quit, /q") {
 		t.Fatalf("plain lines, keys only, no command list:\n%s", v)
+	}
+	for _, note := range []string{"Mouse, themes and windows", "People are @name", "Themes:", "[Act: 1,2]"} {
+		if strings.Contains(v, note) {
+			t.Fatalf("the notes are /help's, not /keys': %q in\n%s", note, v)
+		}
 	}
 	for _, n := range m.wins[1].notes {
 		if strings.Contains(n.text, "Ctrl-X") {
@@ -538,9 +546,9 @@ func TestKeysPrintsIntoServerWindow(t *testing.T) {
 	}
 }
 
-// TestKeysEndsWithTheKeyTable: the window follows the newest line, so
-// /keys prints its notes first and the table last; printed the other way
-// round, the notes filled the screen and the table had to be scrolled to.
+// TestKeysEndsWithTheKeyTable: the window follows the newest line, so the
+// screen ends with the table; a tall enough screen shows it whole, from
+// its heading.
 func TestKeysEndsWithTheKeyTable(t *testing.T) {
 	m := setup(t, newFake())
 	enter(m, "/keys")
@@ -552,16 +560,35 @@ func TestKeysEndsWithTheKeyTable(t *testing.T) {
 	if !strings.HasPrefix(rows[len(rows)-1], "  Ctrl-C ") {
 		t.Fatalf("the screen ends with the key table:\n%s", strings.Join(rows, "\n"))
 	}
-	for _, note := range []string{"People are @name", "Themes:", "[Act: 1,2]"} {
-		if strings.Contains(strings.Join(rows, "\n"), note) {
-			t.Fatalf("note %q printed after the table:\n%s", note, strings.Join(rows, "\n"))
-		}
-	}
-	// A screen tall enough for the whole table shows it from its heading.
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	v := ansi.Strip(body(m))
-	if !strings.Contains(v, "\nKeys\n  Tab ") || !strings.Contains(v, "People are @name, groups and channels are #name.\nKeys\n") {
-		t.Fatalf("the notes, then the heading and the whole table:\n%s", v)
+	if !strings.Contains(v, "\nKeys\n  Tab ") {
+		t.Fatalf("the heading and the whole table:\n%s", v)
+	}
+}
+
+// TestHelpEndsWithTheCommands: /help prints its notes first and the
+// command reference last, so when printing ends the window shows the
+// commands and the line that names /keys; the notes are one scroll up.
+func TestHelpEndsWithTheCommands(t *testing.T) {
+	m := setup(t, newFake())
+	enter(m, "/help")
+	drain(m)
+	if n := m.wins[0].notes; n[len(n)-1].text != "Keyboard shortcuts: type /keys." {
+		t.Fatalf("the last line printed names /keys: %q", n[len(n)-1].text)
+	}
+	rows := strings.Split(ansi.Strip(body(m)), "\n")
+	if rows[len(rows)-1] != "Keyboard shortcuts: type /keys." {
+		t.Fatalf("the screen ends with the command reference:\n%s", strings.Join(rows, "\n"))
+	}
+	for _, note := range []string{"People are @name", "Themes:", "[Act: 1,2]"} {
+		if strings.Contains(strings.Join(rows, "\n"), note) {
+			t.Fatalf("note %q printed after the commands:\n%s", note, strings.Join(rows, "\n"))
+		}
+	}
+	m.Update(tea.WindowSizeMsg{Width: 160, Height: 80})
+	if v := ansi.Strip(body(m)); !strings.Contains(v, "People are @name, groups and channels are #name.\nCommands\n") {
+		t.Fatalf("the notes, then the command reference:\n%s", v)
 	}
 }
 
