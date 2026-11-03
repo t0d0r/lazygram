@@ -158,10 +158,14 @@ completion, and an activity indicator.
   session, so a chat the service never lists costs one request, not one
   a poll, and is named by its id. With no chat list yet this session
   and none on its way (it failed) nothing waits, and when the chat list
-  fails the waiting sync goes ahead, chats named by their ids. While a
-  sync waits it counts as running: no second one starts, and `/refresh`
-  says a sync is running. What the account sent itself opens no window
-  and waits for nothing. Decision: notices and the status are written
+  fails the waiting sync goes ahead, chats named by their ids, and the
+  chat list's error stays on the status line (the sync's own error, if
+  any, is told too). While a sync waits it counts as running: no second
+  one starts, and `/refresh` says a sync is running. An edit reported
+  while it waits shows when it goes ahead, as the store already has it.
+  Smoke mode, which runs no commands, lets a waiting sync go ahead after
+  one more chat list. What the account sent itself opens no window and
+  waits for nothing. Decision: notices and the status are written
   once and keep their text, so a name must be known when they are
   written; on a first start (nothing cached) the sync usually answered
   first, and `window 1 opened for demo-1` stayed in window 0.

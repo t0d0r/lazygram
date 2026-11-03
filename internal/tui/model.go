@@ -798,9 +798,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.dropKept() // the screen is laid out anew: its cells no longer hold what was copied
 	case chatsMsg:
 		m.chatsAsked = false
-		if msg.err != nil {
-			m.fail("chats: " + errText(msg.err))
-		} else {
+		if msg.err == nil {
 			m.chats = msg.chats
 			m.learnShared()
 			if !m.startChecked { // the first chat list from the service this session; a cached one does not count
@@ -811,6 +809,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if held := m.heldSync; held != nil { // a sync waited for these names (awaitNames)
 			m.heldSync = nil
 			m.synced(*held)
+		}
+		if msg.err != nil { // after the waiting sync, so its status does not hide the failure
+			m.fail("chats: " + errText(msg.err))
 		}
 	case syncedMsg:
 		if held, cmd := m.awaitNames(msg); held {
@@ -1330,6 +1331,25 @@ func (m *Model) awaitNames(msg syncedMsg) (bool, tea.Cmd) {
 	}
 	m.chatsAsked = true
 	return true, m.chatsCmd()
+}
+
+// heldPatch puts the newest copy of a message, edited while a sync's
+// result waits for the chat list, into that result: the store has the
+// edit already, and the waiting copy would otherwise undo it on screen
+// when it goes ahead. (Deletions need nothing: arrived leaves out what
+// was deleted this session.)
+func (m *Model) heldPatch(now domain.Message) {
+	h := m.heldSync
+	if h == nil {
+		return
+	}
+	for _, list := range [][]domain.Message{h.fresh, h.known} {
+		for i := range list {
+			if list[i].Key() == now.Key() {
+				list[i] = now
+			}
+		}
+	}
 }
 
 // arrived handles messages that just came in: windows open for their chats

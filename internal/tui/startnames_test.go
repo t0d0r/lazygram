@@ -5,6 +5,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -55,7 +56,9 @@ func TestStartSyncWaitsForTheChatList(t *testing.T) {
 	f := newFake()
 	f.msgs = append(f.msgs, mk("c4", "9", "ghost", "from a deleted account", 4))
 	m := firstStart(t, f)
-	m.Update(m.syncCmd()())
+	if _, cmd := m.Update(m.syncCmd()()); cmd != nil {
+		t.Fatal("the sync waits for the chat list already on its way; it asks for no second one")
+	}
 	if len(m.wins) != 1 || m.heldSync == nil || !m.syncing || strings.Contains(told(m), "opened for") {
 		t.Fatalf("the sync waits for the chat list: %d windows, held %v, syncing %v\n%s", len(m.wins), m.heldSync != nil, m.syncing, told(m))
 	}
@@ -139,6 +142,9 @@ func TestChatListFailsNamesFallBack(t *testing.T) {
 	if m.heldSync != nil || m.syncing || strings.Join(winChats(m), " ") != "c1 c2" || !strings.Contains(told(m), "opened for c1") {
 		t.Fatalf("a failed chat list lets the sync go ahead: held %v, syncing %v, windows %v\n%s", m.heldSync != nil, m.syncing, winChats(m), told(m))
 	}
+	if !m.isErr || !strings.Contains(m.status, "chats: offline") {
+		t.Fatalf("the failure stays on the status line, not the arrivals: %q (error %v)", m.status, m.isErr)
+	}
 
 	m = firstStart(t, newFake())
 	m.Update(chatsMsg{err: errors.New("offline")})
@@ -146,5 +152,86 @@ func TestChatListFailsNamesFallBack(t *testing.T) {
 	m.Update(m.syncCmd()())
 	if m.heldSync != nil || m.syncing || len(m.wins) != 3 {
 		t.Fatalf("no chat list on its way: nothing waits (held %v, syncing %v, %d windows)", m.heldSync != nil, m.syncing, len(m.wins))
+	}
+}
+
+// TestHeldSyncKeepsWhatHappensWhileItWaits: an edit made while a sync
+// waits for the chat list shows when it goes ahead (the store has it), and
+// the sync's own error is told then.
+func TestHeldSyncKeepsWhatHappensWhileItWaits(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	f.chats = append(f.chats, domain.Chat{ID: "c5", Alias: "bob", Title: "Bob", Kind: domain.ChatUser})
+	f.msgs = append(f.msgs, mk("c5", "1", "bob", "helo", 5), mk("c1", "3", "ada", "teh build", 6))
+	m.syncing = true
+	_, cmd := m.Update(m.syncCmd()())
+	if m.heldSync == nil {
+		t.Fatal("a new chat makes the sync wait")
+	}
+	for _, e := range []domain.Message{mk("c5", "1", "bob", "hello", 5), mk("c1", "3", "ada", "the build", 6)} {
+		e.Edited = time.Now()
+		m.applyChange(domain.Change{Kind: domain.Edited, Msg: e})
+	}
+	runAll(m, cmd)
+	for key, want := range map[string]string{"c5\x001": "hello", "c1\x003": "the build"} {
+		got := ""
+		for _, x := range m.msgs {
+			if x.ChatID+"\x00"+x.ID == key {
+				got = x.Text
+			}
+		}
+		if got != want {
+			t.Errorf("%q: %q on screen, want the edit %q", key, got, want)
+		}
+	}
+
+	m = firstStart(t, newFake())
+	m.Update(syncedMsg{fresh: []domain.Message{mk("c1", "1", "ada", "first dev line", 0)}, err: errors.New("partial"), at: time.Now()})
+	m.Update(m.chatsCmd()())
+	if m.heldSync != nil || !m.isErr || !strings.Contains(m.status, "sync: partial") {
+		t.Fatalf("the waiting sync's error is told when it goes ahead: %q (error %v)", m.status, m.isErr)
+	}
+}
+
+// TestUnknownChatsAreAskedForOnce: every chat a waiting sync brings that
+// the list lacks is asked for once a session, those held at start and
+// several new ones in one sync alike.
+func TestUnknownChatsAreAskedForOnce(t *testing.T) {
+	f := newFake()
+	f.msgs = append(f.msgs, mk("c8", "1", "x", "unlisted", 4), mk("c9", "1", "y", "unlisted too", 5))
+	m := firstStart(t, f)
+	m.Update(m.syncCmd()())
+	m.Update(m.chatsCmd()())
+	f.msgs = []domain.Message{mk("c8", "2", "x", "again", 6), mk("c9", "2", "y", "again", 7)}
+	m.syncing = true
+	if m.Update(m.syncCmd()()); m.heldSync != nil || m.chatsAsked {
+		t.Fatal("chats held at start are not asked for again")
+	}
+
+	m = setup(t, newFake())
+	f = m.opt.Provider.(*fake)
+	f.msgs = append(f.msgs, mk("c10", "1", "x", "new", 8), mk("c11", "1", "y", "new too", 9))
+	m.syncing = true
+	_, cmd := m.Update(m.syncCmd()())
+	runAll(m, cmd)
+	f.msgs = append(f.msgs, mk("c11", "2", "y", "again", 10))
+	m.syncing = true
+	if m.Update(m.syncCmd()()); m.heldSync != nil || m.chatsAsked {
+		t.Fatal("both new chats of one sync were asked for")
+	}
+}
+
+// TestSnapshotLetsAWaitingSyncGoAhead: smoke mode runs no commands, so
+// a sync waiting for the chat list it asked for is let go there.
+func TestSnapshotLetsAWaitingSyncGoAhead(t *testing.T) {
+	f := newFake()
+	f.msgs = append(f.msgs, mk("c9", "1", "zed", "from an unlisted chat", 4))
+	st, err := store.Open(store.Memory, bytes.Repeat([]byte{1}, 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	if out := Snapshot(Options{Store: st, Provider: f}, 120, 40); !strings.Contains(out, "first dev line") {
+		t.Fatalf("the sync's messages show in smoke mode:\n%s", out)
 	}
 }
