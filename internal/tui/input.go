@@ -122,8 +122,11 @@ func (r inRow) at(col int) int {
 func (m *Model) prompt() string {
 	switch m.mode {
 	case modeList:
-		if m.listSrc == listWindows {
+		switch m.listSrc {
+		case listWindows:
 			return "windows > "
+		case listSettings:
+			return "settings > "
 		}
 		return "list > "
 	case modePager:

@@ -39,6 +39,8 @@ var hintPool = []string{
 	"hint: /mouse toggles clicks; off, the terminal's own drag-select works",
 	"hint: PgUp / PgDn scroll a page; End jumps back to the newest line",
 	"hint: /move N moves a chat window to position N; /close closes it",
+	"hint: /feed off keeps chat messages out of window 0; notices stay",
+	"hint: /settings lists every setting; Enter or Left/Right change one",
 }
 
 // hintPicks is how many pool hints one start shows.

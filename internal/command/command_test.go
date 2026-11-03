@@ -55,6 +55,15 @@ func TestParse(t *testing.T) {
 		{"/autojoin off", Command{AutoJoin, "off"}, false},
 		{"/autojoin", Command{AutoJoin, ""}, false},
 		{"/markread", Command{}, true}, // one spelling only
+		{"/feed", Command{Feed, ""}, false},
+		{"/FEED off", Command{Feed, "off"}, false},
+		{"/feed  on ", Command{Feed, "on"}, false},
+		{"/settings", Command{Settings, ""}, false},
+		{"/set", Command{Settings, ""}, false},
+		{"/options", Command{Settings, ""}, false},
+		{"/SET  mouse ", Command{Settings, "mouse"}, false},
+		{"/options read receipts", Command{Settings, "read receipts"}, false},
+		{"/setting", Command{}, true}, // the three spellings only
 		{"/redraw", Command{Redraw, ""}, false},
 		{"/clear", Command{Redraw, ""}, false},
 		{"/keys", Command{Keys, ""}, false},

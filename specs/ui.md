@@ -8,8 +8,10 @@ list or pager holds, an error in the error colour, or the last notice,
 truncated with "..." when long) and the send hint (`ctrl-x: to send` or
 `enter: to send`) at its right end; the status line holds only the
 segments, so it never truncates. There is no header: the status line carries the
-window tag, and in the list and pager views it shows what the view holds
-in place of the status message. The window bar lists every window as
+window tag, and in the list and pager views the rule shows what the view
+holds in place of the status message, except right after a change in the
+settings menu, whose rule shows what the change said until the next key
+(see Settings menu). The window bar lists every window as
 `[N:name]`; the current window is highlighted and windows with unread
 messages stand out. The
 model is BitchX/irssi: virtual windows, a slash-command input line, Tab
@@ -19,8 +21,8 @@ completion, and an activity indicator.
 
 - Window 0 is the server window: the messages of every chat that arrive
   during this session (everything a sync brings, and what a window's
-  fetch brings that is dated after the start), interleaved by time, plus
-  client notices (`-!-`): start-up, chat counts, windows opened or closed,
+  fetch brings that is dated after the start), interleaved by time (none
+  with `/feed off`, see below), plus client notices (`-!-`): start-up, chat counts, windows opened or closed,
   and every error (sync, history, send, press, fetch, open), whatever
   window was current; errors also show in the status line. It opens with a figlet banner (font banner3
   where the window is at least its 76 columns wide, chunky below that,
@@ -35,7 +37,8 @@ completion, and an activity indicator.
   Ctrl-X, Ctrl-N and Ctrl-P, `/search`, double and triple click,
   `/theme`, `/autojoin`, `/read-receipts`, `/whois`, `/send`,
   `/open <link>`, Ctrl-L, `/about`, `/mark-as-read`, `/names`, `/last`,
-  Up and Down, `/mouse`, PgUp and PgDn, `/move` and `/close`), so the pair
+  Up and Down, `/mouse`, PgUp and PgDn, `/move` and `/close`, `/feed
+  off`, `/settings`), so the pair
   differs between starts (`Options.Rand` draws them, `rand.IntN` unless
   a test injects one). They are printed once per start, in window 0 only,
   as part of its start-up screen, so they roll in with it when window 0
@@ -76,6 +79,31 @@ completion, and an activity indicator.
   from every chat; it was a side effect of all windows reading one
   in-memory list, never a choice, and an IRC server window shows what
   arrives while connected.
+  `/feed off` (kept in the state store under `feed`; absent or
+  unreadable means on) keeps the chat messages out of window 0, from
+  every chat (people, groups and channels alike): it shows only its
+  notices (the banner and tagline, the start notices and hints, `/help`
+  and `/keys`, errors, windows opened and closed and every other `-!-`
+  line). Nothing is dropped: the messages are still recorded as this
+  session's, open their windows, count as unread and show in the status
+  and in `Act` as before, and `/feed on` shows this session's messages
+  in window 0 again, those that arrived while it was off included: the
+  setting is a filter applied when window 0 is drawn. The chat windows
+  and `/search` (in window 0 it still searches every chat) do not
+  change. `/feed` with no argument shows the setting (`feed on: window 0
+  shows every chat's messages as they arrive; /feed off`, `feed off:
+  window 0 shows only notices; chat messages stay in their own windows;
+  /feed on`); on and off take effect at once; any other argument is the
+  error `/feed takes on or off`. At a start with the feed off, window 0
+  says so in one notice right after the start hints, so their order
+  stays: `-!- /feed is off: chat messages show only in their own windows
+  (/feed on)`. A change keeps window 0's scroll offset within its new
+  number of lines (a window scrolled back further than it now reaches
+  shows its oldest page). Decision: window 0 interleaves every chat, and
+  some prefer the IRC way, where the server window holds only notices
+  and each chat stays in its own window; on by default keeps the
+  behaviour lazygram always had. `/feed` is also a row of the settings
+  menu, which opens in window 0 too (see Settings menu).
   After the program ends a banner is printed to the terminal the same
   way (one line per 56 ms), BitchX style, in one of several faces picked
   at random among those that fit the terminal width: the figlet block
@@ -358,6 +386,9 @@ titles and notices are stripped of control characters before rendering.
   (a Latin query finds Cyrillic text by its transliteration and a
   Cyrillic one finds Latin text, see Search in either script), with matches
   highlighted; the status line shows `N of M messages`; Esc returns.
+- settings (`/settings [text]`): window 0's menu of every kept setting,
+  a list without a button strip whose Enter, Right and Left change the
+  selected setting in place (see Settings menu).
 `/help` and F1 focus the server window (window 0) and print there, as
 plain lines (no time stamp or marker; command lines start after two
 spaces), one logical line every 28 ms like a terminal on a slow serial
@@ -440,7 +471,9 @@ last, as the table does in `/keys`.
 | `/read-receipts [on\|off]`, `/receipts` | read receipts to the service: off by default (kept); on reports a chat read when its window with unread messages is focused; no argument shows the setting (see Read receipts) |
 | `/mark-as-read`               | one read receipt for this window's chat, now, whatever `/read-receipts` says; an error in the server window and for a chat without a known message |
 | `/autojoin [on\|off]`         | at start open a window for every chat with unread messages: on by default, kept; no argument shows the setting (see Windows) |
+| `/feed [on\|off]`             | window 0 shows every chat's messages as they arrive (on, the default) or only its notices (off); kept; no argument shows the setting (see Windows) |
 | `/names`                      | show chats by nick (`@alias`) or by name (`@Title`), kept |
+| `/settings [text]`, `/set`, `/options` | focus the server window and open the menu of every kept setting there; Enter or Right sets the selected one's next value, Left its previous; text narrows the rows (see Settings menu) |
 
 Short forms: `/h` for `/help`; `/shortcuts`, `/bindings` for `/keys`;
 `/exit` for `/quit`; `/sync` for `/refresh`; `/ls`, `/chats` for `/list`;
@@ -451,12 +484,87 @@ Short forms: `/h` for `/help`; `/shortcuts`, `/bindings` for `/keys`;
 `/upload` for `/send`; `/e` for `/edit`; `/del`, `/rm` for `/delete`;
 `/button`, `/btn` for `/press`; `/fetch`, `/download` for `/open`;
 `/colors`, `/colours` for `/theme`; `/version` for `/about`; `/lights`,
-`/anim` for `/fx`; `/nicks` for `/names`. `/help` prints every spelling
+`/anim` for `/fx`; `/nicks` for `/names`; `/set`, `/options` for
+`/settings`. `/help` prints every spelling
 the parser accepts, the short forms as `also /x, /y` after their
 command, so the printed reference and the parser table never disagree
 (a test checks each table entry against the help text and against the
 printed output). Errors show in the status line in red; provider errors
 also land in the server window.
+
+## Settings menu
+
+`/settings [text]` (also `/set`, `/options`) opens a menu of every kept
+setting. It belongs to window 0: typed in any window, `/settings` first
+focuses the server window, as `/help` and `/keys` do, and opens the menu
+there. While it is open the window bar and the status line show
+`[0:server]` as the current window, window 0's content area shows the
+menu's rows, the prompt is `settings > ` and the rule explains the keys:
+`settings (8): Up/Down, Enter or Right next value, Left previous, Esc
+closes, type to narrow` (the number counts the rows shown).
+
+One row per kept setting, in this order: the setting's name (its command
+without the slash), its current value and a short description, in
+aligned columns. The value column is as wide as the longest value any
+row can take, so a change never moves the descriptions.
+
+| row             | values                                   | command          |
+|-----------------|------------------------------------------|------------------|
+| `feed`          | `on`, `off`                              | `/feed`          |
+| `autojoin`      | `on`, `off`                              | `/autojoin`      |
+| `read-receipts` | `on`, `off`                              | `/read-receipts` |
+| `names`         | `nick`, `name`                           | `/names`         |
+| `theme`         | the theme names, sorted as `/theme` lists them | `/theme`   |
+| `fx`            | `on`, `off`                              | `/fx`            |
+| `mouse`         | `on`, `off`                              | `/mouse`         |
+| `clip`          | `auto`, `osc52`, `tool`, `off`           | `/clip`          |
+
+The selected row is highlighted like the other lists; there is no
+button strip. Up and Down (and the mouse wheel) select. Enter or Right
+sets the selected setting to its next value, Left to its previous one,
+wrapping at the ends; for a two-valued setting both toggle. A click on a
+row selects it and sets its next value, as Enter does; the later presses
+of a double or triple click on it do nothing, since the first one changed
+the row under the pointer (see Selection and clipboard). A change
+runs the command's own code: the same store key, the same status
+message and the same side effects (mouse reporting turned on or off in
+the terminal, the theme switched, the rendered lines redrawn after
+`names`, `clip` as `/clip <mode>`, so a mode that cannot work here
+reports as `/clip` does), so it is kept and takes effect at once. The
+menu stays open on the same row with the new value shown, and the rule
+shows the change's status message (an error in the error colour) in
+place of the keys until the next key. A line starting with `/` typed in
+the menu runs as a command on Enter, as in any list; one that leaves the
+menu open (`/feed off`, `/clip`, `/theme nord`) shows its status the same
+way, and the rows follow, since they always show the current values.
+
+Typed text narrows the rows to those whose name or description holds it,
+ignoring case and in either script, as the `/list` filter narrows (see
+Search in either script); `/settings <text>` opens the menu narrowed.
+The filter stays after a change. With no row left the menu says `no
+setting matches`, and Enter, Left and Right change nothing. Tab in the
+filter completes the names of the settings; on an empty prompt Tab and
+Shift-Tab walk the windows as they do in a window (in `/list` and `/win`
+Tab completes the filter instead), and that switch closes the menu.
+
+Esc closes the menu and leaves window 0 current, on its usual view
+(messages and notices), as after `/help`; Alt-N or `/win N` goes
+elsewhere. Any switch of window closes the menu, because it is window
+0's view: Alt-N and Esc N (Alt-0 too: it shows window 0's own view),
+Ctrl-N and Ctrl-P (Alt-Right and Alt-Left), Tab and Shift-Tab on the
+empty prompt, a click on the window bar, and a command typed in the menu
+that focuses a window (`/win N`, `/win @name`, `/msg`, `/help`, `/keys`).
+The other lists and the pager (`/list`, `/win`, `/search`) replace it.
+
+Decision: the menu lives in window 0 because settings belong to the
+client, not to a chat, and window 0 is where `/help` and `/keys` already
+put the client's own text. Decision: values are stepped in place instead
+of picked from a button strip, because the theme has a dozen values and
+a strip of them would not fit a row; Enter keeps the menu open because
+changing a setting is not leaving it. Decision: the rule shows a change's
+status message until the next key, because a list's rule otherwise shows
+what the list holds, and what the command says (the clipboard tool that
+is missing, the theme now in use) is the answer to the change.
 
 ## Editing and deleting
 
@@ -599,7 +707,8 @@ in the server window opens or focuses that chat's window; a nick opens the
 chat whose alias or title equals it exactly (otherwise "no chat named ..."); a
 `[N:name]` tag in the window bar focuses window N; a row in `/list` or
 `/win` opens it and one of the action buttons at the selected row's
-right runs that action (see Modes); an `http(s)` link in a message or notice is handed to the
+right runs that action (see Modes); a row of the settings menu sets its
+next value (see Settings menu); an `http(s)` link in a message or notice is handed to the
 system opener (`open`, `xdg-open`, `rundll32`), which starts the default
 browser (links always go to the browser; only fetched attachments go to
 the image viewer). The wheel scrolls the window three
@@ -803,7 +912,7 @@ The input area is the bottom of the screen. Each line of the input (a
 line break from Enter, from Ctrl-X with "Enter sends" on, or from a
 paste) is a row of its own; there is no return mark. The first row
 starts after the prompt (`[@name] `, `[@name]> `, `list > `, `windows > `,
-`search > `); every later row is indented to the prompt's width, so the
+`settings > `, `search > `); every later row is indented to the prompt's width, so the
 text lines up under the first. A row holds the screen width less the
 prompt's width and one cell, the cell the cursor takes past the end of a
 line. A longer line wraps onto further rows between characters (grapheme
@@ -997,7 +1106,7 @@ match the plain comparison would find.
 
 | key                  | action                                            |
 |----------------------|---------------------------------------------------|
-| Tab / Shift-Tab      | empty prompt: next / previous window; else complete like bash (a second Tab lists): commands, chats, themes, `out`, attachment ids and the chat's recent links after `/open`, paths after `/send`, a command's settings (`/autojoin off`, `/clip tool`); in a group or channel window its `@nicks` after `/whois` and in message text |
+| Tab / Shift-Tab      | empty prompt: next / previous window (from the settings menu too, which the switch closes); else complete like bash (a second Tab lists): commands, chats, themes, `out`, attachment ids and the chat's recent links after `/open`, paths after `/send`, a command's settings (`/autojoin off`, `/clip tool`); in a group or channel window its `@nicks` after `/whois` and in message text |
 | Ctrl-X twice         | toggle "Enter sends" for this window (Ctrl-X then adds a line break to plain text) |
 | Ctrl-N / Ctrl-P      | next / previous window (Alt-Right / Alt-Left too) |
 | Alt-0 .. Alt-9       | window 0 .. 9; Esc followed by the digit does the same (the typed input survives) |
@@ -1010,10 +1119,10 @@ match the plain comparison would find.
 | Ctrl-R               | sync now                                          |
 | Ctrl-L               | redraw: drop this window's notices, help text and pictures, as `/redraw` |
 | F1                   | focus the server window and print the command reference there (as `/help`) |
-| Esc                  | close the list or pager, else clear the input     |
+| Esc                  | close the list, the settings menu or the pager, else clear the input |
 | Ctrl-X               | send the typed text to this window's chat, as typed: a line starting with `/` is sent, not run (Enter runs commands); with "Enter sends" on it still sends such a line |
 | Ctrl-U / Ctrl-W      | clear the input / delete the word before the cursor (and the spaces after it) |
-| Left / Right         | move the cursor one rune; never past the ends; in `/list` or `/win`: pick the row's action button (open or focus, read, unread, close), Enter runs it |
+| Left / Right         | move the cursor one rune; never past the ends; in `/list` or `/win`: pick the row's action button (open or focus, read, unread, close), Enter runs it; in the settings menu: the selected setting's previous / next value |
 | Ctrl-A / Ctrl-E      | cursor to the start / end of the cursor's line (between line breaks) |
 | Delete / Ctrl-K      | delete the rune under the cursor (at the end of the input Delete acts as Backspace, since some terminals send it for that key) / to the end of the cursor's line |
 | Ctrl-C               | quit                                              |
@@ -1044,8 +1153,11 @@ than a row of the input area wraps onto the next row (see Input area).
 History recall, Esc, Enter and the list and pager prompts put the cursor
 at the end.
 
-On an empty prompt in a window, Tab switches to the next window and
-Shift-Tab to the previous one. With text typed, Tab completes the word
+On an empty prompt in a window, and in the settings menu (the switch
+closes it), Tab switches to the next window and Shift-Tab to the
+previous one. In the settings menu's filter Tab completes the names of
+the settings (`re` -> `read-receipts`); a line starting with `/` there
+completes as a command line. With text typed, Tab completes the word
 before the cursor like bash and keeps what follows the cursor. A line that is one
 word starting with `/` completes command names; after `/theme ` theme
 names; after `/send ` (and its aliases) local paths: entries of the typed
@@ -1069,7 +1181,8 @@ In a group or channel window the `/whois` argument and the words of
 message text complete that chat's `@nicks` instead (see Members).
 Otherwise a command's own first-argument words, whatever its spelling
 (`/win list`, `/list --show-deleted`, `/autojoin on|off`,
-`/read-receipts on|off`, `/clip auto|osc52|tool|off`), and chat names
+`/feed on|off`, `/read-receipts on|off`, `/clip auto|osc52|tool|off`),
+and chat names
 where the command takes a chat: the first argument of `/win`, `/msg`,
 `/whois` and `/list`, every word of `/me` and `/edit` text, and every
 word of a line without a command (message text). After any other
