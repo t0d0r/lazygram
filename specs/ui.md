@@ -608,7 +608,7 @@ last, as the table does in `/keys`.
 | `/feed [on\|off]`             | window 0 shows every chat's messages as they arrive and the reactions someone adds (on, the default) or only its notices (off); kept; no argument shows the setting (see Windows, Reactions) |
 | `/vim [on\|off]`              | vi keys: Normal and Insert modes on the input, in the lists and the pager; off by default, kept, takes effect at once; no argument shows the setting (see Vim mode) |
 | `/names`                      | show chats by nick (`@alias`) or by name (`@Title`), kept |
-| `/settings [text]`, `/set`, `/options` | focus the server window and open the menu of every kept setting there; Enter or Right sets the selected one's next value, Left its previous; text narrows the rows (see Settings menu) |
+| `/settings [text]`            | focus the server window and open the menu of every kept setting there; Enter or Right sets the selected one's next value, Left its previous; text narrows the rows; it has no short form (see Settings menu) |
 
 Short forms: `/h` for `/help`; `/shortcuts`, `/bindings` for `/keys`;
 `/exit` for `/quit`; `/sync` for `/refresh`; `/ls`, `/chats` for `/list`;
@@ -619,8 +619,9 @@ Short forms: `/h` for `/help`; `/shortcuts`, `/bindings` for `/keys`;
 `/upload` for `/send`; `/e` for `/edit`; `/del`, `/rm` for `/delete`;
 `/button`, `/btn` for `/press`; `/fetch`, `/download` for `/open`;
 `/colors`, `/colours` for `/theme`; `/version` for `/about`; `/lights`,
-`/anim` for `/fx`; `/nicks` for `/names`; `/set`, `/options` for
-`/settings`. `/help` prints every spelling
+`/anim` for `/fx`; `/nicks` for `/names`. `/settings` has none: `/set`
+and `/options` are unknown commands, like any other unknown name.
+`/help` prints every spelling
 the parser accepts, the short forms as `also /x, /y` after their
 command, so the printed reference and the parser table never disagree
 (a test checks each table entry against the help text and against the
@@ -629,10 +630,12 @@ also land in the server window.
 
 ## Settings menu
 
-`/settings [text]` (also `/set`, `/options`) opens a menu of every kept
-setting. It belongs to window 0: typed in any window, `/settings` first
-focuses the server window, as `/help` and `/keys` do, and opens the menu
-there. While it is open the window bar and the status line show
+`/settings [text]` opens a menu of every kept setting; it is the menu's
+only name (`/set` and `/options`, its short forms before, are unknown
+commands now, so typing one gives `unknown command /set, try /help` as
+any unknown name does, and Tab completes `/set` to `/settings`). It
+belongs to window 0: typed in any window, `/settings` first focuses the
+server window, as `/help` and `/keys` do, and opens the menu there. While it is open the window bar and the status line show
 `[0:server]` as the current window, window 0's content area shows the
 menu's rows, the prompt is `settings > ` and the rule explains the keys:
 `settings (9): Up/Down, Enter or Right next value, Left previous, Esc
@@ -700,7 +703,8 @@ The other lists and the pager (`/list`, `/win`, `/search`) replace it.
 
 Decision: the menu lives in window 0 because settings belong to the
 client, not to a chat, and window 0 is where `/help` and `/keys` already
-put the client's own text. Decision: values are stepped in place instead
+put the client's own text. Decision: one name for the menu, `/settings`,
+with no aliases, so the command list has one way to it. Decision: values are stepped in place instead
 of picked from a button strip, because the theme has a dozen values and
 a strip of them would not fit a row; Enter keeps the menu open because
 changing a setting is not leaving it. Decision: the rule shows a change's

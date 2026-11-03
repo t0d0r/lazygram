@@ -565,14 +565,61 @@ func TestSettingsNarrowByTypedText(t *testing.T) {
 		t.Fatalf("nothing to change: the menu stays, nothing changes: %q", m.status)
 	}
 	press(m, tea.KeyEsc)
-	enter(m, "/set colours") // a short form, narrowed at once: theme's description
+	enter(m, "/settings colours") // narrowed at once: theme's description
 	if got := menuRows(m); !m.settingsOpen() || len(got) != 1 || got[0][0] != "theme" || string(m.input) != "colours" {
-		t.Fatalf("/set <text> opens narrowed: %q input %q", got, string(m.input))
+		t.Fatalf("/settings <text> opens narrowed: %q input %q", got, string(m.input))
 	}
 	press(m, tea.KeyEsc)
-	enter(m, "/options feed")
+	enter(m, "/SETTINGS feed")
 	if got := menuRows(m); len(got) != 1 || got[0][0] != "feed" {
-		t.Fatalf("/options <text>: %q", got)
+		t.Fatalf("/SETTINGS <text>: %q", got)
+	}
+}
+
+// TestOnlySettingsOpensTheMenu: /settings is the menu's one name. /set and
+// /options are unknown commands, handled as any other unknown command is:
+// the same error, no menu, no focus change, nothing kept; and Tab
+// completes /set to /settings, the one command it begins.
+func TestOnlySettingsOpensTheMenu(t *testing.T) {
+	type outcome struct {
+		isErr, open bool
+		cur         int
+		mode        mode
+		input       string
+		cmds        int
+	}
+	run := func(line string) (outcome, string) {
+		m := setup(t, newFake())
+		enter(m, "/win 3")
+		enter(m, line)
+		return outcome{m.isErr, m.settingsOpen(), m.cur, m.mode, string(m.input), m.cmdsN}, m.status
+	}
+	for _, c := range []struct{ line, name string }{
+		{"/set", "set"}, {"/set colours", "set"}, {"/options", "options"}, {"/OPTIONS feed", "options"},
+	} {
+		got, status := run(c.line)
+		arg := strings.TrimPrefix(strings.ToLower(c.line), "/"+c.name)
+		want, wantStatus := run("/xyzzy" + arg)
+		if got != want || status != "unknown command /"+c.name+", try /help" ||
+			wantStatus != "unknown command /xyzzy, try /help" || !got.isErr || got.open || got.cur != 3 {
+			t.Errorf("%q: %+v %q; an unknown command gives %+v %q", c.line, got, status, want, wantStatus)
+		}
+	}
+	m := setup(t, newFake())
+	for typed, want := range map[string]string{"/set": "/settings ", "/se": "/se", "/opt": "/opt"} {
+		m.input, m.curBack = nil, 0
+		typ(m, typed)
+		press(m, tea.KeyTab)
+		if got := string(m.input); got != want {
+			t.Errorf("Tab after %q: %q, want %q", typed, got, want)
+		}
+	}
+	m.input, m.curBack = nil, 0
+	typ(m, "/se")
+	press(m, tea.KeyTab)
+	press(m, tea.KeyTab) // the second Tab lists
+	if v := body(m); !strings.Contains(v, "/search  /send  /settings") {
+		t.Errorf("/se lists /search, /send and /settings, no /set:\n%s", v)
 	}
 }
 

@@ -59,11 +59,12 @@ func TestParse(t *testing.T) {
 		{"/FEED off", Command{Feed, "off"}, false},
 		{"/feed  on ", Command{Feed, "on"}, false},
 		{"/settings", Command{Settings, ""}, false},
-		{"/set", Command{Settings, ""}, false},
-		{"/options", Command{Settings, ""}, false},
-		{"/SET  mouse ", Command{Settings, "mouse"}, false},
-		{"/options read receipts", Command{Settings, "read receipts"}, false},
-		{"/setting", Command{}, true}, // the three spellings only
+		{"/SETTINGS  mouse ", Command{Settings, "mouse"}, false},
+		{"/settings read receipts", Command{Settings, "read receipts"}, false},
+		{"/set", Command{}, true}, // one spelling only: no aliases
+		{"/options", Command{}, true},
+		{"/SET mouse", Command{}, true},
+		{"/setting", Command{}, true},
 		{"/vim", Command{Vim, ""}, false},
 		{"/vim on", Command{Vim, "on"}, false},
 		{"/VIM  off ", Command{Vim, "off"}, false},

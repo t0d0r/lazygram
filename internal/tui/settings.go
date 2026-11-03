@@ -10,7 +10,7 @@ import (
 	"lazygram/internal/domain"
 )
 
-// The settings menu (/settings, /set, /options) lists every kept setting,
+// The settings menu (/settings, its only name) lists every kept setting,
 // one row each: its name (the command without the slash), its current
 // value and what it does. It belongs to the client, not to a chat, so it
 // opens in window 0, the server window, which /settings focuses first
