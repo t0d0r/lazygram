@@ -286,9 +286,12 @@ var (
 // query finds a title written in Cyrillic and the other way round): the
 // exact alias or title, a prefix of either, a substring of either. The
 // either-script tiers make a Latin spelling as decisive as the Cyrillic
-// one and come after the plain ones, so they never turn a plain match
-// ambiguous. A leading @ restricts the search to people, a leading # to
-// groups and channels.
+// one once no plain tier matches, and come after the plain ones, so they
+// never turn a plain match ambiguous; a plain match still wins over them
+// ("kamen" begins the alias kamenov as typed, so it finds that chat and
+// not the one titled Kamen in Cyrillic, which the Cyrillic spelling
+// finds by its exact title). A leading @ restricts the search to people,
+// a leading # to groups and channels.
 func ResolveChat(chats []Chat, query string) (Chat, error) {
 	q := strings.ToLower(strings.TrimSpace(query))
 	switch {

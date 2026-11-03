@@ -1179,18 +1179,25 @@ with two people aliased `ivan` and `ivanka` in Cyrillic, `ivan` and
 `@ivan` find the first, as its Cyrillic spelling does; with channels
 aliased `novini` and `novini-sport` in Cyrillic, `novini` and `#novini`
 find the first; `kamen` and `@Kamen` (Cyrillic) find the chat titled
-Kamen even when one titled Kamenov exists; a title two chats share stays
-ambiguous. Decision: the exact and prefix tiers in either script make a
-Latin spelling as decisive as the Cyrillic one (before, `ivan` was a
-substring of both transliterated aliases and ambiguous while the
-Cyrillic spelling was exact), and they come after the plain tiers, so
-they never make a plain match ambiguous or change a name that resolved
-before. The exact title comes right after the exact alias so the name
-the window bar shows by name always finds its chat; the only names that
-resolve differently because of it are queries that are some chat's exact
-title and begin another chat's alias: they now find the titled chat (or
-are ambiguous when several chats of the kind have that title) instead of
-the one whose alias they begin.
+Kamen even when one titled Kamenov exists, as long as no plain tier
+matches first; a title two chats share stays ambiguous. A plain match
+still wins: when Kamenov's alias is the Latin username `kamenov`,
+`kamen` begins it as typed (3) and finds Kamenov, while `Kamen` written
+in Cyrillic finds Kamen by its exact title (2); Tab, which offers both,
+is not affected. Decision: the exact and prefix tiers in either script
+make a Latin spelling as decisive as the Cyrillic one once no plain tier
+matches (before, `ivan` was a substring of both transliterated aliases
+and ambiguous while the Cyrillic spelling was exact), and they come after
+the plain tiers, so they never make a plain match ambiguous or change a
+name that resolved before. The exact title comes right after the exact
+alias so the name the window bar shows by name finds its chat, unless
+two chats of the kind show that title, it is another chat's alias or id,
+or showing it dropped control characters (Tab then fills in the alias,
+see Names: nick or title); the only names that resolve differently
+because of it are queries that are some chat's exact title and begin
+another chat's alias: they now find the titled chat (or are ambiguous
+when several chats of the kind have that title) instead of the one whose
+alias they begin.
 
 Tab completion matches prefixes in either script (`domain.PrefixMatch`,
 the transliteration of the word a prefix of the transliteration of the
