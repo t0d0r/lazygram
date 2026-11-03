@@ -19,8 +19,8 @@ completion, and an activity indicator.
 
 - Window 0 is the server window: the messages of every chat that arrive
   during this session (everything a sync brings, and what a window's
-  fetch brings that is dated after the start), interleaved by time, plus
-  client notices (`-!-`): start-up, chat counts, windows opened or closed,
+  fetch brings that is dated after the start), interleaved by time (none
+  with `/feed off`, see below), plus client notices (`-!-`): start-up, chat counts, windows opened or closed,
   and every error (sync, history, send, press, fetch, open), whatever
   window was current; errors also show in the status line. It opens with a figlet banner (font banner3
   where the window is at least its 76 columns wide, chunky below that,
@@ -35,7 +35,8 @@ completion, and an activity indicator.
   Ctrl-X, Ctrl-N and Ctrl-P, `/search`, double and triple click,
   `/theme`, `/autojoin`, `/read-receipts`, `/whois`, `/send`,
   `/open <link>`, Ctrl-L, `/about`, `/mark-as-read`, `/names`, `/last`,
-  Up and Down, `/mouse`, PgUp and PgDn, `/move` and `/close`), so the pair
+  Up and Down, `/mouse`, PgUp and PgDn, `/move` and `/close`, `/feed
+  off`), so the pair
   differs between starts (`Options.Rand` draws them, `rand.IntN` unless
   a test injects one). They are printed once per start, in window 0 only,
   as part of its start-up screen, so they roll in with it when window 0
@@ -76,6 +77,30 @@ completion, and an activity indicator.
   from every chat; it was a side effect of all windows reading one
   in-memory list, never a choice, and an IRC server window shows what
   arrives while connected.
+  `/feed off` (kept in the state store under `feed`; absent or
+  unreadable means on) keeps the chat messages out of window 0, from
+  every chat (people, groups and channels alike): it shows only its
+  notices (the banner and tagline, the start notices and hints, `/help`
+  and `/keys`, errors, windows opened and closed and every other `-!-`
+  line). Nothing is dropped: the messages are still recorded as this
+  session's, open their windows, count as unread and show in the status
+  and in `Act` as before, and `/feed on` shows this session's messages
+  in window 0 again, those that arrived while it was off included: the
+  setting is a filter applied when window 0 is drawn. The chat windows
+  and `/search` (in window 0 it still searches every chat) do not
+  change. `/feed` with no argument shows the setting (`feed on: window 0
+  shows every chat's messages as they arrive; /feed off`, `feed off:
+  window 0 shows only notices; chat messages stay in their own windows;
+  /feed on`); on and off take effect at once; any other argument is the
+  error `/feed takes on or off`. At a start with the feed off, window 0
+  says so in one notice right after the start hints, so their order
+  stays: `-!- /feed is off: chat messages show only in their own windows
+  (/feed on)`. A change keeps window 0's scroll offset within its new
+  number of lines (a window scrolled back further than it now reaches
+  shows its oldest page). Decision: window 0 interleaves every chat, and
+  some prefer the IRC way, where the server window holds only notices
+  and each chat stays in its own window; on by default keeps the
+  behaviour lazygram always had.
   After the program ends a banner is printed to the terminal the same
   way (one line per 56 ms), BitchX style, in one of several faces picked
   at random among those that fit the terminal width: the figlet block
@@ -440,6 +465,7 @@ last, as the table does in `/keys`.
 | `/read-receipts [on\|off]`, `/receipts` | read receipts to the service: off by default (kept); on reports a chat read when its window with unread messages is focused; no argument shows the setting (see Read receipts) |
 | `/mark-as-read`               | one read receipt for this window's chat, now, whatever `/read-receipts` says; an error in the server window and for a chat without a known message |
 | `/autojoin [on\|off]`         | at start open a window for every chat with unread messages: on by default, kept; no argument shows the setting (see Windows) |
+| `/feed [on\|off]`             | window 0 shows every chat's messages as they arrive (on, the default) or only its notices (off); kept; no argument shows the setting (see Windows) |
 | `/names`                      | show chats by nick (`@alias`) or by name (`@Title`), kept |
 
 Short forms: `/h` for `/help`; `/shortcuts`, `/bindings` for `/keys`;
@@ -1069,7 +1095,8 @@ In a group or channel window the `/whois` argument and the words of
 message text complete that chat's `@nicks` instead (see Members).
 Otherwise a command's own first-argument words, whatever its spelling
 (`/win list`, `/list --show-deleted`, `/autojoin on|off`,
-`/read-receipts on|off`, `/clip auto|osc52|tool|off`), and chat names
+`/feed on|off`, `/read-receipts on|off`, `/clip auto|osc52|tool|off`),
+and chat names
 where the command takes a chat: the first argument of `/win`, `/msg`,
 `/whois` and `/list`, every word of `/me` and `/edit` text, and every
 word of a line without a command (message text). After any other

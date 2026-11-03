@@ -54,6 +54,7 @@ const (
 	namesKey       = "names"               // store state key for showing chats by name
 	receiptsKey    = "read_receipts"       // store state key for read receipts; absent means off
 	autojoinKey    = "autojoin"            // store state key for opening unread chats at start; absent means on
+	feedKey        = "feed"                // store state key for chat messages in the server window; absent means on
 	sharedKey      = "shared_chats"        // store state key for the chats with shared message ids
 	healEvery      = 2 * time.Minute       // a shown window's history is fetched again after this, in case changes were missed
 	fxTick         = 30 * time.Millisecond
@@ -199,6 +200,7 @@ type Model struct {
 	startChecked bool
 	chatsAsked   bool // a chat list request is on its way
 	autojoin     bool
+	feed         bool            // the server window shows the chats' messages (/feed); off: only its notices
 	sharedChats  map[string]bool // every chat ever marked SharedIDs, kept: where a chat-less deletion looks
 	gone         map[string]bool // keys deleted at the service this session; a late fetch result does not bring them back
 	reportNext   map[string]pendingReport
@@ -296,6 +298,9 @@ func New(opt Options) *Model {
 	if found, err := opt.Store.State(autojoinKey, &m.autojoin); !found || err != nil {
 		m.autojoin = true
 	}
+	if found, err := opt.Store.State(feedKey, &m.feed); !found || err != nil {
+		m.feed = true
+	}
 	var shared []string
 	_, _ = opt.Store.State(sharedKey, &shared)
 	m.sharedChats = map[string]bool{}
@@ -313,6 +318,9 @@ func New(opt Options) *Model {
 	// start-up screen; no chat list or /refresh prints them again.
 	for _, h := range startHints(opt.Rand) {
 		m.note(m.wins[0], h)
+	}
+	if !m.feed { // after the hints, so their order on the start-up screen stays
+		m.note(m.wins[0], feedOffNotice)
 	}
 	m.restoreLayout()
 	m.restoreTheme()
@@ -1855,6 +1863,8 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.readReceipts(c.Arg)
 	case command.AutoJoin:
 		m.setAutojoin(c.Arg)
+	case command.Feed:
+		m.setFeed(c.Arg)
 	case command.MarkRead:
 		return m.markAsRead()
 	case command.Fx:
@@ -2338,6 +2348,7 @@ var argWords = map[command.Kind][]string{
 	command.List:     {"--show-deleted"},
 	command.Receipts: {"on", "off"},
 	command.AutoJoin: {"on", "off"},
+	command.Feed:     {"on", "off"},
 	command.Clip:     {"auto", "osc52", "tool", "off"},
 }
 
@@ -2646,13 +2657,18 @@ func (m *Model) phaseOpt() int {
 	return int(time.Since(m.hoverAt) / time.Millisecond)
 }
 
-func (m *Model) richLines() ([]string, [][]span) {
-	w := m.wins[m.cur]
+func (m *Model) richLines() ([]string, [][]span) { return m.richLinesOf(m.wins[m.cur]) }
+
+// richLinesOf renders a window's scrollback: a chat window its chat's
+// messages, the server window this session's messages of every chat
+// (none with /feed off) and, in both, the window's notices.
+func (m *Model) richLinesOf(w *win) ([]string, [][]span) {
 	o := lineOpts{width: m.width, nameOf: m.nameOf, nameW: m.nameWidth(), showChat: w.chatID == "", phase: m.phaseOpt(), hover: m.hover, cache: m.rcache}
 	var msgs []domain.Message
-	if w.chatID != "" {
+	switch {
+	case w.chatID != "":
 		msgs = domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})
-	} else {
+	case m.feed:
 		msgs = m.liveMsgs()
 	}
 	return renderRich(msgs, w.notes, o)
@@ -2967,7 +2983,7 @@ Clickable text is bright and underlined; a running light plays over the one unde
 Drag with the left button to select text; on release it is copied to the clipboard: through the terminal (OSC 52) and the system tool when there is one (pbcopy, wl-copy, xclip, xsel, clip); /clip picks (kept).
 Double click copies the word under the pointer, triple click the row; on a link or a name the first click acts and the next ones only select. Shift-click extends the selection where the terminal passes Shift on; most Linux terminals keep Shift-drag (Option on macOS) for their own selection, as does /mouse off.
 Mouse: click a chat name or nick in window 0 to open its window, a tag in the window bar to focus it, a row in a list to open it, a link or a [photo] / [file] token to open it with the system; the wheel scrolls.
-Window 0 is the server window: every chat interleaved, plus notices; it stays at 0 and cannot be closed. /move N puts this window at N.
+Window 0 is the server window: every chat interleaved, plus notices (/feed off: the notices only); it stays at 0 and cannot be closed. /move N puts this window at N.
 A window opens for a chat when it gets a message or has unread ones; [Act: 1,2] in the status line lists windows with unread messages.
 People are @name, groups and channels are #name.`
 

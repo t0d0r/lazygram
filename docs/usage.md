@@ -52,7 +52,10 @@ switch), then two more tips picked at random, different from one start
 to the next. Window 0 is the server window:
 what every chat brings while lazygram runs, interleaved by time as
 `HH:MM #chat <sender> text`, plus `-!-` notices; older messages from the
-cache show in each chat's own window. A window bar above the input lists every window as `[N:name]`.
+cache show in each chat's own window. `/feed off` keeps the chat
+messages out of window 0, IRC style, so it holds only the notices; the
+messages still open and fill their own windows, and `/feed on` brings
+this session's back. A window bar above the input lists every window as `[N:name]`.
 Open windows, the current one and each window's Enter-sends setting are
 remembered across restarts. On exit lazygram prints the session statistics
 (time wasted, messages, windows, commands) and, for a release build, a hint
@@ -93,6 +96,7 @@ in a group whose cached messages still lack their senders' usernames), and
 | `/read-receipts [on\|off]` | read receipts: off by default (kept); on tells Telegram a chat was read when you focus its window with unread messages; no argument shows the setting |
 | `/mark-as-read`            | one read receipt for this window's chat, now, whatever `/read-receipts` says; clears its "marked as unread" flag too |
 | `/autojoin [on\|off]`      | at start, open a window for every chat with unread messages (on by default, kept); no argument shows the setting |
+| `/feed [on\|off]`          | window 0 shows every chat's messages as they arrive (on, the default) or only its notices (off); kept, takes effect at once; no argument shows the setting |
 | `/redraw`, `/clear`        | drop notices, help text and pictures from this window; messages stay |
 | `/refresh`, `/help`, `/quit` | sync now; print the notes on the mouse, themes and windows into the server window, then the command list with every short form last, so the commands are what you see when it ends (it ends by naming `/keys`); leave |
 | `/keys`                    | print the keyboard shortcuts into the server window |

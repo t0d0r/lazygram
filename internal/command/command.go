@@ -41,6 +41,7 @@ const (
 	Receipts      // read receipts to the service: Arg is on or off; empty shows the setting
 	MarkRead      // one read receipt for the current window's chat, whatever the setting
 	AutoJoin      // open windows for unread chats at start: Arg is on or off; empty shows the setting
+	Feed          // chat messages in the server window: Arg is on or off; empty shows the setting
 )
 
 // Command is a parsed slash command.
@@ -79,6 +80,7 @@ var table = map[string]Kind{
 	"read-receipts": Receipts, "receipts": Receipts,
 	"autojoin":     AutoJoin,
 	"mark-as-read": MarkRead,
+	"feed":         Feed,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -150,4 +152,5 @@ const HelpText = `Commands
   /read-receipts [on|off]  report a chat read when you focus its window with unread messages; off by default, kept; no argument shows; also /receipts
   /mark-as-read          one receipt for this window's chat, now, whatever /read-receipts says
   /autojoin [on|off]     at start open a window for every chat with unread messages; on by default, kept
+  /feed [on|off]         window 0 shows every chat's messages as they arrive (on, the default) or only its notices (off); kept; no argument shows
 Keyboard shortcuts: type /keys.`
