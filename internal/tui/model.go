@@ -162,7 +162,7 @@ type Model struct {
 	typingAnim   bool                 // a typingAnimMsg is scheduled
 	typingStep   int                  // the running light's clock
 
-	vi vimState // vim mode: Normal and Insert on the input (vim.go)
+	vi vimState // vim mode: Normal and Insert on the input, the lists and the pager (vim.go)
 
 	escPending bool         // an Esc was just pressed: a digit now switches windows
 	escSaved   []rune       // the input as it was before that Esc cleared it; nil when it cleared nothing
@@ -3105,7 +3105,7 @@ func (m *Model) statusLine() string {
 		seg(time.Now().Format("15:04"), 5, false) + gap +
 		seg(m.opt.Provider.Name(), 0, false) + gap +
 		seg(fmt.Sprintf("[%d:%s]", m.cur, m.winName(m.cur)), 3, true) + gap
-	if tag := m.vimTag(); tag != "" { // NORMAL, while the input is in vim's Normal mode
+	if tag := m.vimTag(); tag != "" { // NORMAL, while the input, a list or the pager is in vim's Normal mode
 		head += seg(tag, 4, true) + gap
 	}
 	if act := m.activity(); act != "" {

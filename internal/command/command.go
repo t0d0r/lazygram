@@ -43,7 +43,7 @@ const (
 	AutoJoin      // open windows for unread chats at start: Arg is on or off; empty shows the setting
 	Feed          // chat messages in the server window: Arg is on or off; empty shows the setting
 	Settings      // the menu of every kept setting, in the server window: Arg narrows its rows
-	Vim           // vi keys on the input (Normal and Insert modes): Arg is on or off; empty shows the setting
+	Vim           // vi keys (Normal and Insert modes) on the input, the lists and the pager: Arg is on or off; empty shows the setting
 )
 
 // Command is a parsed slash command.

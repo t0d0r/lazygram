@@ -39,7 +39,7 @@ const vimKey = "vim" // store state key for vim mode; absent or unreadable means
 
 // vimState is vim mode's state.
 type vimState struct {
-	on      bool     // /vim: vi keys on the input (kept); off: the usual keys only
+	on      bool     // /vim: vi keys on the input, the lists and the pager (kept); off: the usual keys only
 	normal  bool     // the input is in Normal mode; false is Insert
 	listIns bool     // the open list or pager is in its Insert mode; false is Normal, as each one opens
 	op      rune     // the first key of a two-key command waiting for its second: g, d, c or r; 0 none
