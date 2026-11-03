@@ -157,7 +157,8 @@ type Model struct {
 	now          func() time.Time     // the clock the typing state, double clicks and double Tabs run on; tests replace it
 	typing       *domain.TypingState  // who is typing where, from the service's reports
 	typingCh     <-chan domain.Typing // the service's feed; nil when it has none or closed it
-	changeCh     <-chan domain.Change // edits and deletions from the service; nil without
+	changeCh     <-chan domain.Change // edits, deletions and reactions from the service; nil without
+	react        reactState           // reaction polls and what is known of reactions (reactions.go)
 	typingExpiry bool                 // a typingExpireMsg is scheduled
 	typingAnim   bool                 // a typingAnimMsg is scheduled
 	typingStep   int                  // the running light's clock
@@ -230,14 +231,16 @@ type (
 	}
 	syncedMsg struct {
 		fresh, known []domain.Message // known: cached messages that learned their sender
+		page         []domain.Message // all the service sent, changed or not: their reactions are known now
 		err          error
 		at           time.Time
 	}
 	recentMsg struct {
 		chatID       string
 		fresh, known []domain.Message
-		gone         []string // ids deleted at the service
-		quiet        bool     // a heal: no notice unless something came
+		page         []domain.Message // as in syncedMsg
+		gone         []string         // ids deleted at the service
+		quiet        bool             // a heal: no notice unless something came
 		err          error
 	}
 	memberListMsg struct {
@@ -297,7 +300,7 @@ func New(opt Options) *Model {
 		listed: map[string][]domain.Participant{}, listAsked: map[string]bool{}, listHidden: map[string]bool{},
 		live: map[string]bool{}, reporting: map[string]bool{}, reportNext: map[string]pendingReport{}, gone: map[string]bool{},
 		wins: []*win{{}}, status: "type /help for commands", started: time.Now(), fx: true, rcache: &renderCache{},
-		now: time.Now, after: tickAfter, typing: domain.NewTypingState(domain.DefaultTypingTTL)}
+		now: time.Now, after: tickAfter, typing: domain.NewTypingState(domain.DefaultTypingTTL), react: newReactState()}
 	if found, err := opt.Store.State(fxKey, &m.fx); !found || err != nil {
 		m.fx = true
 	}
@@ -457,6 +460,9 @@ func (m *Model) Init() tea.Cmd {
 	if m.opt.Poll > 0 {
 		cmds = append(cmds, m.tickCmd())
 	}
+	if cmd := m.reactInit(); cmd != nil {
+		cmds = append(cmds, cmd)
+	}
 	if m.cur > 0 {
 		cmds = append(cmds, m.switchTo(m.cur))
 	}
@@ -533,7 +539,7 @@ func (m *Model) syncCmd() tea.Cmd {
 		if err == nil {
 			err = errors.Join(addErr, idErr)
 		}
-		return syncedMsg{fresh: fresh, known: known, err: err, at: time.Now()}
+		return syncedMsg{fresh: fresh, known: known, page: msgs, err: err, at: time.Now()}
 	}
 }
 
@@ -561,7 +567,7 @@ func (m *Model) fetchRecent(chatID string, n int, quiet bool) tea.Cmd {
 		fresh, err := st.Add(msgs)
 		known, refErr := st.Refresh(msgs)
 		gone, pruneErr := st.Prune(chatID, msgs, asked)
-		return recentMsg{chatID: chatID, quiet: quiet, fresh: fresh, known: known, gone: gone, err: errors.Join(err, refErr, pruneErr)}
+		return recentMsg{chatID: chatID, quiet: quiet, fresh: fresh, known: known, page: msgs, gone: gone, err: errors.Join(err, refErr, pruneErr)}
 	}
 }
 
@@ -769,6 +775,9 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if cmd, ok := m.typingUpdate(msg); ok {
 		return m, cmd
 	}
+	if cmd, ok := m.reactUpdate(msg); ok {
+		return m, cmd
+	}
 	switch msg := msg.(type) {
 	case slowTickMsg:
 		m.slowTick = false
@@ -804,12 +813,14 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.fresh) > 0 {
 			m.arrived(msg.fresh)
 		}
+		m.react.learn(msg.page)
 		switch {
 		case msg.err != nil:
 			m.fail("sync: " + errText(msg.err))
 		case len(msg.fresh) == 0:
 			// Nothing to say: a status that pops up every poll only flickers.
 		}
+		return m, m.pollReactions() // one that came due during the sync
 	case memberListMsg:
 		m.gotMemberList(msg)
 	case changeMsg:
@@ -827,6 +838,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// as for a sync: a stored message is never fresh again.
 		empty := w.chatID != "" && len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})) == 0
 		m.identify(msg.known)
+		m.react.learn(msg.page)
 		m.dropMsgs(msg.chatID, msg.gone)
 		fresh := msg.fresh
 		if msg.quiet && w.loaded {
@@ -1186,10 +1198,36 @@ func (m *Model) setErr(s string)  { m.status, m.isErr = sanitize(s, false), true
 
 // note appends a client line to a window.
 func (m *Model) note(w *win, text string) {
-	w.notes = append(w.notes, note{at: time.Now(), text: text})
-	if len(w.notes) > maxNotes {
-		w.notes = w.notes[len(w.notes)-maxNotes:]
+	w.addNote(note{at: time.Now(), text: text})
+}
+
+// addNote appends n to the window's notices and keeps the newest maxNotes
+// of its kind. The chats' activity told in window 0 (n.chat), which /feed
+// off hides, is capped apart from the rest, so notices that are not shown
+// never push out those that are.
+func (w *win) addNote(n note) {
+	w.notes = append(w.notes, n)
+	if len(w.notes) <= maxNotes {
+		return
 	}
+	over := -maxNotes
+	for _, x := range w.notes {
+		if x.chat == n.chat {
+			over++
+		}
+	}
+	if over <= 0 {
+		return
+	}
+	kept := make([]note, 0, len(w.notes)-over)
+	for _, x := range w.notes {
+		if x.chat == n.chat && over > 0 {
+			over-- // the oldest of its kind
+			continue
+		}
+		kept = append(kept, x)
+	}
+	w.notes = kept
 }
 
 // absorb merges messages into the in-memory mirror.
@@ -2319,10 +2357,10 @@ func (m *Model) redraw(w *win) {
 	m.setInfo("")
 }
 
-// help prints the notes on the mouse, themes and windows and then the
-// command reference into the server window, line by line with a small
-// delay, like a terminal on a slow line, and focuses that window so the
-// text is in view wherever /help was typed. The commands come last, so
+// help prints the notes on the mouse, themes, windows and reactions and
+// then the command reference into the server window, line by line with a
+// small delay, like a terminal on a slow line, and focuses that window so
+// the text is in view wherever /help was typed. The commands come last, so
 // they are what the window shows when printing ends. The keys are a
 // separate list (/keys), and the last help line says so.
 func (m *Model) help() tea.Cmd {
@@ -2362,10 +2400,7 @@ func (m *Model) slowStep() {
 		m.slow, m.slowWin = nil, nil
 		return
 	}
-	m.slowWin.notes = append(m.slowWin.notes, note{at: time.Now(), text: m.slow[0], plain: true})
-	if len(m.slowWin.notes) > maxNotes {
-		m.slowWin.notes = m.slowWin.notes[len(m.slowWin.notes)-maxNotes:]
-	}
+	m.slowWin.addNote(note{at: time.Now(), text: m.slow[0], plain: true})
 	m.slowWin.scroll = 0
 	m.slow = m.slow[1:]
 	if len(m.slow) == 0 {
@@ -2870,17 +2905,28 @@ func (m *Model) richLines() ([]string, [][]span) { return m.richLinesOf(m.wins[m
 
 // richLinesOf renders a window's scrollback: a chat window its chat's
 // messages, the server window this session's messages of every chat
-// (none with /feed off) and, in both, the window's notices.
+// (none with /feed off) and, in both, the window's notices (in the server
+// window without the chats' activity with /feed off).
 func (m *Model) richLinesOf(w *win) ([]string, [][]span) {
+	lines, spans, _ := m.ownedLinesOf(w)
+	return lines, spans
+}
+
+// ownedLinesOf is richLinesOf plus, for every line, the key of the message
+// drawn on it ("" for a notice).
+func (m *Model) ownedLinesOf(w *win) ([]string, [][]span, []string) {
 	o := lineOpts{width: m.width, nameOf: m.nameOf, nameW: m.nameWidth(), showChat: w.chatID == "", phase: m.phaseOpt(), hover: m.hover, cache: m.rcache}
 	var msgs []domain.Message
+	notes := w.notes
 	switch {
 	case w.chatID != "":
 		msgs = domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})
 	case m.feed:
 		msgs = m.liveMsgs()
+	default:
+		notes = withoutChatNotes(notes)
 	}
-	return renderRich(msgs, w.notes, o)
+	return renderOwned(msgs, notes, o)
 }
 
 // liveMsgs are the messages that arrived during this session, every chat,
@@ -2921,6 +2967,7 @@ func (m *Model) View() string {
 	bodySpans := make([][]span, h) // one entry per content row
 	listY, listLook := -1, ""      // the content row the list cursor is on, and its chosen button
 	m.modeInfo = ""
+	m.react.onScreen = nil // only the window view shows messages a poll asks about
 
 	switch m.mode {
 	case modeList:
@@ -2987,25 +3034,28 @@ func (m *Model) View() string {
 		m.modeInfo = fmt.Sprintf("history of %s: %d of %d messages; %s search, Esc returns",
 			m.winName(m.cur), len(hits), len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})), m.vimTypeTo())
 	default:
-		lines, sp := m.richLines()
+		lines, sp, owners := m.ownedLinesOf(w)
 		m.lastLines = len(lines)
 		if w.revealing { // start-up: each line arrives at the bottom and pushes the rest up
 			w.revealTotal = len(lines)
 			if w.revealed >= len(lines) {
 				w.revealing = false
 			} else {
-				lines, sp = lines[:w.revealed], sp[:w.revealed]
+				lines, sp, owners = lines[:w.revealed], sp[:w.revealed], owners[:w.revealed]
 				w.scroll = 0
 			}
 		}
 		body, w.scroll = window(lines, h, w.scroll)
 		bodySpans, _ = window(sp, h, w.scroll)
+		shown, _ := window(owners, h, w.scroll)
 		if w.scroll > 0 && h > 1 { // not at the bottom: a short centred marker
 			marker := fmt.Sprintf("vvv %d more vvv", w.scroll)
 			pad := max((m.width-lipgloss.Width(marker))/2, 0)
 			body[h-1] = actStyle.Render(fitLine(strings.Repeat(" ", pad)+marker, m.width))
 			bodySpans[h-1] = []span{{pad, pad + lipgloss.Width(marker), spanEnd, ""}}
+			shown[h-1] = ""
 		}
+		m.react.onScreen = shown
 	}
 
 	rows := make([]string, 0, len(body)+3+len(input))
@@ -3225,7 +3275,7 @@ func (m *Model) rule(label string) string {
 
 // helpNotes is what /help prints before the command reference: how the
 // client is used beyond its commands (themes, the mouse, selection,
-// windows). One logical line each, wrapped when drawn.
+// windows, reactions). One logical line each, wrapped when drawn.
 const helpNotes = `Mouse, themes and windows
 Themes: /theme lists the colour schemes, /theme <name> switches (kept).
 Clickable text is bright and underlined; a running light plays over the one under the mouse pointer. /fx turns the light on or off (kept).
@@ -3233,6 +3283,7 @@ Drag with the left button to select text; on release it is copied to the clipboa
 Double click copies the word under the pointer, triple click the row; on a link or a name the first click acts and the next ones only select. Shift-click extends the selection where the terminal passes Shift on; most Linux terminals keep Shift-drag (Option on macOS) for their own selection, as does /mouse off.
 Mouse: click a chat name or nick in window 0 to open its window, a tag in the window bar to focus it, a row in /list or /win to open it, a row of /settings to set its next value, a link or a [photo] / [file] token to open it with the system; the wheel scrolls.
 Window 0 is the server window: every chat interleaved, plus notices (/feed off: the notices only); it stays at 0 and cannot be closed. /move N puts this window at N.
+Reactions show after a message as [emoji count ...], yours highlighted; window 0 says when someone adds one (with /feed on). The messages on screen are asked about every 20 seconds.
 A window opens for a chat when it gets a message or has unread ones; [Act: 1,2] in the status line lists windows with unread messages.
 People are @name, groups and channels are #name.`
 

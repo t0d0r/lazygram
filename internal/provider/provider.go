@@ -5,6 +5,7 @@ package provider
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"lazygram/internal/domain"
@@ -22,14 +23,38 @@ type TypingSource interface {
 	Typing() <-chan domain.Typing
 }
 
-// ChangeSource is implemented by a service that reports edits and
-// deletions as they happen. Changes returns the feed; the service closes
-// it when it shuts down; a nil feed reports nothing. A change may be
-// dropped when the reader is behind: the next fetch of the chat's history
-// brings the cache up to date anyway.
+// ChangeSource is implemented by a service that reports edits, deletions
+// and reactions as they happen. Changes returns the feed; the service
+// closes it when it shuts down; a nil feed reports nothing. A change may
+// be dropped when the reader is behind: the next fetch of the chat's
+// history brings the cache up to date anyway.
 type ChangeSource interface {
 	Changes() <-chan domain.Change
 }
+
+// ReactionPoller is implemented by a service whose reactions to other
+// people's messages must be asked for: Telegram pushes reactions only for
+// the account's own messages and asks apps to poll the messages on screen
+// every 15 to 30 seconds. PollReactions asks for the reactions of the
+// given messages of one chat and returns one domain.Reacted change per
+// message it learned about, to be applied like those of the change feed;
+// a message the service leaves out of its answer has no reactions. It
+// returns ErrNotPollable when the chat cannot be polled (the caller skips
+// it for the session) and a *WaitError when the service asked for a pause.
+type ReactionPoller interface {
+	PollReactions(ctx context.Context, chatID string, ids []string) ([]domain.Change, error)
+}
+
+// ErrNotPollable says a chat's reactions cannot be asked for (Telegram: a
+// private or invalid channel, or message ids it does not take).
+var ErrNotPollable = errors.New("reactions cannot be polled in this chat")
+
+// WaitError says the service asked lazygram to wait (Telegram's
+// FLOOD_WAIT) before it polls again; nothing is polled until Wait has
+// passed.
+type WaitError struct{ Wait time.Duration }
+
+func (e *WaitError) Error() string { return fmt.Sprintf("the service asks to wait %s", e.Wait) }
 
 // ErrMembersHidden says a chat does not show its member list to this
 // account: a broadcast channel, whose subscribers only admins see, or a

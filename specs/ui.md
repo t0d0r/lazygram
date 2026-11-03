@@ -22,7 +22,8 @@ completion, and an activity indicator.
 - Window 0 is the server window: the messages of every chat that arrive
   during this session (everything a sync brings, and what a window's
   fetch brings that is dated after the start), interleaved by time (none
-  with `/feed off`, see below), plus client notices (`-!-`): start-up, chat counts, windows opened or closed,
+  with `/feed off`, see below), the reactions someone adds to any
+  message (see Reactions; none with `/feed off` either), plus client notices (`-!-`): start-up, chat counts, windows opened or closed,
   and every error (sync, history, send, press, fetch, open), whatever
   window was current; errors also show in the status line. It opens with a figlet banner (font banner3
   where the window is at least its 76 columns wide, chunky below that,
@@ -81,7 +82,8 @@ completion, and an activity indicator.
   arrives while connected.
   `/feed off` (kept in the state store under `feed`; absent or
   unreadable means on) keeps the chat messages out of window 0, from
-  every chat (people, groups and channels alike): it shows only its
+  every chat (people, groups and channels alike), and with them the
+  notices of reactions (see Reactions): it shows only its
   notices (the banner and tagline, the start notices and hints, `/help`
   and `/keys`, errors, windows opened and closed and every other `-!-`
   line). Nothing is dropped: the messages are still recorded as this
@@ -436,7 +438,8 @@ style, and empty lines inside a message are dropped. Notices: `HH:MM -!- text`. 
 whose text starts with `* ` is an action line (`/me`) and renders as
 `HH:MM * sender text`. Long lines
 wrap as described above; a long line that starts with spaces keeps that
-indent on every piece. The `/help` and `/keys` references have a layout
+indent on every piece. A message with reactions ends with their counts,
+`[E 3 F 1]` (see Reactions). The `/help` and `/keys` references have a layout
 of their own (see `/help` under Modes). A dim separator marks a change of local day.
 Chat and sender colors derive from a hash so they are stable. Sender, text,
 titles and notices are stripped of control characters before rendering.
@@ -497,8 +500,8 @@ narrows them (see Vim mode); with vim off they are as described here.
 `/help` and F1 focus the server window (window 0) and print there, as
 plain lines (no time stamp or marker; command lines start after two
 spaces), one logical line every 28 ms like a terminal on a slow serial
-line, first the notes on themes, the mouse, selection and windows (under
-the heading `Mouse, themes and windows`), then the command reference
+line, first the notes on themes, the mouse, selection, windows and
+reactions (under the heading `Mouse, themes and windows`), then the command reference
 (under `Commands`), last, so that when printing ends the commands are
 what the window shows (the window follows the newest line) and the
 notes are one scroll up; there is no separate help view. The command
@@ -544,7 +547,7 @@ last, as the table does in `/keys`.
 
 | command                       | action                                               |
 |-------------------------------|------------------------------------------------------|
-| `/help`, `/?`                 | focus the server window and print the notes on the mouse, themes and windows there, then the command reference; it ends by naming `/keys` |
+| `/help`, `/?`                 | focus the server window and print the notes on the mouse, themes, windows and reactions there, then the command reference; it ends by naming `/keys` |
 | `/keys`, `/shortcuts`         | focus the server window and print the key table there |
 | `/redraw`, `/clear`           | drop the window's notices, help text, pictures and banner; the messages stay; a slow print still queued for it is dropped |
 | `/quit`, `/q`                 | leave                                                |
@@ -577,7 +580,7 @@ last, as the table does in `/keys`.
 | `/read-receipts [on\|off]`, `/receipts` | read receipts to the service: off by default (kept); on reports a chat read when its window with unread messages is focused; no argument shows the setting (see Read receipts) |
 | `/mark-as-read`               | one read receipt for this window's chat, now, whatever `/read-receipts` says; an error in the server window and for a chat without a known message |
 | `/autojoin [on\|off]`         | at start open a window for every chat with unread messages: on by default, kept; no argument shows the setting (see Windows) |
-| `/feed [on\|off]`             | window 0 shows every chat's messages as they arrive (on, the default) or only its notices (off); kept; no argument shows the setting (see Windows) |
+| `/feed [on\|off]`             | window 0 shows every chat's messages as they arrive and the reactions someone adds (on, the default) or only its notices (off); kept; no argument shows the setting (see Windows, Reactions) |
 | `/vim [on\|off]`              | vi keys: Normal and Insert modes on the input, in the lists and the pager; off by default, kept, takes effect at once; no argument shows the setting (see Vim mode) |
 | `/names`                      | show chats by nick (`@alias`) or by name (`@Title`), kept |
 | `/settings [text]`, `/set`, `/options` | focus the server window and open the menu of every kept setting there; Enter or Right sets the selected one's next value, Left its previous; text narrows the rows (see Settings menu) |
@@ -741,6 +744,135 @@ Decision: the polled history only sees new messages, so without the
 update stream an edit never arrived and a deleted message stayed
 readable in the cache; a message deleted for everyone should not
 outlive the deletion in lazygram.
+
+## Reactions
+
+Reactions (`Message.Reactions`, specs/providers.md) show after a
+message's text in every window: chat windows, window 0 and the `/search`
+pager alike. Two spaces, then `[`, each reaction as its emoji, a space
+and its count, the reactions separated by single spaces in the
+service's order, then `]`: `<ada> fixed it  [E 3 F 1]`, where E is,
+say, the thumbs-up emoji and F the heart, drawn as the service sends
+them. They follow the caption of an attachment
+(`[photo] the view  [E 3]`) and the last line of the text, before any
+button line. A
+reaction the account sent too (`Mine`) is drawn in the highlight style
+(reverse and bold, as a search hit); the others are plain. All
+custom-emoji reactions of a message show as one `*` with their sum, a
+paid reaction (a Telegram Star) as the star emoji (specs/providers.md).
+An emoji from the service is stripped of control characters and cut to
+its first character (a whole emoji sequence; `?` when nothing visible is
+left), so it can neither style the screen nor take more than one place.
+An emoji and its count stay together on a row: what does not fit the
+last row of the text continues on rows of its own, indented like the
+text's continuation rows. Selection and copy read the screen as drawn.
+The render cache keys a message on its reactions, so a count that
+changed is never drawn stale.
+
+Changes reach lazygram two ways and are applied by the same code
+(`applyChange`, `Store.React`): the change feed, on which Telegram
+pushes a message's reactions only for the account's own messages, and
+polls. The cache and every window show the new counts at once; the text
+and everything else stay. A sync, a window's first fetch, `/last` and a
+heal bring a message's reactions too, through `Store.Refresh`.
+
+Polls (`provider.ReactionPoller`): every 20 seconds
+(`reactionPollEvery`; Telegram asks apps for every 15 to 30 seconds),
+while the background syncs run, lazygram asks the service about the
+messages on screen in the focused window that others sent. On screen
+means the rows of the window view as last drawn: not a list, the pager
+or the settings menu over it; not the row under the scrolled-up marker
+nor the rows still to roll in at start; a notice row is not the message
+above it; window 0 with `/feed off` shows no messages. The account's own
+messages are left out: Telegram pushes those. A chat window asks about
+all of its messages on screen in one call; window 0 asks about those of
+one chat per tick, the chats on screen taken in turn (in the order of
+their ids, the one after the chat asked last). At most one call per
+tick: a tick while a poll is on its way makes none, then or later; a
+tick while a sync runs polls when the sync ends, since on Telegram both
+need the one client. No two calls go out less than 15 seconds apart
+(`reactionPollGap`, Telegram's lower bound): the tick after a poll that
+a long sync held back makes none when it comes sooner, and is not made
+up for. Nothing is asked when nothing is on screen. A chat
+the service refuses (`provider.ErrNotPollable`) is not asked again this
+session; when the service asks for a pause (`*provider.WaitError`,
+Telegram's FLOOD_WAIT) nothing is polled until it has passed; other
+errors are ignored. Nothing is printed about a poll, in the window or
+the status line. Decision: only the messages on screen are polled, as
+Telegram asks apps to, so a busy account costs one small call per 20
+seconds however many chats it has; the rest of the cache catches up
+when its window is fetched.
+
+Notices: when a message's reactions change and someone other than the
+account added one compared with what lazygram knew of that message (a
+count of the others' reactions rose, the account's whole share taken
+out by `Reaction.Own()`: one for `Mine`, its Stars for a paid reaction,
+each of its custom emoji for `*`; or a new emoji came), window 0 says
+so in a `-!-` notice that starts with the chat's tag, the chat named as
+`/names` shows chats:
+
+- When the change names who reacted and lazygram has not seen them
+  react with that emoji to that message this session:
+  `#dev: @grace reacted E to ada "first words"`. At most as many per
+  emoji as its count rose, in the service's order (Telegram lists the
+  newest first); several in one notice:
+  `#dev: @grace reacted E, @alan reacted F to ada "first words"`. A
+  reactor is named as `/names` shows their chat when lazygram lists it,
+  else as `@` and the name the service gave; reactors the service gives
+  no id are told apart by that name; the account itself is never named.
+- Otherwise (a broadcast channel, whose reactors are anonymous, or
+  nobody new named) the whole current set:
+  `#news: E 13 F 4 on wire "first words"`.
+- The account's own message: `to your "first words"`, `on your "first
+  words"`.
+- A message the cache does not hold: `to a message`, `on a message`; a
+  pushed change about one, which Telegram sends for the account's own
+  messages, says `to your message`, `on your message`. Such a message is
+  compared with its last report this session.
+
+The author is the sender as message lines show it. "first words" are
+the start of the text (the attachment token when there is no text), on
+one line, stripped of control characters, cut at a word to about 30
+columns with `...`.
+
+Never told: the first time lazygram learns a message's reactions this
+session, a removal or a lowered count, a change identical to what is
+known, and the account's own reaction. A message's reactions are
+learned from the service when a sync or a fetch brings it (a new
+message, a cached copy that changed, and a cached copy that came back
+the same, since the service has just said what its reactions are; the
+cached history loaded at start does not count), from an edit the
+service reports, and from any reported change. A sync, a window's
+first fetch, `/last`, a heal and a new message with reactions update
+the counts and say nothing; a reaction a poll then finds added to any
+message they brought is told. A poll's
+first report on a message not learned this session (one cached in an
+earlier session and on screen, not fetched since) is applied silently;
+a push is compared with the cache whatever was learned. The notices are
+chat activity: with `/feed off` window 0 does not show them, as it shows
+no chat messages, and since the setting is a filter applied when window
+0 is drawn, `/feed on` shows them again; the counts change either way.
+They open no window, count as no unread message, and change neither
+`Act` nor the status line; `/redraw` drops them like any notice. A
+window keeps its newest 500 notices of the chats' activity apart from
+its newest 500 other notices, so with `/feed off` the hidden ones never
+push out the notices window 0 shows, nor these the hidden ones. What
+lazygram remembers of who reacted and of the messages it does not hold
+lives in memory for the session, at most 20000 entries each, then
+starts over (which can name a reactor twice, never make a notice of a
+change that added nothing).
+
+Decision: a first sighting and a removal are silent, so opening a
+chat, a fetch or a heal never floods window 0 with reactions made while
+lazygram was off, or with every count a cache from before reactions
+lacked; window 0 tells what happens while lazygram watches. Decision:
+the notices follow `/feed` because they are chat activity, not the
+client's own notices. Decision: a reactor is named only when new, and
+no more of them than the count rose, because Telegram lists the recent
+reactors with every report, old ones included.
+
+Not yet: sending reactions (`/react`), the emoji behind a custom
+reaction (it needs a document fetch), and the list of who reacted.
 
 ## Editing and deleting
 
@@ -1705,6 +1837,8 @@ colour: only the active window is highlighted (reversed) and windows with
 new messages show in the activity colour as the indicator.
 A background sync runs every 5s (demo) or 10s (telegram) with a 90s
 budget (enough for a FLOOD_WAIT retry); polls skip while a sync runs.
+The reactions on screen are asked about every 20s, never beside a sync
+(see Reactions).
 
 ## Subcommands and flags
 

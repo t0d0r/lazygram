@@ -26,7 +26,50 @@ type Provider struct {
 	now   func() time.Time
 	sent  int
 	files map[string][]byte // attachments sent from here, by message id
+
+	start    time.Time
+	reacted  int                         // how many of later have been sent
+	reactors map[string][]domain.Reactor // who reacted while the demo ran, newest first, by message key
+	changes  chan domain.Change          // reactions to the account's own lines, pushed
 }
+
+// Reaction emoji the demo uses, as Telegram sends them.
+const (
+	thumbsUp = "\U0001F44D"
+	heart    = "\u2764"
+	fire     = "\U0001F525"
+	party    = "\U0001F389"
+	star     = "\u2b50" // a paid reaction
+)
+
+// startReactions are the reactions lines already carry, by the line's
+// text.
+var startReactions = map[string][]domain.Reaction{
+	"pushed a fix for the scrollback off-by-one": {{Emoji: thumbsUp, Count: 2}},
+	"release candidate tagged":                   {{Emoji: party, Count: 3}, {Emoji: thumbsUp, Count: 1, Mine: true}},
+	"the place looks like this today":            {{Emoji: heart, Count: 1, Mine: true}},
+	"Demo headline: IRC-style feeds are still popular with power users": {
+		{Emoji: fire, Count: 12}, {Emoji: heart, Count: 4}, {Emoji: domain.CustomReaction, Count: 2}, {Emoji: star, Count: 1}},
+}
+
+// reaction is one reaction sent while the demo runs.
+type reaction struct {
+	after time.Duration // after start
+	text  string        // the line it is sent to
+	who   string
+	emoji string
+}
+
+// later are the reactions sent while the demo runs, in time order: one to
+// the account's own line, which the service pushes on the change feed as
+// Telegram does, and one to someone else's, which only a poll finds.
+var later = []reaction{
+	{25 * time.Second, "no problem, ordering for you", "linus", thumbsUp},
+	{100 * time.Second, "tip: /win 2 switches windows, Tab completes names", "grace", thumbsUp},
+}
+
+// changeBuffer is how many pushed reactions wait for the reader.
+const changeBuffer = 16
 
 type line struct {
 	chat   int
@@ -85,11 +128,14 @@ var script = []line{
 }
 
 // New returns a demo provider anchored at the current time.
-func New() *Provider { return newAt(time.Now) }
+func New() *Provider { return NewAt(time.Now) }
 
-func newAt(now func() time.Time) *Provider {
+// NewAt returns a demo provider anchored at now(), whose clock it reads
+// from then on: the script and the reactions move with it.
+func NewAt(now func() time.Time) *Provider {
 	start := now().Truncate(time.Second)
-	p := &Provider{chats: chats, now: now, files: map[string][]byte{}}
+	p := &Provider{chats: chats, now: now, files: map[string][]byte{}, start: start,
+		reactors: map[string][]domain.Reactor{}, changes: make(chan domain.Change, changeBuffer)}
 	for i, l := range script {
 		m := domain.Message{
 			ID:     fmt.Sprintf("%d", i+1),
@@ -107,9 +153,88 @@ func newAt(now func() time.Time) *Provider {
 		if l.text == "the place looks like this today" {
 			m.Media = &domain.Media{Kind: "photo"}
 		}
+		m.Reactions = append([]domain.Reaction(nil), startReactions[l.text]...)
 		p.msgs = append(p.msgs, m)
 	}
 	return p
+}
+
+// Changes implements provider.ChangeSource: the reactions to the
+// account's own lines, pushed when they are sent. The feed never closes.
+func (p *Provider) Changes() <-chan domain.Change { return p.changes }
+
+// reactLocked sends the reactions of later whose time has come: each one
+// counts on its line (in a new slice, so copies already handed out stay as
+// they were) and is remembered with who sent it; one to the account's own
+// line is pushed on the change feed, dropped when the reader is behind.
+// The demo's clock moves when it is asked something, so Sync, Recent and
+// PollReactions call this first. p.mu is held.
+func (p *Provider) reactLocked(now time.Time) {
+	for p.reacted < len(later) && !p.start.Add(later[p.reacted].after).After(now) {
+		r := later[p.reacted]
+		p.reacted++
+		for i := range p.msgs {
+			m := &p.msgs[i]
+			if m.Text != r.text {
+				continue
+			}
+			m.Reactions = withReaction(m.Reactions, r.emoji)
+			who := domain.Reactor{Who: r.who, ID: "demo-user-" + r.who, Emoji: r.emoji, At: p.start.Add(r.after)}
+			p.reactors[m.Key()] = append([]domain.Reactor{who}, p.reactors[m.Key()]...)
+			if m.Sender == "me" {
+				select {
+				case p.changes <- p.reactedLocked(*m, true):
+				default:
+				}
+			}
+			break
+		}
+	}
+}
+
+// reactedLocked is the Reacted change that reports m's reactions as they
+// are now. p.mu is held.
+func (p *Provider) reactedLocked(m domain.Message, own bool) domain.Change {
+	return domain.Change{
+		Kind: domain.Reacted, ChatID: m.ChatID,
+		Msg:      domain.Message{ID: m.ID, ChatID: m.ChatID, Reactions: append([]domain.Reaction(nil), m.Reactions...)},
+		Reactors: append([]domain.Reactor(nil), p.reactors[m.Key()]...),
+		Own:      own,
+	}
+}
+
+// withReaction returns rs with one more emoji, counted on its entry or
+// added at the end, without touching rs.
+func withReaction(rs []domain.Reaction, emoji string) []domain.Reaction {
+	out := append([]domain.Reaction(nil), rs...)
+	for i := range out {
+		if out[i].Emoji == emoji {
+			out[i].Count++
+			return out
+		}
+	}
+	return append(out, domain.Reaction{Emoji: emoji, Count: 1})
+}
+
+// PollReactions implements provider.ReactionPoller: one Reacted change per
+// asked-for line that is already there, with its reactions as they are now
+// and who reacted while the demo ran.
+func (p *Provider) PollReactions(_ context.Context, chatID string, ids []string) ([]domain.Change, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := p.now()
+	p.reactLocked(now)
+	asked := map[string]bool{}
+	for _, id := range ids {
+		asked[id] = true
+	}
+	var out []domain.Change
+	for _, m := range p.msgs {
+		if m.ChatID == chatID && asked[m.ID] && !m.Time.After(now) {
+			out = append(out, p.reactedLocked(m, false))
+		}
+	}
+	return out, nil
 }
 
 // Name implements provider.Provider.
@@ -127,6 +252,7 @@ func (p *Provider) Sync(_ context.Context, since time.Time) ([]domain.Message, e
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := p.now()
+	p.reactLocked(now)
 	var out []domain.Message
 	for _, m := range p.msgs {
 		if m.Time.After(now) || !m.Time.After(since) {
@@ -142,6 +268,7 @@ func (p *Provider) Recent(_ context.Context, chatID string, limit int) ([]domain
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := p.now()
+	p.reactLocked(now)
 	var out []domain.Message
 	for _, m := range p.msgs {
 		if m.ChatID == chatID && !m.Time.After(now) {

@@ -26,14 +26,30 @@ index messages(time), messages(chat_key, time)
 In clear: the service's message ids, timestamps (Unix nanoseconds), keyed
 hashes of chat ids, and row counts. That reveals activity volume and timing
 per (unidentifiable) chat and nothing else. Everything identifying (text,
-sender, the sender's id and username, chat id, alias, title, kind, unread)
-is inside `data`. The sender's id and username are optional JSON fields
-(`sender_id`, `sender_nick`), so rows cached before they existed still
-decode. `Add` never overwrites a stored row. The cache follows the
-service in four ways (specs/ui.md, Edits and deletions):
+sender, the sender's id and username, reactions, chat id, alias, title,
+kind, unread) is inside `data`. The sender's id and username and the
+reactions are optional JSON fields (`sender_id`, `sender_nick`,
+`reactions`: a list of `emoji`, `count`, `mine`, `mine_count`), so rows
+cached before they existed still decode. `MineUnknown` is never stored. `Add` never
+overwrites a stored row. The cache follows the service in five ways
+(specs/ui.md, Edits and deletions, Reactions):
 - `Refresh(msgs)`: a fetched copy of a stored message that differs
-  (edited text, media or buttons, the sender's name, id or username)
-  replaces the stored row whole; the replacements are returned.
+  (edited text, media or buttons, the sender's name, id or username, the
+  reactions) replaces the stored row whole; the replacements are
+  returned. A heal fetch of a window's newest page therefore refreshes
+  its reactions too.
+- Reactions have no edit time: of two copies the later edit wins, but
+  the copy fetched or reported later always carries the current
+  reactions, even when its text is unchanged and even when the stored
+  copy's edit is newer (then that copy keeps its text, media and buttons
+  and takes only the reactions). A copy whose reactions came without the
+  account's own (`MineUnknown`, Telegram's `min`) keeps the stored `Mine`
+  flag and `MineCount` of each emoji.
+- `React(msg)`: reactions the service reported (a `domain.Reacted`
+  change) replace the stored message's reactions only; its text, sender,
+  times and everything else stay. It returns the stored copy before and
+  as stored now (the same when nothing changed, and then nothing is
+  written), or not ok when the message is not stored.
 - `Prune(chatID, page, before)`: a page of a chat's newest history has
   no gaps, so a stored message of that chat whose numeric id lies
   strictly between the page's lowest and highest and that the page lacks
@@ -43,9 +59,10 @@ service in four ways (specs/ui.md, Edits and deletions):
   attachment. Non-numeric ids and anything below the page are never
   pruned (a short page may only have skipped service messages).
 - `Edit(msg)`: an edit the service reported live replaces the stored
-  message's text, media, buttons and edit time; sender, time and ids
-  stay. An edit older than the stored copy's changes nothing, and
-  `Refresh` skips a fetched copy older than the stored edit. When the
+  message's text, media, buttons, edit time and reactions; sender, time
+  and ids stay. An edit older than the stored copy's changes nothing but
+  the reactions, and `Refresh` takes nothing but the reactions from a
+  fetched copy older than the stored edit. When the
   attachment was swapped or removed (`Media.ID`, kind or name differ),
   the vault's copy is dropped.
 - Deletions (`Delete`, `DeleteMessages`, `Prune`) are remembered for the
@@ -57,8 +74,8 @@ service in four ways (specs/ui.md, Edits and deletions):
 - `DeleteMessages(chatIDs, ids)`: deletes those ids from any of those
   chats (a deletion reported without a chat, for the chats sharing one id
   space), with their attachments.
-A stored row that does not open or decode is skipped by `Refresh` and
-`Edit`, so one bad row never fails the fetch around it. `Delete` (an own
+A stored row that does not open or decode is skipped by `Refresh`,
+`Edit` and `React`, so one bad row never fails the fetch around it. `Delete` (an own
 `/delete`) removes the attachment from the vault as well.
 
 ## Keys
@@ -94,7 +111,7 @@ client.
 ## API
 
 `Open(path, secret)`, `Add(msgs) (fresh, err)` (insert-or-ignore by chat
-and id), `Refresh`, `Prune`, `Edit`, `DeleteMessages`, `Delete`, `Replace`, `Messages(chatID, limit)` (newest limit, oldest first; empty chat
+and id), `Refresh`, `Prune`, `Edit`, `React`, `DeleteMessages`, `Delete`, `Replace`, `Messages(chatID, limit)` (newest limit, oldest first; empty chat
 id means all; limit <= 0 means all), `Count`, `Latest`, `Chats`,
 `SetChats` (replaces the list, keeping order), `SetState`/`State` (small
 sealed JSON documents such as the window layout, in `meta`), `Close`.
