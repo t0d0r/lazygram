@@ -1184,10 +1184,36 @@ func (m *Model) setErr(s string)  { m.status, m.isErr = sanitize(s, false), true
 
 // note appends a client line to a window.
 func (m *Model) note(w *win, text string) {
-	w.notes = append(w.notes, note{at: time.Now(), text: text})
-	if len(w.notes) > maxNotes {
-		w.notes = w.notes[len(w.notes)-maxNotes:]
+	w.addNote(note{at: time.Now(), text: text})
+}
+
+// addNote appends n to the window's notices and keeps the newest maxNotes
+// of its kind. The chats' activity told in window 0 (n.chat), which /feed
+// off hides, is capped apart from the rest, so notices that are not shown
+// never push out those that are.
+func (w *win) addNote(n note) {
+	w.notes = append(w.notes, n)
+	if len(w.notes) <= maxNotes {
+		return
 	}
+	over := -maxNotes
+	for _, x := range w.notes {
+		if x.chat == n.chat {
+			over++
+		}
+	}
+	if over <= 0 {
+		return
+	}
+	kept := make([]note, 0, len(w.notes)-over)
+	for _, x := range w.notes {
+		if x.chat == n.chat && over > 0 {
+			over-- // the oldest of its kind
+			continue
+		}
+		kept = append(kept, x)
+	}
+	w.notes = kept
 }
 
 // absorb merges messages into the in-memory mirror.
@@ -2328,10 +2354,7 @@ func (m *Model) slowStep() {
 		m.slow, m.slowWin = nil, nil
 		return
 	}
-	m.slowWin.notes = append(m.slowWin.notes, note{at: time.Now(), text: m.slow[0], plain: true})
-	if len(m.slowWin.notes) > maxNotes {
-		m.slowWin.notes = m.slowWin.notes[len(m.slowWin.notes)-maxNotes:]
-	}
+	m.slowWin.addNote(note{at: time.Now(), text: m.slow[0], plain: true})
 	m.slowWin.scroll = 0
 	m.slow = m.slow[1:]
 	if len(m.slow) == 0 {

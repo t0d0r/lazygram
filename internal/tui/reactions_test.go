@@ -532,6 +532,41 @@ func TestReactionNoticesFollowTheFeed(t *testing.T) {
 	}
 }
 
+// TestHiddenReactionNoticesKeepWindow0sOwn: window 0 keeps maxNotes
+// notices of the chats' activity apart from its own, so with /feed off
+// the hidden reaction notices never push out the notices it shows, nor
+// its own notices the hidden ones.
+func TestHiddenReactionNoticesKeepWindow0sOwn(t *testing.T) {
+	m := setupProvider(t, newReactingFake())
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 60})
+	enter(m, "/feed off")
+	m.fail("sync: a marker error")
+	own := len(m.wins[0].notes)
+	for n := range maxNotes + 1 { // c1/1 is learned by the start sync: each rise is told
+		polled(m, reactedChange("c1", "1", false, rs(rx(upEmoji, n+1))))
+	}
+	if got := len(chatNotices(m)); got != maxNotes {
+		t.Fatalf("%d notices of the chats' activity kept, want %d", got, maxNotes)
+	}
+	if got := len(m.wins[0].notes) - maxNotes; got != own {
+		t.Fatalf("%d of window 0's own notices left, want %d", got, own)
+	}
+	if v := ansi.Strip(body(m)); !strings.Contains(v, "error: sync: a marker error") {
+		t.Fatalf("window 0 still shows its own notices:\n%s", v)
+	}
+	for i := range maxNotes + 1 {
+		m.note(m.wins[0], "note "+strconv.Itoa(i))
+	}
+	if got, all := len(chatNotices(m)), len(m.wins[0].notes); got != maxNotes || all != 2*maxNotes {
+		t.Fatalf("%d of %d notices are the chats' activity, want %d of %d", got, all, maxNotes, 2*maxNotes)
+	}
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 600})
+	enter(m, "/feed on")
+	if v := ansi.Strip(body(m)); !strings.Contains(v, `-!- #dev: `+upEmoji+` `+strconv.Itoa(maxNotes+1)+` on ada "first dev line"`) {
+		t.Fatalf("/feed on shows the newest:\n%s", v)
+	}
+}
+
 // TestReactionNoticesOpenNoWindowCountNothing: a notice is no message: no
 // window opens, nothing counts as unread or activity, no status.
 func TestReactionNoticesOpenNoWindowCountNothing(t *testing.T) {

@@ -771,7 +771,10 @@ chat activity: with `/feed off` window 0 does not show them, as it shows
 no chat messages, and since the setting is a filter applied when window
 0 is drawn, `/feed on` shows them again; the counts change either way.
 They open no window, count as no unread message, and change neither
-`Act` nor the status line; `/redraw` drops them like any notice. What
+`Act` nor the status line; `/redraw` drops them like any notice. A
+window keeps its newest 500 notices of the chats' activity apart from
+its newest 500 other notices, so with `/feed off` the hidden ones never
+push out the notices window 0 shows, nor these the hidden ones. What
 lazygram remembers of who reacted and of the messages it does not hold
 lives in memory for the session, at most 20000 entries each, then
 starts over (which can name a reactor twice, never make a notice of a

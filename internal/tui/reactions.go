@@ -228,9 +228,7 @@ func (m *Model) reacted(c domain.Change) {
 	}
 	if c.Own || r.learned[key] {
 		if text := m.reactionNotice(c, before, now, held); text != "" {
-			w := m.wins[0]
-			m.note(w, text)
-			w.notes[len(w.notes)-1].chat = true // chat activity: /feed off hides it
+			m.wins[0].addNote(note{at: time.Now(), text: text, chat: true}) // chat activity: /feed off hides it
 		}
 	}
 	r.learned[key] = true
