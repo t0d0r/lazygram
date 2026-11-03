@@ -561,6 +561,11 @@ func TestVimKillBufferPutAndUndo(t *testing.T) {
 	if curText(m) != "one |two" {
 		t.Fatalf("u after dd: %q", curText(m))
 	}
+	normalAt(m, "cat", 0)
+	typ(m, "rbu")
+	if curText(m) != "|cat" {
+		t.Fatalf("u after r: %q", curText(m))
+	}
 	// Nothing to undo, nothing to put: nothing happens.
 	normalAt(m, "abc", 1)
 	typ(m, "upP")
@@ -659,6 +664,49 @@ func TestVimCtrlKeysInsertAndNormal(t *testing.T) {
 	press(m, tea.KeyCtrlK)
 	if len(m.input) != 0 {
 		t.Fatalf("Normal: Ctrl-K deletes to the line end: %q", string(m.input))
+	}
+}
+
+// keptState is what a key that keeps its meaning can change: a keyState,
+// the notes of the current window (Ctrl-L drops them) and whether the key
+// gave a command (Ctrl-R syncs, F1 prints the help).
+type keptState struct {
+	keyState
+	Notes int
+	Cmd   bool
+}
+
+func keptStateOf(m *Model, cmd tea.Cmd) keptState {
+	return keptState{stateOf(m), len(m.wins[m.cur].notes), cmd != nil}
+}
+
+// TestVimNormalKeepsTheOtherKeys: the keys Normal mode does not take do
+// in Normal what they do with vim off, compared on two models from an
+// empty input and from "one two" with the cursor on the t, and Normal
+// stays.
+func TestVimNormalKeepsTheOtherKeys(t *testing.T) {
+	for _, text := range []string{"", "one two"} {
+		for _, keys := range [][]tea.KeyType{
+			{tea.KeyTab}, {tea.KeyShiftTab}, {tea.KeyPgUp}, {tea.KeyPgUp, tea.KeyPgDown}, {tea.KeyHome}, {tea.KeyHome, tea.KeyEnd},
+			{tea.KeyCtrlA}, {tea.KeyCtrlW}, {tea.KeyLeft}, {tea.KeyRight}, {tea.KeyBackspace}, {tea.KeyDelete},
+			{tea.KeyCtrlL}, {tea.KeyCtrlR}, {tea.KeyF1},
+		} {
+			off, on := chatOn(t, 100, 30), vimChat(t)
+			normalAt(on, text, min(4, len(text)))
+			off.input, off.curBack = []rune(text), on.curBack
+			off.history, off.histIdx = slices.Clone(on.history), on.histIdx // /vim on is one more line
+			for _, m := range []*Model{off, on} {
+				m.note(m.wins[m.cur], "a note")
+				m.status, m.isErr = "", false
+			}
+			var a, b keptState
+			for _, k := range keys {
+				a, b = keptStateOf(off, press(off, k)), keptStateOf(on, press(on, k))
+			}
+			if !reflect.DeepEqual(a, b) || !on.vi.normal {
+				t.Errorf("%q, %v: with vim off %+v\nin Normal  %+v (normal=%v)", text, keys, a, b, on.vi.normal)
+			}
+		}
 	}
 }
 
@@ -1012,12 +1060,13 @@ func TestVimInsertIsTodaysKeys(t *testing.T) {
 	for _, kt := range []tea.KeyType{tea.KeyCtrlA, tea.KeyCtrlE, tea.KeyCtrlD, tea.KeyCtrlY, tea.KeyCtrlF, tea.KeyCtrlB,
 		tea.KeyLeft, tea.KeyLeft, tea.KeyRight, tea.KeyBackspace, tea.KeyDelete, tea.KeyCtrlW, tea.KeyEnter,
 		tea.KeyUp, tea.KeyDown, tea.KeyUp, tea.KeyHome, tea.KeyPgDown, tea.KeyEnd, tea.KeyPgUp, tea.KeyCtrlK, tea.KeyCtrlU,
-		tea.KeyTab, tea.KeyTab, tea.KeyShiftTab, tea.KeyCtrlN, tea.KeyCtrlP} {
+		tea.KeyTab, tea.KeyTab, tea.KeyShiftTab, tea.KeyCtrlN, tea.KeyCtrlP, tea.KeyCtrlL, tea.KeyCtrlR} {
 		keys = append(keys, tea.KeyMsg{Type: kt})
 	}
 	keys = append(keys, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("one\ntwo"), Paste: true},
 		tea.KeyMsg{Type: tea.KeyUp}, tea.KeyMsg{Type: tea.KeyUp}, tea.KeyMsg{Type: tea.KeyDown},
-		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("xyz")}, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}, Alt: true})
+		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("xyz")}, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'w'}, Alt: true},
+		tea.KeyMsg{Type: tea.KeyF1}, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'q'}})
 	for i, k := range keys {
 		off.Update(k)
 		on.Update(k)
@@ -1319,6 +1368,31 @@ func TestVimListEnterQAndEsc(t *testing.T) {
 	}
 }
 
+// TestVimListQAndSlashEverywhere: in every list and the pager q closes
+// without arming a digit, and / enters Insert, where typing narrows the
+// filter (the pager: edits the search).
+func TestVimListQAndSlashEverywhere(t *testing.T) {
+	m := vimOn(t, newFake())
+	for _, line := range []string{"/list", "/win", "/settings", "/search"} {
+		enter(m, line)
+		open := m.mode
+		typ(m, "q")
+		if m.mode != modeWin || m.escPending || len(m.input) != 0 || m.cur != 0 || m.vi.normal {
+			t.Fatalf("%s: q closes, no digit armed: mode=%v esc=%v %q", line, m.mode, m.escPending, string(m.input))
+		}
+		enter(m, line)
+		typ(m, "/x")
+		if m.mode != open || m.listNormal() || string(m.input) != "x" {
+			t.Fatalf("%s: / then x: Insert, x typed: mode=%v normal=%v %q", line, m.mode, m.listNormal(), string(m.input))
+		}
+		press(m, tea.KeyEsc)
+		press(m, tea.KeyEsc)
+		if m.mode != modeWin {
+			t.Fatalf("%s: Esc Esc closes: %v", line, m.mode)
+		}
+	}
+}
+
 // TestVimListInsertNarrows: / and i enter the list's Insert mode, where
 // typing narrows the filter; Esc returns to Normal with the filter kept,
 // and a digit right after that Esc closes the list, dropping the filter,
@@ -1615,6 +1689,58 @@ func TestVimOffListsKeepTodaysKeys(t *testing.T) {
 	}
 }
 
+// settingValues is every setting's value but vim's, name=value, in the
+// menu's order: what Enter and Left or Right in the menu change.
+func settingValues(m *Model) string {
+	var out []string
+	for _, s := range settings {
+		if s.key != vimKey {
+			out = append(out, s.name+"="+s.value(m))
+		}
+	}
+	return strings.Join(out, " ")
+}
+
+// TestVimListNormalKeepsTheOtherKeys: in a list's or the pager's Normal
+// mode the keys it does not take do what they do with vim off, compared
+// key for key on two models, and Normal stays while it is open.
+func TestVimListNormalKeepsTheOtherKeys(t *testing.T) {
+	for _, line := range []string{"/list e", "/list al", "/win", "/settings", "/search line"} {
+		for _, keys := range [][]tea.KeyType{
+			{tea.KeyPgUp}, {tea.KeyPgUp, tea.KeyPgDown}, {tea.KeyHome}, {tea.KeyHome, tea.KeyEnd},
+			{tea.KeyTab}, {tea.KeyShiftTab}, {tea.KeyLeft}, {tea.KeyRight}, {tea.KeyDown}, {tea.KeyDown, tea.KeyUp},
+			{tea.KeyBackspace}, {tea.KeyCtrlW}, {tea.KeyCtrlA}, {tea.KeyCtrlA, tea.KeyCtrlE}, {tea.KeyCtrlA, tea.KeyDelete},
+			{tea.KeyCtrlA, tea.KeyCtrlK}, {tea.KeyEnter}, {tea.KeyCtrlL}, {tea.KeyCtrlR}, {tea.KeyF1},
+		} {
+			off, on := setup(t, newFake()), vimOn(t, newFake())
+			off.history, off.histIdx = slices.Clone(on.history), on.histIdx // /vim on is one more line
+			for _, m := range []*Model{off, on} {
+				enter(m, line)
+				m.note(m.wins[m.cur], "a note")
+				m.status, m.isErr, m.escPending = "", false, false
+			}
+			if !on.listNormal() {
+				t.Fatalf("%s opens in Normal", line)
+			}
+			type state struct {
+				listState
+				Notes    int
+				Cmd      bool
+				Settings string
+			}
+			var a, b state
+			for _, k := range keys {
+				ca, cb := press(off, k), press(on, k)
+				a = state{listStateOf(off), len(off.wins[off.cur].notes), ca != nil, settingValues(off)}
+				b = state{listStateOf(on), len(on.wins[on.cur].notes), cb != nil, settingValues(on)}
+			}
+			if !reflect.DeepEqual(a, b) || (on.mode != modeWin && !on.listNormal()) {
+				t.Errorf("%s, %v: with vim off %+v\nin Normal  %+v", line, keys, a, b)
+			}
+		}
+	}
+}
+
 // TestVimListInsertIsTodaysKeys: in a list's or the pager's Insert mode
 // every key but Esc does exactly what it does with vim off, compared key
 // for key on two models.
@@ -1629,24 +1755,29 @@ func TestVimListInsertIsTodaysKeys(t *testing.T) {
 	}
 	for _, kt := range []tea.KeyType{tea.KeyLeft, tea.KeyRight, tea.KeyRight, tea.KeyDown, tea.KeyDown, tea.KeyUp,
 		tea.KeyCtrlA, tea.KeyCtrlE, tea.KeyBackspace, tea.KeyDelete, tea.KeyCtrlW, tea.KeyCtrlD, tea.KeyCtrlY,
-		tea.KeyCtrlF, tea.KeyCtrlB, tea.KeyPgUp, tea.KeyPgDown, tea.KeyHome, tea.KeyEnd, tea.KeyTab, tea.KeyCtrlK} {
+		tea.KeyCtrlF, tea.KeyCtrlB, tea.KeyPgUp, tea.KeyPgDown, tea.KeyHome, tea.KeyEnd, tea.KeyTab, tea.KeyCtrlK,
+		tea.KeyCtrlL, tea.KeyCtrlX, tea.KeyShiftTab} {
 		keys = append(keys, tea.KeyMsg{Type: kt})
 	}
 	keys = append(keys, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}, Alt: true}, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("ab")},
 		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c\nd"), Paste: true}, tea.KeyMsg{Type: tea.KeyCtrlU},
 		tea.KeyMsg{Type: tea.KeyTab}, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}}, tea.KeyMsg{Type: tea.KeyEnter})
-	for _, line := range []string{"/list", "/win", "/settings", "/search"} {
-		off, on := setup(t, busyFake()), setup(t, busyFake())
-		on.setVim("on")
-		enter(off, line)
-		enter(on, line)
-		typ(on, "i")
-		off.status, on.status = "", ""
-		for i, k := range keys {
-			off.Update(k)
-			on.Update(k)
-			if a, b := listStateOf(off), listStateOf(on); !reflect.DeepEqual(a, b) || (on.mode != modeWin && !on.vi.listIns) {
-				t.Fatalf("%s key %d %v: with vim off %+v\nin Insert %+v", line, i, k, a, b)
+	// F1 closes the list (the help goes to window 0), so it has a run of
+	// its own, after one key that types.
+	for _, keys := range [][]tea.KeyMsg{keys, {{Type: tea.KeyRunes, Runes: []rune{'e'}}, {Type: tea.KeyF1}}} {
+		for _, line := range []string{"/list", "/win", "/settings", "/search"} {
+			off, on := setup(t, busyFake()), setup(t, busyFake())
+			on.setVim("on")
+			enter(off, line)
+			enter(on, line)
+			typ(on, "i")
+			off.status, on.status = "", ""
+			for i, k := range keys {
+				off.Update(k)
+				on.Update(k)
+				if a, b := listStateOf(off), listStateOf(on); !reflect.DeepEqual(a, b) || (on.mode != modeWin && !on.vi.listIns) {
+					t.Fatalf("%s key %d %v: with vim off %+v\nin Insert %+v", line, i, k, a, b)
+				}
 			}
 		}
 	}
