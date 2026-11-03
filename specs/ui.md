@@ -38,7 +38,7 @@ completion, and an activity indicator.
   `/theme`, `/autojoin`, `/read-receipts`, `/whois`, `/send`,
   `/open <link>`, Ctrl-L, `/about`, `/mark-as-read`, `/names`, `/last`,
   Up and Down, `/mouse`, PgUp and PgDn, `/move` and `/close`, `/feed
-  off`, `/settings`), so the pair
+  off`, `/settings`, `/vim on`), so the pair
   differs between starts (`Options.Rand` draws them, `rand.IntN` unless
   a test injects one). They are printed once per start, in window 0 only,
   as part of its start-up screen, so they roll in with it when window 0
@@ -426,6 +426,11 @@ titles and notices are stripped of control characters before rendering.
 - settings (`/settings [text]`): window 0's menu of every kept setting,
   a list without a button strip whose Enter, Right and Left change the
   selected setting in place (see Settings menu).
+
+With `/vim on` the lists and the pager open in a Normal mode of their
+own, where letters move and act and `/` or `i` start the typing that
+narrows them (see Vim mode); with vim off they are as described here.
+
 `/help` and F1 focus the server window (window 0) and print there, as
 plain lines (no time stamp or marker; command lines start after two
 spaces), one logical line every 28 ms like a terminal on a slow serial
@@ -509,6 +514,7 @@ last, as the table does in `/keys`.
 | `/mark-as-read`               | one read receipt for this window's chat, now, whatever `/read-receipts` says; an error in the server window and for a chat without a known message |
 | `/autojoin [on\|off]`         | at start open a window for every chat with unread messages: on by default, kept; no argument shows the setting (see Windows) |
 | `/feed [on\|off]`             | window 0 shows every chat's messages as they arrive (on, the default) or only its notices (off); kept; no argument shows the setting (see Windows) |
+| `/vim [on\|off]`              | vi keys: Normal and Insert modes on the input, in the lists and the pager; off by default, kept, takes effect at once; no argument shows the setting (see Vim mode) |
 | `/names`                      | show chats by nick (`@alias`) or by name (`@Title`), kept |
 | `/settings [text]`, `/set`, `/options` | focus the server window and open the menu of every kept setting there; Enter or Right sets the selected one's next value, Left its previous; text narrows the rows (see Settings menu) |
 
@@ -537,8 +543,9 @@ focuses the server window, as `/help` and `/keys` do, and opens the menu
 there. While it is open the window bar and the status line show
 `[0:server]` as the current window, window 0's content area shows the
 menu's rows, the prompt is `settings > ` and the rule explains the keys:
-`settings (8): Up/Down, Enter or Right next value, Left previous, Esc
-closes, type to narrow` (the number counts the rows shown).
+`settings (9): Up/Down, Enter or Right next value, Left previous, Esc
+closes, type to narrow` (the number counts the rows shown; with `/vim
+on`, in the menu's Normal mode, it ends `/ to narrow`, see Vim mode).
 
 One row per kept setting, in this order: the setting's name (its command
 without the slash), its current value and a short description, in
@@ -555,6 +562,7 @@ row can take, so a change never moves the descriptions.
 | `fx`            | `on`, `off`                              | `/fx`            |
 | `mouse`         | `on`, `off`                              | `/mouse`         |
 | `clip`          | `auto`, `osc52`, `tool`, `off`           | `/clip`          |
+| `vim`           | `on`, `off`                              | `/vim`           |
 
 The selected row is highlighted like the other lists; there is no
 button strip. Up and Down (and the mouse wheel) select. Enter or Right
@@ -578,6 +586,11 @@ way, and the rows follow, since they always show the current values.
 Typed text narrows the rows to those whose name or description holds it,
 ignoring case and in either script, as the `/list` filter narrows (see
 Search in either script); `/settings <text>` opens the menu narrowed.
+With `/vim on` the menu opens in Normal mode: `j` and `k` select, `h`
+and `l` are Left and Right, and typing narrows only after `/` or `i`
+(see Vim mode). Decision: the `vim` row's description is `vi keys: Esc
+for Normal, i for Insert`, without the letters `mo`, so typing `mo`
+still narrows the menu to `mouse` and `clip` alone.
 The filter stays after a change. With no row left the menu says `no
 setting matches`, and Enter, Left and Right change nothing. Tab in the
 filter completes the names of the settings; on an empty prompt Tab and
@@ -1248,13 +1261,258 @@ match the plain comparison would find.
 | Ctrl-R               | sync now                                          |
 | Ctrl-L               | redraw: drop this window's notices, help text and pictures, as `/redraw` |
 | F1                   | focus the server window and print the command reference there (as `/help`) |
-| Esc                  | close the list, the settings menu or the pager, else clear the input |
+| Esc                  | close the list, the settings menu or the pager, else clear the input; with `/vim on` a window's Esc enters Normal mode and keeps the input, and in a list or the pager Esc closes from Normal mode and returns to Normal from Insert (see Vim mode) |
 | Ctrl-X               | send the typed text to this window's chat, as typed: a line starting with `/` is sent, not run (Enter runs commands); with "Enter sends" on it still sends such a line |
 | Ctrl-U / Ctrl-W      | clear the input / delete the word before the cursor (and the spaces after it) |
 | Left / Right         | move the cursor one rune; never past the ends; in `/list` or `/win`: pick the row's action button (open or focus, read, unread, close), Enter runs it; in the settings menu: the selected setting's previous / next value |
 | Ctrl-A / Ctrl-E      | cursor to the start / end of the cursor's line (between line breaks) |
 | Delete / Ctrl-K      | delete the rune under the cursor (at the end of the input Delete acts as Backspace, since some terminals send it for that key) / to the end of the cursor's line |
 | Ctrl-C               | quit                                              |
+
+This is the key map with vim off, the default. `/vim on` adds vi's
+Normal and Insert modes on top of it, for the input, the lists and the
+pager; its keys and what they leave alone are under Vim mode. `/keys`
+prints this table with two entries for vim mode before Ctrl-C.
+
+## Vim mode
+
+`/vim on` gives lazygram vi's two modes, Normal and Insert, the way
+WeeChat's vimode script gives them to an IRC client: on the input line
+of every window and, each with modes of its own, in the lists (`/list`,
+`/win`, `/settings`) and the `/search` pager. In Normal mode typed keys
+are commands that move, edit and scroll; in Insert mode they type, as
+always. The code is `internal/tui/vim.go`; `key` hands each key to it
+first and again after Ctrl-C and the window keys.
+
+### The setting
+
+- `/vim` with no argument shows the setting: `vim off: the input keys
+  are the usual ones; /vim on for vi keys`, or `vim on: Esc enters
+  Normal mode (vi keys), i returns to typing; /vim off`.
+- `/vim on` and `/vim off` (ignoring case) set it, keep it in the state
+  store under `vim` and take effect at once; they say `vim on: typing
+  works as before; Esc enters Normal mode (vi keys), i returns to
+  typing` and `vim off: the input keys are the usual ones`. Absent or
+  unreadable in the store means off. Any other argument is the error
+  `/vim takes on or off` and changes nothing, the store included.
+- Tab completes `on` and `off` after `/vim`. `/help` lists `/vim
+  [on|off]`; `/keys` prints two entries for it before Ctrl-C (`vim:
+  Normal mode`, `vim: lists, pager`), short enough that the whole key
+  table still shows on a 100x40 screen; a start hint offers `/vim on`.
+- It is the `vim` row of the settings menu (`on`, `off`; see Settings
+  menu), whose change runs `/vim`'s own code. Turned on from the open
+  menu, the menu is in its Normal mode at once; turned off, it has the
+  usual keys again.
+- Every start and every `/vim on` begins in Insert, with no list in its
+  Insert mode, nothing waiting for a second key, nothing in the kill
+  buffer and nothing to undo, so typing works at once. `/vim off` drops
+  all of it.
+
+Decision: off by default, so nothing changes for anyone who does not ask
+for it: with vim off every key everywhere does what the rest of this
+spec says, exactly as before vim mode. Decision: it starts in Insert
+because a chat client is mostly typing.
+
+### Insert and Normal on the input
+
+- Insert is the usual key map exactly, except Esc. Esc enters Normal:
+  the text stays (with vim on Esc never clears the input) and the cursor
+  steps back onto the character before it, within its line (at a line's
+  start it stays), as vi does. It still arms Esc then a digit, and so
+  does Esc in Normal: a digit as the very next key switches to that
+  window, the input kept as it is.
+- In Normal no typed key ever inserts text. A typed character (Space
+  included) is a command from the table below; one not in it does
+  nothing, and so does the second key of a pair not in it, and an Alt
+  chord (Alt-0 .. Alt-9 still switch windows). Keys typed fast or held
+  that the terminal delivers as one run are read one at a time, so `dw`
+  typed quickly still deletes a word. The keys that keep their meaning
+  (below) still change the input as in Insert: a paste goes in at the
+  cursor, line breaks and all, Tab completes (taking the character
+  under the cursor, below), Backspace and Delete delete.
+- These keep their meaning in Normal: Enter, Ctrl-X and Ctrl-X twice,
+  Tab and Shift-Tab, the arrows, Backspace, Delete, Home and End, PgUp
+  and PgDn, F1, Ctrl-A, Ctrl-K, Ctrl-W, Ctrl-L, Ctrl-R, Ctrl-N, Ctrl-P,
+  Ctrl-C, Alt-N, Alt-Left and Alt-Right, the mouse and a paste. Sending,
+  running a command and switching windows leave the mode as it was.
+- Tab with text in the input and Ctrl-W work in Normal as `a`, the key
+  and Esc do in vi: on the text before the cursor up to and including
+  the character under it, where Insert's cursor stood before Esc
+  stepped back onto that character. The cursor then steps back one
+  character within its line, as Esc does. So `hi @ali`, Esc, Tab
+  completes `@alice` as in Insert (not `@al`, leaving the `i` behind),
+  a second Tab lists the candidates as a second Tab in Insert does, and
+  `hello world`, Esc, Ctrl-W leaves `hello ` with the cursor on its
+  blank. On an empty line there is no character to take; Tab on an
+  empty prompt walks the windows as always.
+- With "Enter sends" on, the line break a single Ctrl-X adds goes in
+  after the character under the cursor in Normal: where Insert's cursor
+  stood before Esc stepped back onto that character. So `hello`, Esc,
+  Ctrl-X gives `hello` and a new empty line, as in Insert, and Ctrl-X
+  twice leaves `hello` as typed, toggling "Enter sends" (see Sending).
+- In Normal the cursor stands on a character, as vi's does: never past
+  the end of a line that has text (an empty line has none). A key that
+  left it past the end (a recalled line, a delete at the end, `l`, `$`,
+  an arrow) puts it back on the line's last character.
+- A character is what the input area draws as one (a grapheme cluster:
+  an emoji sequence, a letter with combining marks; see Input area); a
+  line is the text between line breaks, not a row of a wrap.
+- The terminal reader has no Esc delay: an Esc and the key after it
+  that reach lazygram in one read arrive as one Alt chord, which Insert
+  types as it does with vim off (Insert is the vim-off key map); typed
+  at human speed they arrive apart.
+
+| keys            | Normal mode on the input                                  |
+|-----------------|-----------------------------------------------------------|
+| `h` / `l`       | one character left / right, within the line; `l` stops on its last character |
+| `w`             | the start of the next word, across line breaks; with no word after, the end of the input: its last character, or its last line when that line is empty (an empty line is a stop, as in vi) |
+| `b`             | the start of this word, or of the one before it, across line breaks |
+| `e`             | the end of this word, or of the next one when on its end already, across line breaks; with no word after, the end of the input, as `w` |
+| `0`             | the start of the line; right after Esc it is window 0 instead (Esc then a digit) |
+| `^`             | the line's first character that is not blank              |
+| `$`             | the line's last character                                 |
+| `j` / `k`       | exactly Down / Up: the input row below / above, keeping the column (see Input area), and through the input history from the last / first row |
+| `i` / `a`       | Insert at the cursor / after the character under it       |
+| `I` / `A`       | Insert at the line's first character that is not blank / at its end |
+| `o` / `O`       | a new line below / above the cursor's line (a line break, as Enter adds one in a chat window), Insert on it |
+| `x` / `X`       | delete the character under / before the cursor, within the line |
+| `D`             | delete from the cursor to the line's end                  |
+| `dd`            | delete the whole input, every line of it                  |
+| `dw`            | delete from the cursor to the next word's start, never past the line's end |
+| `cw`            | on a word, delete to its end, keeping the blank after it (vi's `cw`); on blanks, to the next word's start; then Insert |
+| `cc`, `S`       | delete the whole input, then Insert                       |
+| `C`             | delete to the line's end, then Insert                     |
+| `r` and a character | replace the character under the cursor with a printable one; on an empty line nothing; any other key cancels and does what it does (Esc arms the digit) |
+| `u`             | undo the last change; a second `u` puts it back (vi's one-level undo) |
+| `p` / `P`       | put the kill buffer after / before the character under the cursor, the cursor on its last character |
+| Ctrl-E / Ctrl-Y | scroll the window one line toward the newest / the oldest |
+| Ctrl-D / Ctrl-U | scroll half a page (half the content height) toward the newest / the oldest |
+| Ctrl-F / Ctrl-B | scroll a page, as PgDn / PgUp                             |
+| `gg` / `G`      | the oldest loaded line, as Home / the newest line (scroll 0), as End |
+| `gt` / `gT`     | the next / previous window, as Tab / Shift-Tab on an empty prompt, also with text typed (the input stays) |
+| `:`             | Insert with `/` in an empty input: a command line         |
+| `/`, `?`        | Insert with `/search ` in an empty input: a search, in the pager |
+
+- With text in the input `:`, `/` and `?` only enter Insert at its end;
+  nothing is overwritten.
+- Words are vi's: a run of letters, digits and `_` (in any script), or a
+  run of other characters that are not blank; blanks and line breaks
+  separate them.
+- `d`, `c`, `g` and `r` wait for a second key. Any key ends the wait: a
+  typed character that makes no pair in the table does nothing (neither
+  key acts), and any other key does what it does in Normal (Esc arms Esc
+  then a digit, Ctrl-N switches windows, Down moves).
+- The kill buffer: every delete (`x`, `X`, `D`, `dd`, `dw`, `cw`, `cc`,
+  `S`, `C`) puts what it took into one kill buffer, in place of what it
+  held; a delete that takes nothing leaves it. It is lazygram's own: in
+  memory only, never the system clipboard, an OSC 52 sequence or a
+  file; it lasts until the next `/vim on` or `/vim off` (either one
+  empties it, see The setting) or the end of the session.
+- Undo: every change made in Normal (the deletes, `r`, `p`, `P`, `u`)
+  and every entry into Insert from Normal (`i a I A o O`, `cw`, `cc`,
+  `S`, `C`, `:`, `/`, `?`) keeps the input as it was before it, one
+  snapshot; `u` puts that input back, so what an Insert typed goes with
+  the key that began it, and keeps the input it replaced for the next
+  `u`.
+- Ctrl-E, Ctrl-Y, Ctrl-D, Ctrl-U, Ctrl-F and Ctrl-B scroll only in
+  Normal. In Insert they are what they are with vim off: Ctrl-U clears
+  the input, Ctrl-E goes to the line's end, the others do nothing.
+- The status line shows `NORMAL` right after the window tag, in a
+  segment styled as the others, while the input is in Normal mode (and
+  while a list or the pager is in its Normal mode, below); nothing in
+  Insert or with vim off.
+
+Decision: Esc then a digit keeps switching windows so the Alt-less habit
+survives; that is why `0` right after Esc means window 0 and the line
+start otherwise. Decision: Normal never inserts text, so a stray key in
+Normal cannot type or send anything; a paste still goes in, since no
+paste happens by a stray key. Decision: Enter does in both modes what it
+does with vim off (sends with "Enter sends" on, else adds a line or runs
+a command), and so does Ctrl-X, so sending never depends on the mode.
+Decision: in Normal Ctrl-X's line break goes after the character under
+the cursor, not before it, because Esc stepped back onto the last typed
+character: before it, the break would split that character off, and the
+double Ctrl-X, which removes only a break at the end, would leave the
+draft changed. Decision: Tab and Ctrl-W take the character under the
+cursor for the same reason: on the text before it they completed or
+deleted a word without its last character and left that character
+behind (`hi @alice i`, `hello d`), so the same keys did one thing
+before Esc and another after it; vi's insert-mode completion and
+Ctrl-W, reached with `a`, take it too. Decision: the cursor stands on
+a character, Esc steps back, `$` and `l` stop on the last character,
+`^` and `I` skip leading blanks, `cw` keeps the blank after the word
+and a second `u` puts the change back: these
+follow vi, so a vi habit does here what it does in vi. Decision: `dd`,
+`cc` and `S` clear the whole input, a draft of several lines too, rather
+than vi's one line: the input is one message, and Ctrl-U clears it whole
+as well. Decision: one level of everything (no counts, no registers, one
+kill buffer, one undo) keeps the mode small; a chat line is short.
+
+### Lists and the pager
+
+With vim on `/list`, `/win`, `/settings` and the `/search` pager have
+Normal and Insert modes of their own. Each opens in Normal, and so does
+every list or pager a command opens; while one is open the input's own
+mode is kept, and it is in force again when the list closes.
+
+| keys            | Normal mode in a list or the pager                        |
+|-----------------|-----------------------------------------------------------|
+| `j` / `k`       | exactly Down / Up: the next / previous row; the pager scrolls a line toward the newest / the oldest |
+| `gg` / `G`      | the first / last row; the pager goes to the top (the oldest line, as Home) / the bottom (as End) |
+| `h` / `l`       | exactly Left / Right: the row's action button in `/list` and `/win`, the selected setting's previous / next value in `/settings`, the search's cursor in the pager |
+| Ctrl-D / Ctrl-U | half a page (half the content height) down / up, within the rows; the pager scrolls half a page toward the newest / the oldest |
+| Enter           | as with vim off: open, focus, run the chosen button, set the next value, run a command |
+| `q`             | close, as Esc does with vim off, but arm no digit         |
+| Esc             | close, as with vim off, arming Esc then a digit           |
+| `i`             | Insert at the cursor of the filter (the pager: the search) |
+| `/`             | Insert at the end of the filter                           |
+| `:`             | Insert with `/` in an empty filter, to type a command as in a window; with a filter, Insert at its end |
+
+- Any other typed character, Space included, does nothing in Normal,
+  nor does `g` followed by a typed character other than `g` (neither
+  key acts), nor an Alt chord (Alt-0 .. Alt-9 still switch windows).
+  Every other key is what it is with vim off: the arrows, Tab and
+  Shift-Tab, Backspace, Ctrl-W, Ctrl-K, PgUp and PgDn, the mouse wheel
+  and clicks, a paste (it narrows, as typing does with vim off), Ctrl-N
+  and Ctrl-P, Alt-N.
+- In Insert typing narrows the filter (in the pager it edits the
+  search) and every key is what it is with vim off, Ctrl-U clearing the
+  filter included, except Esc: it returns to Normal with the filter
+  kept, and a second Esc closes. That first Esc arms Esc then a digit: a
+  digit next closes the list, its filter dropped, and switches windows
+  (`no window N` when there is none, the list closed all the same), as
+  Esc then a digit does with vim off.
+- Enter on a line starting with `/` (a command, run or refused) leaves
+  Insert: the list it opens, or the one it leaves open, is in Normal. A
+  row opened from Insert closes the list; the next list opens in Normal.
+- Runs of keys are read one at a time in Normal, as on the input.
+- The rule says `/ to narrow` (in the pager `/ to search`) in place of
+  `type to narrow` (`type to search`) while in Normal, and the status
+  line shows `NORMAL`; in Insert both read as with vim off.
+
+Decision: lists open in Normal because in a list one mostly moves and
+picks; typing narrows only after `/` or `i`, so letters are free to
+move, and the rule and the `NORMAL` tag say which mode is on, since a
+letter that narrowed before now moves. Decision: `q` closes without
+arming the digit because it is not Esc: in Insert a digit typed right
+after it must type. Decision: `:` starts a command line in a list as in
+a window, so a command is typed the same way everywhere. Decision: the
+input keeps its mode while a list is open, so closing a list returns to
+the input as it was left.
+
+### What vim mode never changes
+
+- With vim off, every key in a window, a list and the pager does
+  exactly what the rest of this spec says; tests compare a table of keys
+  and every printable character with the effect they had before vim
+  mode.
+- With vim on, in both modes: Enter, Ctrl-X, Tab and Shift-Tab, Alt-N,
+  Esc then a digit, Ctrl-N and Ctrl-P, Ctrl-C, PgUp and PgDn, the mouse
+  and a paste. On the input in Normal, Tab, Ctrl-W and Ctrl-X's line
+  break take the character under the cursor first (above).
+- Insert, on the input and in a list or the pager, is the vim-off key
+  map except Esc; tests compare the two key for key.
+- Nothing typed in Normal reaches the input, the filter or the service.
 
 ## Input history
 
@@ -1280,7 +1538,8 @@ under it, or one past the text at the end of a line); typing inserts at
 the cursor, Backspace deletes before it, Delete under it. A line longer
 than a row of the input area wraps onto the next row (see Input area).
 History recall, Esc, Enter and the list and pager prompts put the cursor
-at the end.
+at the end (with `/vim on` Esc keeps the text and steps the cursor back
+onto a character instead, see Vim mode).
 
 On an empty prompt in a window, and in the settings menu (the switch
 closes it), Tab switches to the next window and Shift-Tab to the
@@ -1310,7 +1569,8 @@ In a group or channel window the `/whois` argument and the words of
 message text complete that chat's `@nicks` instead (see Members).
 Otherwise a command's own first-argument words, whatever its spelling
 (`/win list`, `/list --show-deleted`, `/autojoin on|off`,
-`/feed on|off`, `/read-receipts on|off`, `/clip auto|osc52|tool|off`),
+`/feed on|off`, `/read-receipts on|off`, `/vim on|off`,
+`/clip auto|osc52|tool|off`),
 and chat names
 where the command takes a chat: the first argument of `/win`, `/msg`,
 `/whois` and `/list`, every word of `/me` and `/edit` text, and every
@@ -1351,8 +1611,10 @@ and the status line shows `[scrolled up N lines]` in the same colour.
 
 ## Status line
 
-`time  provider  [N:name]  Act: ...  ada is typing  M msgs  sync state  scrolled up K lines`
-(brackets only around the window tag; two spaces between segments; the
+`time  provider  [N:name]  NORMAL  Act: ...  ada is typing  M msgs  sync state  scrolled up K lines`
+(brackets only around the window tag; `NORMAL` only with `/vim on`
+while the input, a list or the pager is in Normal mode, see Vim mode;
+two spaces between segments; the
 message and the send hint live on the rule above; the typing segment
 appears only while someone is composing, see Typing indicators). The
 sync segment keeps a fixed width and colour (`synced: HH:MM:SS` or
