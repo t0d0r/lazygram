@@ -84,10 +84,13 @@ func chatNotices(m *Model) []string {
 	return out
 }
 
-// tickReactions delivers one reaction tick and, when it starts a poll,
-// runs the poll and hands its answer to the model; the next tick it arms
-// is not waited for. It reports whether a poll was made.
+// tickReactions delivers the next reaction tick, reactionPollEvery later
+// on the model's clock than the last, and, when it starts a poll, runs
+// the poll and hands its answer to the model; the next tick it arms is
+// not waited for. It reports whether a poll was made.
 func tickReactions(m *Model) bool {
+	now := m.now
+	m.now = func() time.Time { return now().Add(reactionPollEvery) }
 	_, cmd := m.Update(reactTickMsg{})
 	if !m.react.running {
 		return false // only the next tick, which would wait
@@ -760,11 +763,10 @@ func TestPollWaitsWhenTheServiceAsks(t *testing.T) {
 	if !tickReactions(m) {
 		t.Fatal("the first poll is made")
 	}
-	step(59 * time.Second)
+	step(39 * time.Second) // the next tick then comes 59 s into the wait
 	if tickReactions(m) || len(f.polls) != 1 {
 		t.Fatalf("no poll while the service waits: %q", f.polls)
 	}
-	step(2 * time.Second)
 	f.pollErr = errors.New("connection reset")
 	if !tickReactions(m) || len(f.polls) != 2 {
 		t.Fatalf("polls again once it has passed: %q", f.polls)
@@ -778,16 +780,19 @@ func TestPollWaitsWhenTheServiceAsks(t *testing.T) {
 }
 
 // TestPollWaitsForSyncsAndPolls: a tick during a sync polls when the sync
-// ends; a tick while a poll is on its way makes none, then or later.
+// ends, and the next tick makes none when it comes less than Telegram's
+// 15 s after; a tick while a poll is on its way makes none, then or later.
 func TestPollWaitsForSyncsAndPolls(t *testing.T) {
 	f := newReactingFake()
 	m := setupProvider(t, f)
+	step := pinClock(m)
 	body(m)
 	m.syncing = true
 	m.Update(reactTickMsg{})
 	if m.react.running || len(f.polls) != 0 {
 		t.Fatal("no poll beside a sync")
 	}
+	step(19 * time.Second) // a long sync
 	_, cmd := m.Update(syncedMsg{at: time.Now()})
 	if !m.react.running || cmd == nil {
 		t.Fatal("the poll follows the sync's end")
@@ -799,7 +804,16 @@ func TestPollWaitsForSyncsAndPolls(t *testing.T) {
 	if _, cmd := m.Update(syncedMsg{at: time.Now()}); cmd != nil {
 		t.Fatal("one call per tick: the next sync's end makes none")
 	}
+	step(time.Second) // the next tick, 20 s after the one the sync held back
+	if _, cmd := m.Update(reactTickMsg{}); pollIn(cmd) || m.react.running || len(f.polls) != 1 {
+		t.Fatalf("no poll a second after the last: %q", f.polls)
+	}
+	step(14 * time.Second) // 15 s after the last poll
+	if _, cmd := m.Update(syncedMsg{at: time.Now()}); cmd != nil {
+		t.Fatal("nor is that tick made up for later")
+	}
 	// A poll on its way takes the next tick.
+	step(6 * time.Second) // the tick after, 21 s after the last poll
 	_, cmd = m.Update(reactTickMsg{})
 	poll := cmd().(tea.BatchMsg)[1]
 	_, cmd = m.Update(reactTickMsg{})
@@ -887,6 +901,9 @@ func TestReactionPollsRunWithTheSyncs(t *testing.T) {
 	}
 	if reactionPollEvery < 15*time.Second || reactionPollEvery > 30*time.Second {
 		t.Errorf("every %s", reactionPollEvery)
+	}
+	if reactionPollGap < 15*time.Second || reactionPollGap >= reactionPollEvery {
+		t.Errorf("at least %s apart, which the ticks keep", reactionPollGap)
 	}
 }
 

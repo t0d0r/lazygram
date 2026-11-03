@@ -713,7 +713,10 @@ one chat per tick, the chats on screen taken in turn (in the order of
 their ids, the one after the chat asked last). At most one call per
 tick: a tick while a poll is on its way makes none, then or later; a
 tick while a sync runs polls when the sync ends, since on Telegram both
-need the one client. Nothing is asked when nothing is on screen. A chat
+need the one client. No two calls go out less than 15 seconds apart
+(`reactionPollGap`, Telegram's lower bound): the tick after a poll that
+a long sync held back makes none when it comes sooner, and is not made
+up for. Nothing is asked when nothing is on screen. A chat
 the service refuses (`provider.ErrNotPollable`) is not asked again this
 session; when the service asks for a pause (`*provider.WaitError`,
 Telegram's FLOOD_WAIT) nothing is polled until it has passed; other

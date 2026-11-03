@@ -32,6 +32,10 @@ const (
 	// reactionPollEvery is how often the messages on screen are asked
 	// about; Telegram asks apps to poll every 15 to 30 seconds.
 	reactionPollEvery = 20 * time.Second
+	// reactionPollGap is the least time between two polls, Telegram's 15
+	// seconds: a poll a sync held back goes out when the sync ends, and the
+	// next tick may come soon after it.
+	reactionPollGap = 15 * time.Second
 	// maxReactors bounds what is remembered of who reacted; past it the
 	// memory starts over, which can name a reactor twice but never makes
 	// a notice of a change that added nothing.
@@ -53,6 +57,7 @@ type (
 type reactState struct {
 	due      bool                         // a tick came while a sync ran: the poll follows its end
 	running  bool                         // a poll is on its way
+	sent     time.Time                    // when the last poll went out
 	wait     time.Time                    // the service asked for a pause: no poll before
 	refused  map[string]bool              // chats the service will not be asked about, for the session
 	last     string                       // the chat window 0 polled last; the next one on screen follows
@@ -139,8 +144,9 @@ func (m *Model) reactUpdate(msg tea.Msg) (cmd tea.Cmd, handled bool) {
 // pollReactions asks the service about the reactions on screen when a
 // tick made a poll due (none does while a poll is on its way), unless a
 // sync runs (the poll follows its end; on Telegram both need the one
-// client) or the service asked for a pause. Nothing on screen, nothing
-// asked.
+// client), the service asked for a pause, or the last poll went out less
+// than reactionPollGap ago (one a long sync held back: that tick makes
+// none). Nothing on screen, nothing asked.
 func (m *Model) pollReactions() tea.Cmd {
 	r := &m.react
 	if !r.due || m.syncing {
@@ -148,14 +154,14 @@ func (m *Model) pollReactions() tea.Cmd {
 	}
 	r.due = false
 	p, ok := m.opt.Provider.(provider.ReactionPoller)
-	if !ok || m.now().Before(r.wait) {
+	if !ok || m.now().Before(r.wait) || m.now().Sub(r.sent) < reactionPollGap {
 		return nil
 	}
 	chatID, ids := m.pollTarget()
 	if len(ids) == 0 {
 		return nil
 	}
-	r.running = true
+	r.running, r.sent = true, m.now()
 	return func() tea.Msg {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
