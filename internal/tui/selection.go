@@ -35,8 +35,10 @@ type clickRun struct {
 // leftPress starts whatever a left-button press starts: a Shift-click
 // extends the last selection; a press continuing a multi-click selects
 // the word or the row; any other press is the start of a click or a
-// drag. The release finishes it (Model.mouse).
+// drag. Any press drops the kept highlight of the last one. The release
+// finishes it (Model.mouse).
 func (m *Model) leftPress(e tea.MouseMsg) {
+	m.dropKept()
 	if e.Shift && m.lastSel != nil {
 		s := m.lastSel.extendTo(e.X, e.Y)
 		m.sel = &s

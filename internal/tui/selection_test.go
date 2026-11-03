@@ -157,9 +157,8 @@ func TestDoubleClickCopiesTheWord(t *testing.T) {
 		t.Fatalf("status: %q", m.status)
 	}
 	copied(t, m, "this-word")
-	if strings.Contains(m.View(), "\x1b[7mthis-word") {
-		t.Fatal("no highlight after the release")
-	}
+	// The word stays highlighted after the release, as a drag does.
+	wantMarked(t, m.View(), "this-word")
 
 	// A double click on a blank cell has nothing to copy.
 	step(time.Second)
@@ -203,9 +202,10 @@ func TestTripleClickCopiesTheRow(t *testing.T) {
 		t.Fatalf("status: %q", m.status)
 	}
 	copied(t, m, want)
+	// The row stays highlighted after the release.
+	wantMarked(t, m.View(), m.plainRow(y))
 
 	// More presses in the same run keep selecting the row.
-	m.View()
 	step(150 * time.Millisecond)
 	mousePress(m, x, y, false)
 	if m.sel == nil || m.sel.unit != byRow {
@@ -393,13 +393,17 @@ func TestShiftClickExtendsTheSelection(t *testing.T) {
 		t.Fatalf("status: %q", m.status)
 	}
 	copied(t, m, "beta gamma")
-	// Another Shift-click moves the end from the same anchor, either way.
+	wantMarked(t, m.View(), "beta gamma") // the extension stays highlighted
+	// Another Shift-click moves the end from the same anchor, either way,
+	// and its result replaces the highlight.
 	step(time.Second)
 	shiftClick(m, x+21, y)
 	copied(t, m, "beta gamma delta")
+	wantMarked(t, m.View(), "beta gamma delta")
 	step(time.Second)
 	shiftClick(m, x, y)
 	copied(t, m, "alpha b")
+	wantMarked(t, m.View(), "alpha b")
 
 	// A drag's anchor is where it started; the pointer moving with the
 	// button down after a Shift press drags the end.
@@ -507,7 +511,8 @@ func TestShiftClickInsideAWordOrRowKeepsTheFarEnd(t *testing.T) {
 }
 
 // TestWordCopyDroppedWhenTheScreenChanged: a word whose row changed
-// between the second press and its release is not copied.
+// between the second press and its release is not copied, and nothing
+// stays highlighted: what is there now was never selected.
 func TestWordCopyDroppedWhenTheScreenChanged(t *testing.T) {
 	t.Setenv("TERM", "xterm-256color")
 	f := newFake()
@@ -527,5 +532,29 @@ func TestWordCopyDroppedWhenTheScreenChanged(t *testing.T) {
 	mouseRelease(m, x+12, y)
 	if m.clipSeq != "" || m.status != "nothing copied: the screen changed" {
 		t.Fatalf("copied from the new screen: %q %q", m.clipSeq, m.status)
+	}
+	wantMarked(t, m.View())
+	if m.kept != nil {
+		t.Fatalf("kept on the new screen: %+v", m.kept)
+	}
+
+	// The same with /clip off: nothing is said, and nothing is kept.
+	enter(m, "/clip off")
+	m.View()
+	x, y = rowOf(t, m, "alpha beta gamma delta")
+	step(time.Second)
+	multiClick(m, step, 1, x+12, y)
+	step(150 * time.Millisecond)
+	mousePress(m, x+12, y, false)
+	m.note(m.wins[m.cur], "something else arrived")
+	m.View()
+	status := m.status
+	mouseRelease(m, x+12, y)
+	if m.status != status {
+		t.Fatalf("clip off says nothing: %q", m.status)
+	}
+	wantMarked(t, m.View())
+	if m.kept != nil {
+		t.Fatalf("clip off: kept on the new screen: %+v", m.kept)
 	}
 }

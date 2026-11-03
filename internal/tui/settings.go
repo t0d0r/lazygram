@@ -200,6 +200,7 @@ func (m *Model) setMouse(on bool) tea.Cmd {
 		return tea.EnableMouseAllMotion
 	}
 	m.hover = ""
+	m.dropKept() // the terminal's own selection takes over
 	m.setInfo("mouse off: drag selects text; /mouse turns clicks back on")
 	return tea.DisableMouse
 }

@@ -735,7 +735,9 @@ where the button went down to the cell under the pointer, in reading
 order (the first row from the anchor to its end, whole rows between,
 the last row up to and including the pointer's cell), over any screen
 row including the status rows and the rows of the input area. While the button is
-down the selected cells show in reverse video. On release the text is
+down the selected cells show in reverse video, and they stay so after
+the release until the next press or until the text under them changes
+(see below). On release the text is
 put on the clipboard and the status says `copied N characters` (one
 row; `copied 1 character` for one) or `copied N lines`, naming the
 channels used; a press and release
@@ -757,9 +759,10 @@ first cell to its last character; not the whole wrapped message), and
 any further quick press on that cell keeps the row. A pause longer
 than 400 ms, a press on another cell, a drag or a Shift-click ends the
 multi-click, so the next press starts a new one. The word or row shows
-in reverse video while the button is down and is copied on release
-exactly as a drag's selection is (the same channels, `/clip` modes and
-status); moving the pointer before the release does not change it. A
+in reverse video while the button is down, is copied on release and
+stays highlighted after it exactly as a drag's selection does (the same
+channels, `/clip` modes and status); moving the pointer before the
+release does not change it. A
 double click on a blank cell says `nothing to copy`.
 
 A word is taken from what the screen shows, cell by cell: the longest
@@ -818,6 +821,46 @@ ignoring the rest after the screen changed keeps the clipboard from
 being overwritten with text that was not under the pointer when the
 gesture began.
 
+After the release the selection stays in reverse video, as a
+terminal's does: every selection that showed while the button was
+down (a drag that moved, a word, a row, a Shift extension) is kept, in
+every `/clip` mode (with `off` the highlight marks what was selected
+though nothing is copied), also when the release says `nothing to
+copy` or the clipboard tool reports an error. A plain click (press and
+release on one cell) leaves nothing highlighted. A word or row whose
+release says `nothing copied: the screen changed` leaves nothing
+highlighted either: what is there now was never selected. The kept
+highlight goes, and never comes back, when:
+
+- the next left-button press happens, anywhere and of any kind: a
+  click, the start of a drag, a press of a double or triple click, a
+  Shift-click. The new gesture's own selection shows while the button
+  is down, as above, and is kept in turn after its release; a
+  Shift-click still extends the last selection as described above.
+- a screen row it covers no longer reads, as plain text (styling
+  aside), as it did when it was copied: as the last frame before the
+  release showed it, which is what the copy read. Scrolling, a message
+  that moves the lines, switching windows, opening `/list` or
+  `/settings`, a list cursor that moves, typing into an input row it
+  covers and a new status message on the rule it covers all do this.
+  The copy's own `copied ...` status is such a change too, so a
+  selection that covers the rule is gone at the first frame after the
+  release. The rows are compared when the screen is drawn; scrolling
+  back to the same text does not bring the highlight back. The mouse
+  wheel does not remove it by itself, only through the scroll it
+  causes.
+- the terminal is resized, or mouse reporting is turned off (`/mouse`,
+  or the `mouse` row of the settings menu), since the terminal's own
+  selection takes over.
+
+Keeping the highlight changes nothing else: the base of a Shift-click
+(the last click, drag, word or row), the text copied, the status
+messages, the OSC 52 sequence and the multi-click timing are as
+described above. Decision: a terminal's selection stays after copying,
+so one sees what was copied; lazygram's selection is in screen cells
+and cannot follow the text, so it goes as soon as the text under it
+changes rather than mark text that was not copied.
+
 Two channels carry the text, and `/clip` chooses (the choice is kept):
 
 - `osc52`: the OSC 52 escape sequence, base64 payload, written into the
@@ -837,8 +880,9 @@ Two channels carry the text, and `/clip` chooses (the choice is kept):
   failure lands in the status as an error.
 - `auto` (default): both; whichever the environment honours wins.
 - `off`: dragging, double, triple and Shift clicks copy nothing (the
-  highlight still shows while the button is down); single clicks still
-  work, and the later presses of a double click still do not act.
+  highlight still shows while the button is down and is kept after the
+  release, as above); single clicks still work, and the later
+  presses of a double click still do not act.
 
 Shift-drag (Option on macOS) still reaches the terminal's own
 selection, as does `/mouse` off. Reason for the in-app selection: the
@@ -1112,9 +1156,9 @@ match the plain comparison would find.
 | Alt-0 .. Alt-9       | window 0 .. 9; Esc followed by the digit does the same (the typed input survives) |
 | Up / Down            | with several input rows: the row above / below, keeping the column (see Input area); on the first / last row: walk the input history (commands and sent lines); in a list they move, in the pager they scroll |
 | PgUp / PgDn          | scroll a page (the wheel scrolls three lines)     |
-| mouse drag           | select text; copied to the clipboard on release (see Mouse) |
-| double / triple click | select the word / the screen row under the pointer and copy it; on clickable text the first click acts, the next ones only select (see Mouse) |
-| Shift-click          | extend the last selection to the clicked cell and copy it (only where the terminal passes Shift through) |
+| mouse drag           | select text; copied to the clipboard on release, and it stays highlighted until the next press or until the text under it changes (see Mouse) |
+| double / triple click | select the word / the screen row under the pointer and copy it, kept highlighted as a drag's selection is; on clickable text the first click acts, the next ones only select (see Mouse) |
+| Shift-click          | extend the last selection to the clicked cell and copy it, kept highlighted as a drag's selection is (only where the terminal passes Shift through) |
 | Home / End           | oldest / newest                                   |
 | Ctrl-R               | sync now                                          |
 | Ctrl-L               | redraw: drop this window's notices, help text and pictures, as `/redraw` |

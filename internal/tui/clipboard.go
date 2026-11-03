@@ -21,7 +21,10 @@ import (
 // pointer, in reading order, like a terminal's. On release the text is
 // put on the clipboard; a press and release without motion is a click.
 // A double click selects a word, a triple click a row, and a Shift-click
-// extends the last selection (selection.go).
+// extends the last selection (selection.go). After the release the
+// selection stays highlighted, like a terminal's, until the next press
+// or until a row under it reads differently: it is in screen cells and
+// cannot follow the text.
 
 // Clipboard modes for /clip. The choice is kept in the store.
 const (
@@ -46,10 +49,11 @@ func validClipMode(s string) bool {
 	return false
 }
 
-// selection is a drag in progress, in screen cells of the last View. The
-// anchor is where the button went down; the end follows the pointer. A
-// word, a row or a Shift extension is a selection too, made by the press
-// itself rather than by motion.
+// selection is a drag in progress, in screen cells of the last View, or
+// the one kept highlighted after its release. The anchor is where the
+// button went down; the end follows the pointer. A word, a row or a Shift
+// extension is a selection too, made by the press itself rather than by
+// motion.
 type selection struct {
 	x0, y0 int // anchor
 	x1, y1 int // end
@@ -165,6 +169,39 @@ func plainRows(rows []string) []string {
 	}
 	return out
 }
+
+// keep holds a released selection highlighted, with the plain rows of the
+// last View it covers: the rows its copy reads.
+func (m *Model) keep(s selection) {
+	_, ay, _, by := s.ordered()
+	rows := make([]string, 0, by-ay+1)
+	for y := ay; y <= by; y++ {
+		rows = append(rows, m.plainRow(y))
+	}
+	m.kept, m.keptRows = &s, rows
+}
+
+// keptSel is the kept selection while every row it covers reads as it did
+// when it was copied, styling aside; View asks once the new rows are in
+// m.screen. A row that changed drops it for good, so the same text
+// scrolled back does not bring it back.
+func (m *Model) keptSel() *selection {
+	if m.kept == nil {
+		return nil
+	}
+	_, ay, _, _ := m.kept.ordered()
+	for i, r := range m.keptRows {
+		if m.plainRow(ay+i) != r {
+			m.dropKept()
+			return nil
+		}
+	}
+	return m.kept
+}
+
+// dropKept removes the kept highlight: the next press, a resize and
+// /mouse off do.
+func (m *Model) dropKept() { m.kept, m.keptRows = nil, nil }
 
 // osc52Seq is the escape sequence that asks the terminal to put text on
 // the system clipboard (OSC 52). The text travels base64-encoded, so

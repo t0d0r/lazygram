@@ -131,6 +131,8 @@ type Model struct {
 
 	sel      *selection // the left button is down: a click, drag, word, row or extension until the release
 	lastSel  *selection // the last click, drag, word or row; a Shift-click extends it
+	kept     *selection // the last selection released, highlighted until the next press or until its rows change
+	keptRows []string   // the plain screen rows the kept selection covers, as the copy read them
 	multi    clickRun   // the double or triple click in progress
 	screen   []string   // the rows of the last View, styled; the selection reads them
 	clipMode string     // /clip: auto, osc52, tool or off (kept)
@@ -769,6 +771,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.ticking = false // the next View reads the hover clock
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.dropKept() // the screen is laid out anew: its cells no longer hold what was copied
 	case chatsMsg:
 		m.chatsAsked = false
 		if msg.err != nil {
@@ -1016,11 +1019,11 @@ func (m *Model) exactChat(name string) (domain.Chat, bool) {
 func hoverKey(s span) string { return fmt.Sprintf("%d:%s", s.kind, s.target) }
 
 // mouse handles wheel scrolling, hovering, left-button drags (a text
-// selection, copied on release), double and triple clicks (a word, a
-// row), Shift-clicks (the last selection extended) and clicks on the
-// spans of the last View. A click acts on release, so that a drag that
-// starts on a link selects instead of opening it; the later presses of a
-// double or triple click select and never act again.
+// selection, copied on release and kept highlighted), double and triple
+// clicks (a word, a row), Shift-clicks (the last selection extended) and
+// clicks on the spans of the last View. A click acts on release, so that
+// a drag that starts on a link selects instead of opening it; the later
+// presses of a double or triple click select and never act again.
 func (m *Model) mouse(e tea.MouseMsg) (tea.Model, tea.Cmd) {
 	w := m.wins[m.cur]
 	if e.Action == tea.MouseActionMotion {
@@ -1072,14 +1075,17 @@ func (m *Model) mouse(e tea.MouseMsg) (tea.Model, tea.Cmd) {
 			if s.unit == byCell { // a drag is no part of a double click
 				m.multi = clickRun{}
 			}
-			if m.clipMode == clipOff {
-				return m, nil
-			}
 			if (s.unit == byWord || s.unit == byRow) && m.plainRow(s.y0) != s.row {
 				// The screen changed between the press and the release (a
 				// picture landed, a message arrived): what is there now was
-				// never under the pointer.
-				m.setInfo("nothing copied: the screen changed")
+				// never under the pointer, so it is neither copied nor kept.
+				if m.clipMode != clipOff {
+					m.setInfo("nothing copied: the screen changed")
+				}
+				return m, nil
+			}
+			m.keep(s) // with /clip off too: the highlight marks what was selected
+			if m.clipMode == clipOff {
 				return m, nil
 			}
 			return m.copySelection(s)
@@ -2823,10 +2829,16 @@ func (m *Model) View() string {
 	m.clicks = append(append([][]span{}, bodySpans...), nil, nil, barSpans)
 	m.clicks = append(m.clicks, make([][]span, len(input))...)
 	m.screen = rows
+	// The selection being made shows while the button is down; once it is
+	// released, the kept one, for as long as its rows read the same.
+	mark := m.sel
+	if mark == nil || !mark.shown() {
+		mark = m.keptSel()
+	}
 	var b strings.Builder
 	for y, l := range rows {
-		if m.sel != nil && m.sel.shown() {
-			if from, to, ok := m.sel.cols(y, m.width); ok {
+		if mark != nil && mark.shown() {
+			if from, to, ok := mark.cols(y, m.width); ok {
 				l = markCells(l, from, to)
 			}
 		}
@@ -3005,7 +3017,7 @@ func (m *Model) rule(label string) string {
 const helpNotes = `Mouse, themes and windows
 Themes: /theme lists the colour schemes, /theme <name> switches (kept).
 Clickable text is bright and underlined; a running light plays over the one under the mouse pointer. /fx turns the light on or off (kept).
-Drag with the left button to select text; on release it is copied to the clipboard: through the terminal (OSC 52) and the system tool when there is one (pbcopy, wl-copy, xclip, xsel, clip); /clip picks (kept).
+Drag with the left button to select text; on release it is copied to the clipboard: through the terminal (OSC 52) and the system tool when there is one (pbcopy, wl-copy, xclip, xsel, clip); /clip picks (kept). The selection stays highlighted until the next click or until the text under it changes.
 Double click copies the word under the pointer, triple click the row; on a link or a name the first click acts and the next ones only select. Shift-click extends the selection where the terminal passes Shift on; most Linux terminals keep Shift-drag (Option on macOS) for their own selection, as does /mouse off.
 Mouse: click a chat name or nick in window 0 to open its window, a tag in the window bar to focus it, a row in /list or /win to open it, a row of /settings to set its next value, a link or a [photo] / [file] token to open it with the system; the wheel scrolls.
 Window 0 is the server window: every chat interleaved, plus notices (/feed off: the notices only); it stays at 0 and cannot be closed. /move N puts this window at N.

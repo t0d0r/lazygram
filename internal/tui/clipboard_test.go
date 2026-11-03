@@ -3,6 +3,7 @@ package tui
 import (
 	"encoding/base64"
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -204,13 +205,14 @@ func TestDragSelectsAndCopies(t *testing.T) {
 	if !strings.Contains(view, want) {
 		t.Fatal("the OSC 52 sequence rides on the frame")
 	}
-	if strings.Contains(view, "\x1b[7m"+"copy me") {
-		t.Fatal("no highlight after the release")
-	}
+	// The selection stays highlighted after the release, like a terminal's.
+	wantMarked(t, view, "copy me")
 	m.Update(clipFlushMsg{})
-	if m.clipSeq != "" || strings.Contains(m.View(), "\x1b]52;") {
+	view = m.View()
+	if m.clipSeq != "" || strings.Contains(view, "\x1b]52;") {
 		t.Fatal("the flush tick drops the sequence from later frames")
 	}
+	wantMarked(t, view, "copy me")
 
 	// Several rows: from inside one message to the start of the next;
 	// lines are trimmed and joined with newlines.
@@ -228,10 +230,253 @@ func TestDragSelectsAndCopies(t *testing.T) {
 		t.Fatalf("clipSeq carries the two lines: %q", m.clipSeq)
 	}
 
-	// Dragging backwards over blank space copies nothing and says so.
+	// Dragging backwards over blank space copies nothing and says so; the
+	// selection is kept all the same.
 	drag(m, m.width-1, 0, m.width-3, 0)
 	if m.status != "nothing to copy" {
 		t.Fatalf("status: %q", m.status)
+	}
+	if m.kept == nil || m.kept.x0 != m.width-1 || m.kept.x1 != m.width-3 {
+		t.Fatalf("a blank selection is kept too: %+v", m.kept)
+	}
+}
+
+// marked returns the runs of a frame that markCells drew in reverse
+// video: what the selection highlights.
+func marked(frame string) []string {
+	var out []string
+	for {
+		_, after, ok := strings.Cut(frame, "\x1b[7m")
+		if !ok {
+			return out
+		}
+		run, rest, _ := strings.Cut(after, "\x1b[27m")
+		out = append(out, run)
+		frame = rest
+	}
+}
+
+// wantMarked checks the runs a frame shows in reverse video; none when
+// want is empty.
+func wantMarked(t *testing.T, frame string, want ...string) {
+	t.Helper()
+	if got := marked(frame); !slices.Equal(got, want) {
+		t.Fatalf("highlighted: got %q, want %q", got, want)
+	}
+}
+
+func wheel(m *Model, b tea.MouseButton) {
+	m.Update(tea.MouseMsg{X: 10, Y: 2, Action: tea.MouseActionPress, Button: b})
+}
+
+// keptDrag renders the server window with "copy me please" on it, drags
+// over "copy me" and checks that the selection stays highlighted after
+// the release. It returns the cell where "copy me" starts.
+func keptDrag(t *testing.T) (m *Model, x, y int) {
+	t.Helper()
+	t.Setenv("TERM", "xterm-256color")
+	f := newFake()
+	f.msgs = append(f.msgs, mk("c1", "9", "alice", "copy me please", 4))
+	m = setup(t, f)
+	m.clipMode = clipOSC52 // never run a system tool from a test
+	m.View()
+	x, y = rowOf(t, m, "copy me please")
+	drag(m, x, y, x+6, y)
+	if m.status != "copied 7 characters via terminal" {
+		t.Fatalf("status: %q", m.status)
+	}
+	wantMarked(t, m.View(), "copy me")
+	return m, x, y
+}
+
+// TestKeptSelectionGoesAtTheNextClick: the next press removes the kept
+// highlight at once, and a plain click leaves nothing highlighted.
+func TestKeptSelectionGoesAtTheNextClick(t *testing.T) {
+	m, x, y := keptDrag(t)
+	mousePress(m, x+9, y, false) // on "please": plain text, no clickable element
+	wantMarked(t, m.View())
+	mouseRelease(m, x+9, y)
+	wantMarked(t, m.View())
+	if m.kept != nil {
+		t.Fatalf("a click keeps nothing: %+v", m.kept)
+	}
+	if m.lastSel == nil || m.lastSel.x0 != x+9 || m.lastSel.moved {
+		t.Fatalf("the click is still the base of a Shift-click: %+v", m.lastSel)
+	}
+}
+
+// TestKeptSelectionReplacedByTheNextDrag: the next drag's own selection
+// shows while the button is down, and is kept in turn.
+func TestKeptSelectionReplacedByTheNextDrag(t *testing.T) {
+	m, x, y := keptDrag(t)
+	mousePress(m, x+8, y, false)
+	wantMarked(t, m.View()) // the old one is gone at the press; nothing selected yet
+	m.Update(tea.MouseMsg{X: x + 13, Y: y, Action: tea.MouseActionMotion, Button: tea.MouseButtonLeft})
+	wantMarked(t, m.View(), "please")
+	mouseRelease(m, x+13, y)
+	copied(t, m, "please")
+	wantMarked(t, m.View(), "please")
+}
+
+// TestKeptSelectionGoesWhenItsRowsChange: the kept highlight is in screen
+// cells, so it goes as soon as a row under it reads differently.
+func TestKeptSelectionGoesWhenItsRowsChange(t *testing.T) {
+	cases := []struct {
+		name   string
+		change func(m *Model)
+	}{
+		{"a message arrives", func(m *Model) {
+			f := m.opt.Provider.(*fake)
+			f.msgs = append(f.msgs, mk("c1", "10", "bob", "a new line", 5))
+			m.Update(m.syncCmd()())
+		}},
+		{"the wheel scrolls", func(m *Model) { wheel(m, tea.MouseButtonWheelUp) }},
+		{"PgUp scrolls", func(m *Model) { press(m, tea.KeyPgUp) }},
+		{"another window is shown", func(m *Model) { press(m, tea.KeyCtrlN) }},
+		{"/list opens", func(m *Model) { enter(m, "/list") }},
+		{"/settings opens", func(m *Model) { enter(m, "/settings") }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m, _, y := keptDrag(t)
+			before := m.plainRow(y)
+			c.change(m)
+			wantMarked(t, m.View())
+			if m.kept != nil {
+				t.Fatalf("kept after the change: %+v", m.kept)
+			}
+			if m.plainRow(y) == before {
+				t.Fatalf("the change did not move the row: %q", before)
+			}
+		})
+	}
+}
+
+// TestKeptSelectionDoesNotComeBack: once dropped, the highlight stays
+// gone when the same text is shown again in the same cells.
+func TestKeptSelectionDoesNotComeBack(t *testing.T) {
+	cases := []struct {
+		name       string
+		away, back func(m *Model)
+	}{
+		{"scrolled back", func(m *Model) { wheel(m, tea.MouseButtonWheelUp) }, func(m *Model) { wheel(m, tea.MouseButtonWheelDown) }},
+		{"switched back", func(m *Model) { press(m, tea.KeyCtrlN) }, func(m *Model) { press(m, tea.KeyCtrlP) }},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			m, x, y := keptDrag(t)
+			c.away(m)
+			wantMarked(t, m.View())
+			c.back(m)
+			view := m.View()
+			if x2, y2 := rowOf(t, m, "copy me please"); x2 != x || y2 != y {
+				t.Fatalf("the text is not back in its cells: %d,%d", x2, y2)
+			}
+			wantMarked(t, view)
+		})
+	}
+}
+
+// TestWheelAloneKeepsTheSelection: the wheel does not drop the kept
+// highlight by itself, only through the scroll it causes.
+func TestWheelAloneKeepsTheSelection(t *testing.T) {
+	m, _, _ := keptDrag(t)
+	wheel(m, tea.MouseButtonWheelDown) // at the bottom already: nothing moves
+	wantMarked(t, m.View(), "copy me")
+}
+
+// TestKeptSelectionGoesWhenTypedOver: a selection over the input row goes
+// with the first key typed into it, wherever in the row it lands.
+func TestKeptSelectionGoesWhenTypedOver(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	m := setup(t, newFake())
+	m.clipMode = clipOSC52
+	m.View()
+	y := len(m.screen) - 1 // the input row: the prompt, then the typed text
+	if !strings.HasPrefix(m.plainRow(y), "[server]") {
+		t.Fatalf("input row: %q", m.plainRow(y))
+	}
+	drag(m, 1, y, 6, y)
+	copied(t, m, "server")
+	wantMarked(t, m.View(), "server")
+	typ(m, "x")
+	wantMarked(t, m.View())
+	if m.kept != nil {
+		t.Fatalf("kept after typing: %+v", m.kept)
+	}
+}
+
+// TestKeptSelectionOverTheStatusGoes: the copy's own status message
+// changes the rule, so a selection over it is gone at the first frame
+// after the release.
+func TestKeptSelectionOverTheStatusGoes(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	m := setup(t, newFake())
+	m.clipMode = clipOSC52
+	m.View()
+	// Below the content: the rule, the status line, the window bar, one input row.
+	rule := len(m.screen) - 4
+	if dash := string(rune(0x2500)); !strings.HasPrefix(m.plainRow(rule), dash+dash) {
+		t.Fatalf("rule: %q", m.plainRow(rule))
+	}
+	drag(m, 2, rule-1, 5, rule)
+	if !strings.HasPrefix(m.status, "copied 2 lines via terminal") {
+		t.Fatalf("status: %q", m.status)
+	}
+	wantMarked(t, m.View())
+	if m.kept != nil {
+		t.Fatalf("kept over a changed rule: %+v", m.kept)
+	}
+}
+
+// TestKeptSelectionWithClipOff: with /clip off nothing is copied, but the
+// highlight still stays on what was selected.
+func TestKeptSelectionWithClipOff(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	f := newFake()
+	f.msgs = append(f.msgs, mk("c1", "9", "alice", "copy me please", 4))
+	m := setup(t, f)
+	enter(m, "/clip off")
+	m.View()
+	x, y := rowOf(t, m, "copy me please")
+	status := m.status
+	drag(m, x, y, x+6, y)
+	if m.clipSeq != "" || m.status != status {
+		t.Fatalf("off: copied: %q %q", m.clipSeq, m.status)
+	}
+	wantMarked(t, m.View(), "copy me")
+}
+
+// TestKeptSelectionGoesOnResize: a resize drops the kept highlight even
+// where the row under it reads the same.
+func TestKeptSelectionGoesOnResize(t *testing.T) {
+	m, x, y := keptDrag(t)
+	m.Update(tea.WindowSizeMsg{Width: m.width + 10, Height: m.height})
+	view := m.View()
+	if x2, y2 := rowOf(t, m, "copy me please"); x2 != x || y2 != y {
+		t.Fatalf("the text moved: %d,%d", x2, y2)
+	}
+	wantMarked(t, view)
+	if m.kept != nil {
+		t.Fatalf("kept after a resize: %+v", m.kept)
+	}
+}
+
+// TestKeptSelectionGoesWithMouseOff: /mouse off hands selecting back to
+// the terminal, so the kept highlight goes though its rows stay.
+func TestKeptSelectionGoesWithMouseOff(t *testing.T) {
+	m, _, y := keptDrag(t)
+	before := m.plainRow(y)
+	enter(m, "/mouse")
+	if m.mouseOn {
+		t.Fatal("/mouse turns reporting off")
+	}
+	wantMarked(t, m.View())
+	if m.plainRow(y) != before {
+		t.Fatalf("the row changed: %q", m.plainRow(y))
+	}
+	if m.kept != nil {
+		t.Fatalf("kept with the mouse off: %+v", m.kept)
 	}
 }
 
