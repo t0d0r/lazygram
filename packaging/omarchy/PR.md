@@ -1,4 +1,4 @@
-Add lazygram 0.4.25: terminal Telegram client (TUI)
+Add lazygram 0.4.26: terminal Telegram client (TUI)
 
 ## What it is
 
@@ -46,13 +46,13 @@ terminal. Pure Go, BSD-2-Clause. Upstream: https://github.com/t0d0r/lazygram
   prints a screen, the not-linked start exits 2 with the login hint and
   the launcher wrapper holds the window for Enter.
 - With the package directory copied into a checkout of this repository
-  (master at e0ac3a7), in an Arch Linux ARM container:
+  (master at be513f7), in an Arch Linux ARM container:
   `helpers/upstream-watch.py validate` and `check` pass (`"current":
-  "0.4.25", "reason": "already current"`),
+  "0.4.26", "reason": "already current"`),
   `validate_package_metadata` passes, `tests/pinned-sources.sh` and
   `tests/package-metadata.sh` pass, `bin/build --package lazygram
   --dry-run` plans the build.
-- The watch pattern matches `v0.4.25` whole, so a malformed tag such as
+- The watch pattern matches `v0.4.26` whole, so a malformed tag such as
   the `v0.4.11-1-gd0bdc3f` the upstream repository once had (a release
   mishap, deleted since) would never be taken for a version.
 - Not tested by me on Omarchy itself: the launcher entry inside Hyprland
