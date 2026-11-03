@@ -14,10 +14,14 @@ import (
 
 // holdTicks keeps what the model schedules with after (a Tab's held read
 // receipt) instead of starting a timer, so nothing sleeps; passGap
-// delivers it.
-func holdTicks(m *Model) *[]tea.Msg {
+// delivers it. Whatever is held is held for tabGap.
+func holdTicks(t *testing.T, m *Model) *[]tea.Msg {
+	t.Helper()
 	held := &[]tea.Msg{}
-	m.after = func(_ time.Duration, msg tea.Msg) tea.Cmd {
+	m.after = func(d time.Duration, msg tea.Msg) tea.Cmd {
+		if d != tabGap {
+			t.Errorf("held for %v, want tabGap", d)
+		}
 		*held = append(*held, msg)
 		return nil
 	}
@@ -44,7 +48,7 @@ func fromDev(t *testing.T, f *fake) (*Model, func(time.Duration), *[]tea.Msg) {
 	t.Helper()
 	m := setup(t, f) // 0 server, 1 #news, 2 #dev, 3 @alice
 	step := pinClock(m)
-	held := holdTicks(m)
+	held := holdTicks(t, m)
 	enter(m, "/win 1")
 	enter(m, "/win 2")
 	if m.cur != 2 || m.lastWindow() != 1 {
@@ -94,6 +98,16 @@ func TestLastWindowGoesWithItsWindow(t *testing.T) {
 	enter(m, "/win last")
 	if !m.isErr || m.status != "no last window" || m.winName(m.cur) != "@alice" {
 		t.Fatalf("a closed last window is none: %q, %s", m.status, m.winName(m.cur))
+	}
+	// Above, the current window took the closed one's place; here another
+	// does, and it is still not the last window.
+	other := setup(t, newFake()) // 0 server, 1 #news, 2 #dev, 3 @alice
+	enter(other, "/win 1")
+	enter(other, "/win 3")
+	enter(other, "/close 1") // #news, the last window: #dev takes its number
+	enter(other, "/win last")
+	if !other.isErr || other.status != "no last window" || other.winName(other.cur) != "@alice" {
+		t.Fatalf("whatever takes its number, a closed last window is none: %q, %s", other.status, other.winName(other.cur))
 	}
 	// Closing the current window can fall back on the last one: none either.
 	enter(m, "/win 1") // #news, after @alice
@@ -378,7 +392,7 @@ func TestDoubleTabHoldsItsDestinationsReceipt(t *testing.T) {
 	f := newFake()
 	m := setup(t, f) // 0 server, 1 #news, 2 #dev, 3 @alice
 	step := pinClock(m)
-	held := holdTicks(m)
+	held := holdTicks(t, m)
 	enter(m, "/win 3")
 	enter(m, "/win 1") // in #news, @alice last
 	enter(m, "/read-receipts on")
@@ -470,6 +484,43 @@ func TestHeldReceiptNeverGoesTwiceOrForAClosedWindow(t *testing.T) {
 func altN(m *Model, n rune) tea.Cmd {
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{n}, Alt: true})
 	return cmd
+}
+
+// TestFocusingTheCurrentWindowKeepsTheLastOne: only a focus that changes
+// the window sets the last one; focusing the window already shown keeps
+// it.
+func TestFocusingTheCurrentWindowKeepsTheLastOne(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		server bool // from window 0 (#dev last) instead of #dev (#news last)
+		do     func(m *Model)
+	}{
+		{"Alt-N", false, func(m *Model) { altN(m, '2') }},
+		{"/win N", false, func(m *Model) { enter(m, "/win 2") }},
+		{"/win name", false, func(m *Model) { enter(m, "/win #dev") }},
+		{"window tag click", false, func(m *Model) {
+			m.View()
+			x, y := find(m, spanWin, "2")
+			click(m, x, y)
+		}},
+		{"/help", true, func(m *Model) { enter(m, "/help") }},
+		{"F1", true, func(m *Model) { press(m, tea.KeyF1) }},
+		{"/keys", true, func(m *Model) { enter(m, "/keys") }},
+		{"/settings", true, func(m *Model) { enter(m, "/settings") }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			m, _, _ := fromDev(t, newFake())
+			want := 1
+			if c.server {
+				enter(m, "/win 0")
+				want = 2
+			}
+			c.do(m)
+			if m.lastWindow() != want {
+				t.Fatalf("in %s with window %d last; want %d", m.winName(m.cur), m.lastWindow(), want)
+			}
+		})
+	}
 }
 
 // TestDoubleTabSurvivesAClickOnTheCurrentWindow: a click that focuses the
@@ -611,5 +662,22 @@ func TestWindowLeftAfterTabGapIsReported(t *testing.T) {
 	runAll(m, altN(m, '2'))
 	if len(f.read) != 2 || m.wins[3].unread != 0 {
 		t.Fatalf("@alice was reported tabGap later, and stays read: %v, unread %d", f.read, m.wins[3].unread)
+	}
+}
+
+// TestTabHoldsItsReceiptOnARealTimer: without holdTicks the model's own
+// after holds the receipt (the command is not run, so nothing waits), and
+// tickAfter delivers its message only after the pause.
+func TestTabHoldsItsReceiptOnARealTimer(t *testing.T) {
+	m := setup(t, newFake()) // 0 server, 1 #news, 2 #dev, 3 @alice
+	enter(m, "/win 1")
+	enter(m, "/win 2")
+	enter(m, "/read-receipts on")
+	if cmd := press(m, tea.KeyTab); cmd == nil || m.winName(m.cur) != "@alice" || m.held == nil || m.held.receipt == nil {
+		t.Fatalf("Tab onto @alice holds its receipt: in %s", m.winName(m.cur))
+	}
+	start := time.Now()
+	if got := tickAfter(time.Millisecond, tabReadMsg{seq: 7})(); got != (tabReadMsg{seq: 7}) || time.Since(start) < time.Millisecond {
+		t.Fatalf("tickAfter delivered %v after %v", got, time.Since(start))
 	}
 }
