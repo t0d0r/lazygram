@@ -32,8 +32,11 @@ const (
 // emoji reaction by its emoticon, all custom-emoji reactions summed into
 // one domain.CustomReaction (their emoji is a document lazygram does not
 // fetch), a paid one as the star; empty reactions and zero counts are
-// dropped. Mine is chosen_order set. mineUnknown is min: the object is the
-// same for every user and lacks the account's own reactions.
+// dropped. MineCount is how many of the results summed into an entry have
+// chosen_order set, but for a paid reaction, whose count is of Stars, the
+// Stars the account sent (myStars); Mine is MineCount above zero.
+// mineUnknown is min: the object is the same for every user and lacks the
+// account's own reactions.
 func reactions(r tg.MessageReactions) (out []domain.Reaction, mineUnknown bool) {
 	at := map[string]int{}
 	for _, rc := range r.Results {
@@ -41,16 +44,35 @@ func reactions(r tg.MessageReactions) (out []domain.Reaction, mineUnknown bool) 
 		if !ok || rc.Count <= 0 {
 			continue
 		}
-		_, mine := rc.GetChosenOrder()
+		mine := 0
+		if _, chosen := rc.GetChosenOrder(); chosen {
+			mine = 1
+		}
+		if _, paid := rc.Reaction.(*tg.ReactionPaid); paid {
+			mine = max(mine, myStars(r.TopReactors))
+		}
 		if i, seen := at[emoji]; seen {
 			out[i].Count += rc.Count
-			out[i].Mine = out[i].Mine || mine
+			out[i].MineCount += mine
+			out[i].Mine = out[i].MineCount > 0
 			continue
 		}
 		at[emoji] = len(out)
-		out = append(out, domain.Reaction{Emoji: emoji, Count: rc.Count, Mine: mine})
+		out = append(out, domain.Reaction{Emoji: emoji, Count: rc.Count, Mine: mine > 0, MineCount: mine})
 	}
 	return out, r.Min
+}
+
+// myStars is how many Stars the account sent as paid reactions: the count
+// of its own entry (my) among the top reactors, which lists it whether it
+// is among the top or not; 0 when it is not listed.
+func myStars(top []tg.MessageReactor) int {
+	for _, x := range top {
+		if x.My {
+			return x.Count
+		}
+	}
+	return 0
 }
 
 // reactionEmoji is how a reaction is shown; ok is false for reactionEmpty

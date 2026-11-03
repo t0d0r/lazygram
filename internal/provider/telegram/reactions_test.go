@@ -39,19 +39,42 @@ func TestReactionsAreConvertedWithMessages(t *testing.T) {
 	}})
 	got := convert("telegram:7", entity{kind: kindUser}, m, collect(nil, nil)).Reactions
 	want := []domain.Reaction{
-		{Emoji: thumbsUp, Count: 3, Mine: true},
-		{Emoji: domain.CustomReaction, Count: 3, Mine: true}, // both custom emoji, summed where the first stood
-		{Emoji: "\u2b50", Count: 5},                          // paid: the star
-		{Emoji: heart, Count: 1},                             // empty and zero counts dropped
+		{Emoji: thumbsUp, Count: 3, Mine: true, MineCount: 1},
+		{Emoji: domain.CustomReaction, Count: 3, Mine: true, MineCount: 1}, // both custom emoji, summed where the first stood
+		{Emoji: "\u2b50", Count: 5},                                        // paid: the star
+		{Emoji: heart, Count: 1},                                           // empty and zero counts dropped
 	}
-	if len(got) != len(want) {
-		t.Fatalf("%+v", got)
-	}
-	for i := range want {
-		if got[i] != want[i] {
-			t.Errorf("%d: got %+v want %+v", i, got[i], want[i])
+	same := func(what string, got, want []domain.Reaction) {
+		t.Helper()
+		if len(got) != len(want) {
+			t.Fatalf("%s: %+v", what, got)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Errorf("%s %d: got %+v want %+v", what, i, got[i], want[i])
+			}
 		}
 	}
+	same("converted", got, want)
+	// The account's share: every own custom emoji summed, and its Stars,
+	// which the paid count is of, from its entry among the top reactors.
+	own := tmsg(5, 0, "starred")
+	r := tg.MessageReactions{Results: []tg.ReactionCount{
+		count(&tg.ReactionCustomEmoji{DocumentID: 11}, 2, true),
+		count(&tg.ReactionPaid{}, 14, true),
+		count(&tg.ReactionCustomEmoji{DocumentID: 12}, 1, true),
+	}}
+	r.SetTopReactors([]tg.MessageReactor{{Top: true, Count: 4}, {My: true, Count: 10}})
+	own.SetReactions(r)
+	same("own", convert("telegram:7", entity{kind: kindUser}, own, collect(nil, nil)).Reactions, []domain.Reaction{
+		{Emoji: domain.CustomReaction, Count: 3, Mine: true, MineCount: 2},
+		{Emoji: "\u2b50", Count: 14, Mine: true, MineCount: 10},
+	})
+	r.Results = []tg.ReactionCount{count(&tg.ReactionPaid{}, 14, false)} // listed among the top reactors alone
+	own.SetReactions(r)
+	same("stars without chosen_order", convert("telegram:7", entity{kind: kindUser}, own, collect(nil, nil)).Reactions, []domain.Reaction{
+		{Emoji: "\u2b50", Count: 14, Mine: true, MineCount: 10},
+	})
 	if out := convert("telegram:7", entity{}, tmsg(2, 0, "plain"), collect(nil, nil)); out.Reactions != nil || out.MineUnknown {
 		t.Fatalf("no reactions: %+v", out)
 	}
@@ -95,7 +118,7 @@ func checkReacted(t *testing.T, c domain.Change, own bool) {
 	if c.Kind != domain.Reacted || c.ChatID != ch || c.Msg.ID != "42" || c.Msg.ChatID != ch || c.Own != own {
 		t.Fatalf("change: %+v", c)
 	}
-	if rs := c.Msg.Reactions; len(rs) != 2 || rs[0] != (domain.Reaction{Emoji: thumbsUp, Count: 4, Mine: true}) || rs[1] != (domain.Reaction{Emoji: heart, Count: 2}) {
+	if rs := c.Msg.Reactions; len(rs) != 2 || rs[0] != (domain.Reaction{Emoji: thumbsUp, Count: 4, Mine: true, MineCount: 1}) || rs[1] != (domain.Reaction{Emoji: heart, Count: 2}) {
 		t.Fatalf("reactions: %+v", rs)
 	}
 	var got []string

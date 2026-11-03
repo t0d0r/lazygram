@@ -725,9 +725,11 @@ when its window is fetched.
 
 Notices: when a message's reactions change and someone other than the
 account added one compared with what lazygram knew of that message (a
-count of the others' reactions rose, the account's own taken out by
-`Mine`, or a new emoji came), window 0 says so in a `-!-` notice that
-starts with the chat's tag, the chat named as `/names` shows chats:
+count of the others' reactions rose, the account's whole share taken
+out by `Reaction.Own()`: one for `Mine`, its Stars for a paid reaction,
+each of its custom emoji for `*`; or a new emoji came), window 0 says
+so in a `-!-` notice that starts with the chat's tag, the chat named as
+`/names` shows chats:
 
 - When the change names who reacted and lazygram has not seen them
   react with that emoji to that message this session:

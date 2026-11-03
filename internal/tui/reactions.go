@@ -271,12 +271,11 @@ func (m *Model) reactionNotice(c domain.Change, before, now domain.Message, held
 	return where + reactionCounts(now.Reactions) + " on " + reactedTo(now, held, c.Own)
 }
 
-// others is how many besides the account sent a reaction.
+// others is how much of a reaction's count is not the account's own: the
+// account can have sent several Stars of a paid reaction, or several
+// custom emoji summed into one.
 func others(x domain.Reaction) int {
-	if x.Mine {
-		return x.Count - 1
-	}
-	return x.Count
+	return max(x.Count-x.Own(), 0)
 }
 
 // reactionOf finds the reaction with the emoji; zero when there is none.

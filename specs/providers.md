@@ -55,9 +55,14 @@ Reactions (`Message.Reactions`) are a list of `{Emoji, Count, Mine}` in
 the service's order: `Emoji` is the emoji, or `*`
 (`domain.CustomReaction`) for all custom-emoji reactions of the message
 summed into one entry; `Count` is more than zero; `Mine` says the
-account sent it too. `Message.MineUnknown` (never stored) says the
-reactions came without the account's own: each then keeps the `Mine`
-flag already known for its emoji (`domain.CurrentReactions`). A
+account sent it too. `MineCount` (optional) is how much of `Count` is
+the account's own when the service says: one for an emoji, the number
+of the account's custom emoji summed into `*`, and for a paid reaction,
+whose count is of Stars, the Stars the account sent; zero when unknown,
+and `Reaction.Own()` then counts `Mine` as one. `Message.MineUnknown`
+(never stored) says the reactions came without the account's own: each
+then keeps the `Mine` flag and `MineCount` already known for its emoji
+(`domain.CurrentReactions`). A
 `domain.Reacted` change carries the chat, the message id and its
 reactions in `Msg` (`ID`, `ChatID`, `Reactions`, `MineUnknown`), the
 recent reactions the service names in `Reactors` (`Who`, named like a
@@ -314,11 +319,19 @@ reaction (`reactionEmoji`) by its emoticon; every custom-emoji reaction
 first, because its emoji is a document that needs
 messages.getCustomEmojiDocuments (a follow-up); a paid reaction
 (`reactionPaid`, a Telegram Star) as the star emoji; `reactionEmpty` and
-zero counts are dropped. `Mine` is `chosen_order` set (for the summed
-custom entry: on any of them). A `min` object is the same for every user
-and lacks the account's own reactions: it is passed on with
-`MineUnknown`, and the cache keeps the `Mine` flags it already had for
-the same emoji (specs/storage.md). `top_reactors` (paid) are not used.
+zero counts are dropped. `MineCount` is how many of the results summed
+into an entry have `chosen_order` set (one for an emoji, each of the
+account's custom emoji for `*`), except for the paid reaction: its
+counter rises by one per Star sent, so its `MineCount` is the `count` of
+the account's own entry (`my`) in `top_reactors`, which Telegram lists
+whether or not the account is among the top reactors (one when it is
+missing and `chosen_order` is set). `Mine` is `MineCount` above zero.
+Without the account's share the TUI would take the rest of its own
+Stars, or its second custom emoji, for reactions others added. A `min`
+object is the same for every user and lacks the account's own
+reactions: it is passed on with `MineUnknown`, and the cache keeps the
+`Mine` flags and `MineCount`s it already had for the same emoji
+(specs/storage.md). The rest of `top_reactors` is not used.
 
 Changes reach lazygram two ways:
 

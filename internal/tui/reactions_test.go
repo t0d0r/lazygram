@@ -504,6 +504,53 @@ func TestAnUnchangedCopyTeachesItsReactions(t *testing.T) {
 	}
 }
 
+// TestTheAccountsStarsAndCustomReactionsAreNoNews: the account's whole
+// share of a count is taken out, its Stars of a paid reaction and its
+// custom emoji summed into one, so only what others add is told.
+func TestTheAccountsStarsAndCustomReactionsAreNoNews(t *testing.T) {
+	const star = "⭐"
+	stars := func(n, mine int) domain.Reaction {
+		return domain.Reaction{Emoji: star, Count: n, Mine: mine > 0, MineCount: mine}
+	}
+	custom := func(n, mine int) domain.Reaction {
+		return domain.Reaction{Emoji: domain.CustomReaction, Count: n, Mine: mine > 0, MineCount: mine}
+	}
+	f := newReactingFake()
+	f.msgs[0].Reactions = rs(rx(upEmoji, 1)) // ada's first dev line
+	post := mk("c3", "8", "wire", "Breaking: headline", 6)
+	post.Reactions = rs(rx(fireEmoji, 12), stars(1, 0)) // someone else's Star
+	f.msgs = append(f.msgs, post)
+	m := setupProvider(t, f)
+	minReport := reactedChange("c3", "8", false, rs(rx(fireEmoji, 12), stars(14, 0)))
+	minReport.Msg.MineUnknown = true
+	steps := []struct {
+		what   string
+		change domain.Change
+		want   string // "" for no notice
+	}{
+		{"the account sends 10 Stars", reactedChange("c3", "8", false, rs(rx(fireEmoji, 12), stars(11, 10))), ""},
+		{"someone else sends 3", reactedChange("c3", "8", false, rs(rx(fireEmoji, 12), stars(14, 10))),
+			`#news: ` + fireEmoji + ` 12 ` + star + ` 14 on wire "Breaking: headline"`},
+		{"a min report keeps the account's Stars", minReport, ""},
+		{"the account adds two custom emoji", reactedChange("c1", "1", false, rs(rx(upEmoji, 1), custom(2, 2)),
+			by("me", "", domain.CustomReaction), by("me", "", domain.CustomReaction)), ""},
+		{"grace adds one", reactedChange("c1", "1", false, rs(rx(upEmoji, 1), custom(3, 2)),
+			by("grace", "u-grace", domain.CustomReaction), by("me", "", domain.CustomReaction)),
+			`#dev: @grace reacted * to ada "first dev line"`},
+	}
+	for _, s := range steps {
+		before := len(chatNotices(m))
+		polled(m, s.change)
+		got := chatNotices(m)[before:]
+		if s.want == "" && len(got) != 0 || s.want != "" && (len(got) != 1 || got[0] != s.want) {
+			t.Fatalf("%s: notices %q, want %q", s.what, got, s.want)
+		}
+	}
+	if got := msgOf(m, "c3", "8").Reactions; !slices.Equal(got, rs(rx(fireEmoji, 12), stars(14, 10))) {
+		t.Fatalf("the counts: %v", got)
+	}
+}
+
 // TestReactionNoticesFollowTheFeed: with /feed off window 0 does not show
 // them, as it shows no chat messages; the counts still change, and /feed
 // on shows the notices again.

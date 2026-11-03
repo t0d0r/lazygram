@@ -93,6 +93,23 @@ type Reaction struct {
 	Emoji string `json:"emoji"`          // the emoji, or CustomReaction
 	Count int    `json:"count"`          // more than zero
 	Mine  bool   `json:"mine,omitempty"` // the account sent it too
+	// MineCount is how much of Count is the account's own when the service
+	// says: more than one for a paid reaction, whose count is of Stars, and
+	// for CustomReaction when several of the account's are summed in it.
+	// Zero when not known: Own then counts Mine as one.
+	MineCount int `json:"mine_count,omitempty"`
+}
+
+// Own is how much of Count the account sent: MineCount, else one when
+// Mine.
+func (r Reaction) Own() int {
+	switch {
+	case r.MineCount > 0:
+		return r.MineCount
+	case r.Mine:
+		return 1
+	}
+	return 0
 }
 
 // Reactor is one recent reaction the service names: who sent which emoji
@@ -104,22 +121,24 @@ type Reactor struct {
 	At    time.Time // zero when unknown
 }
 
-// KeepMine returns now with the Mine flags of known, for reactions the
-// service sent without the account's own (Message.MineUnknown): each
-// emoji keeps whether the account had sent it.
+// KeepMine returns now with the Mine flags and counts of known, for
+// reactions the service sent without the account's own
+// (Message.MineUnknown): each emoji keeps whether, and how much of it,
+// the account had sent.
 func KeepMine(known, now []Reaction) []Reaction {
 	if len(now) == 0 {
 		return now
 	}
-	mine := map[string]bool{}
+	mine := map[string]Reaction{}
 	for _, r := range known {
 		if r.Mine {
-			mine[r.Emoji] = true
+			mine[r.Emoji] = r
 		}
 	}
 	out := make([]Reaction, len(now))
 	for i, r := range now {
-		r.Mine = mine[r.Emoji]
+		k := mine[r.Emoji]
+		r.Mine, r.MineCount = k.Mine, k.MineCount
 		out[i] = r
 	}
 	return out
@@ -127,8 +146,8 @@ func KeepMine(known, now []Reaction) []Reaction {
 
 // CurrentReactions returns the reactions of a message known as known,
 // given later, a copy of it fetched or reported after: reactions carry no
-// edit time, so later's are current, with known's Mine flags when later's
-// are unknown.
+// edit time, so later's are current, with known's Mine flags and counts
+// when later's are unknown.
 func CurrentReactions(known, later Message) []Reaction {
 	if later.MineUnknown {
 		return KeepMine(known.Reactions, later.Reactions)
@@ -207,8 +226,8 @@ type Message struct {
 	Reactions []Reaction `json:"reactions,omitempty"`
 	// MineUnknown says Reactions came without the account's own
 	// (Telegram's min reactions, the same for every user), so each keeps
-	// the Mine flag already known for its emoji (CurrentReactions). It is
-	// never stored.
+	// the Mine flag and count already known for its emoji
+	// (CurrentReactions). It is never stored.
 	MineUnknown bool `json:"-"`
 }
 

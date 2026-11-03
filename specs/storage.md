@@ -29,8 +29,8 @@ per (unidentifiable) chat and nothing else. Everything identifying (text,
 sender, the sender's id and username, reactions, chat id, alias, title,
 kind, unread) is inside `data`. The sender's id and username and the
 reactions are optional JSON fields (`sender_id`, `sender_nick`,
-`reactions`: a list of `emoji`, `count`, `mine`), so rows cached before
-they existed still decode. `MineUnknown` is never stored. `Add` never
+`reactions`: a list of `emoji`, `count`, `mine`, `mine_count`), so rows
+cached before they existed still decode. `MineUnknown` is never stored. `Add` never
 overwrites a stored row. The cache follows the service in five ways
 (specs/ui.md, Edits and deletions, Reactions):
 - `Refresh(msgs)`: a fetched copy of a stored message that differs
@@ -44,7 +44,7 @@ overwrites a stored row. The cache follows the service in five ways
   copy's edit is newer (then that copy keeps its text, media and buttons
   and takes only the reactions). A copy whose reactions came without the
   account's own (`MineUnknown`, Telegram's `min`) keeps the stored `Mine`
-  flag of each emoji.
+  flag and `MineCount` of each emoji.
 - `React(msg)`: reactions the service reported (a `domain.Reacted`
   change) replace the stored message's reactions only; its text, sender,
   times and everything else stay. It returns the stored copy before and

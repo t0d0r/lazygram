@@ -231,4 +231,24 @@ func TestReactionsOfALaterCopy(t *testing.T) {
 	if got := KeepMine(known.Reactions, nil); len(got) != 0 {
 		t.Fatalf("no reactions stay none: %+v", got)
 	}
+	// How much is the account's travels with Mine: its Stars.
+	stars := []Reaction{{Emoji: "s", Count: 11, Mine: true, MineCount: 10}}
+	if got := KeepMine(stars, []Reaction{{Emoji: "s", Count: 14}}); got[0] != (Reaction{Emoji: "s", Count: 14, Mine: true, MineCount: 10}) {
+		t.Fatalf("min reactions keep the known count of the account's own: %+v", got)
+	}
+}
+
+func TestOwnIsTheAccountsShare(t *testing.T) {
+	for _, c := range []struct {
+		r    Reaction
+		want int
+	}{
+		{Reaction{Count: 3}, 0},
+		{Reaction{Count: 3, Mine: true}, 1}, // the count not known: one
+		{Reaction{Count: 11, Mine: true, MineCount: 10}, 10},
+	} {
+		if got := c.r.Own(); got != c.want {
+			t.Errorf("%+v: Own() = %d, want %d", c.r, got, c.want)
+		}
+	}
 }

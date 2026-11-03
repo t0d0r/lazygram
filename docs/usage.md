@@ -159,7 +159,8 @@ When someone adds a reaction while lazygram runs, window 0 says so with
 the chat's name: `-!- #dev: @grace reacted E to ada "first words of the
 message"`, or, where Telegram does not say who (channels), the counts:
 `-!- #news: E 13 F 4 on wire "first words..."`. Your own messages read
-`to your "..."`. Your own reactions, removed reactions and what changed
+`to your "..."`. Your own reactions (all the Stars you send, and every
+custom emoji of yours counted in `*`), removed reactions and what changed
 while lazygram was off are not announced; the counts just update. These
 notices are chat activity: `/feed off` hides them with the messages, and
 they never open a window or count as unread.

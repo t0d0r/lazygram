@@ -424,7 +424,7 @@ func TestReactionsPersist(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "cache.sqlite")
 	s := mustOpen(t, path, secret)
 	x := m("c", "1", 0, "liked")
-	x.Reactions = []domain.Reaction{{Emoji: "\U0001F44D", Count: 3, Mine: true}, {Emoji: domain.CustomReaction, Count: 1}}
+	x.Reactions = []domain.Reaction{{Emoji: "\U0001F44D", Count: 3, Mine: true}, {Emoji: domain.CustomReaction, Count: 3, Mine: true, MineCount: 2}}
 	x.MineUnknown = true
 	mustAdd(t, s, x, m("c", "2", 1, "nobody reacted"))
 	if err := s.Close(); err != nil {
@@ -486,7 +486,7 @@ func TestReactChangesOnlyTheReactions(t *testing.T) {
 	s := mustOpen(t, Memory, secret)
 	x := m("c", "1", 0, "keep me")
 	x.SenderID, x.Edited = "u1", time.Unix(1500, 0)
-	x.Reactions = []domain.Reaction{{Emoji: "a", Count: 1, Mine: true}}
+	x.Reactions = []domain.Reaction{{Emoji: "a", Count: 1, Mine: true, MineCount: 1}}
 	mustAdd(t, s, x)
 	rep := domain.Message{ID: "1", ChatID: "c", MineUnknown: true,
 		Reactions: []domain.Reaction{{Emoji: "a", Count: 2}, {Emoji: "b", Count: 1}}}
@@ -495,8 +495,8 @@ func TestReactChangesOnlyTheReactions(t *testing.T) {
 		t.Fatalf("before: %+v %v %v", before, ok, err)
 	}
 	if now.Text != "keep me" || now.SenderID != "u1" || !now.Edited.Equal(x.Edited) || now.Sender != "someone" ||
-		len(now.Reactions) != 2 || now.Reactions[0] != (domain.Reaction{Emoji: "a", Count: 2, Mine: true}) {
-		t.Fatalf("only the reactions change, Mine kept: %+v", now)
+		len(now.Reactions) != 2 || now.Reactions[0] != (domain.Reaction{Emoji: "a", Count: 2, Mine: true, MineCount: 1}) {
+		t.Fatalf("only the reactions change, Mine and its count kept: %+v", now)
 	}
 	all, _ := s.Messages("c", 0)
 	if len(all[0].Reactions) != 2 || all[0].Text != "keep me" {
