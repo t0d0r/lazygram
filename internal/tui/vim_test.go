@@ -319,10 +319,10 @@ func TestVimNormalMotions(t *testing.T) {
 		{"abc\n", 0, "w", "abc\n|"}, // no word after, an empty last line: on it, as vi
 		{"abc\n", 2, "e", "abc\n|"},
 		{"abc\n", 4, "w", "abc\n|"},
-		{"привет мир", 0, "w", "привет |мир"},
-		{"привет мир", 0, "e", "приве|т мир"},
-		{"привет,мир", 0, "w", "привет|,мир"}, // Cyrillic letters are a word, the comma is not
-		{"привет,мир", 0, "e", "приве|т,мир"},
+		{"\u043f\u0440\u0438\u0432\u0435\u0442 \u043c\u0438\u0440", 0, "w", "\u043f\u0440\u0438\u0432\u0435\u0442 |\u043c\u0438\u0440"},
+		{"\u043f\u0440\u0438\u0432\u0435\u0442 \u043c\u0438\u0440", 0, "e", "\u043f\u0440\u0438\u0432\u0435|\u0442 \u043c\u0438\u0440"},
+		{"\u043f\u0440\u0438\u0432\u0435\u0442,\u043c\u0438\u0440", 0, "w", "\u043f\u0440\u0438\u0432\u0435\u0442|,\u043c\u0438\u0440"}, // Cyrillic letters are a word, the comma is not
+		{"\u043f\u0440\u0438\u0432\u0435\u0442,\u043c\u0438\u0440", 0, "e", "\u043f\u0440\u0438\u0432\u0435|\u0442,\u043c\u0438\u0440"},
 		{"snake_case2 x", 0, "w", "snake_case2 |x"},
 		{"  two words", 6, "0", "|  two words"},
 		{"  two words", 6, "^", "  |two words"},
@@ -772,7 +772,7 @@ func TestVimNormalNeverInsertsText(t *testing.T) {
 			unmapped = append(unmapped, r)
 		}
 	}
-	unmapped = append(unmapped, []rune("éжЖ€\u00a0")...)
+	unmapped = append(unmapped, []rune("\u00e9\u0436\u0416\u20ac\u00a0")...)
 	sent := len(f.sent)
 	check := func(what string) {
 		t.Helper()
@@ -1511,7 +1511,7 @@ func TestVimListNormalNeverTypes(t *testing.T) {
 			unmapped = append(unmapped, r)
 		}
 	}
-	unmapped = append(unmapped, []rune("éж€\u00a0")...)
+	unmapped = append(unmapped, []rune("\u00e9\u0436\u20ac\u00a0")...)
 	sent := len(f.sent)
 	for _, line := range []string{"/list", "/win", "/settings", "/search"} {
 		enter(m, line)
