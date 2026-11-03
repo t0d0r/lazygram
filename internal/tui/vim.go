@@ -21,21 +21,30 @@ import (
 // client is mostly typing. One level of everything: no counts, one kill
 // buffer for p and P (lazygram's own, never the clipboard), one undo.
 //
+// The lists (/list, /win, /settings) and the pager have the two modes
+// too, each its own: they open in Normal, where j and k move, h and l are
+// Left and Right, gg and G go to the ends, Ctrl-D and Ctrl-U move half a
+// page and q closes; / or i enter their Insert mode, where typing narrows
+// the filter (the pager: edits the search) as with vim off, until Esc.
+// The window's mode stays as it was while a list is open.
+//
 // key hands vim mode every key first (vimBegin: the first key of a
-// two-key command waiting for it is taken, j and k become Down and Up),
-// then, once Ctrl-C and the window keys have had it, the rest (vimKey);
-// vimSettle keeps Normal's cursor on a character when the key is done.
-// The lists and the pager keep their own keys.
+// two-key command waiting for it is taken, j and k become Down and Up, in
+// a list h and l Left and Right too), then, once Ctrl-C and the window
+// keys have had it, the rest (vimKey, vimList for the lists and the
+// pager); vimSettle keeps Normal's cursor on a character when the key is
+// done.
 
 const vimKey = "vim" // store state key for vim mode; absent or unreadable means off
 
 // vimState is vim mode's state.
 type vimState struct {
-	on     bool     // /vim: vi keys on the input (kept); off: the usual keys only
-	normal bool     // the input is in Normal mode; false is Insert
-	op     rune     // the first key of a two-key command waiting for its second: g, d, c or r; 0 none
-	kill   []rune   // what the last delete took, for p and P
-	undo   *vimSnap // the input before the last Normal-mode change, for u
+	on      bool     // /vim: vi keys on the input (kept); off: the usual keys only
+	normal  bool     // the input is in Normal mode; false is Insert
+	listIns bool     // the open list or pager is in its Insert mode; false is Normal, as each one opens
+	op      rune     // the first key of a two-key command waiting for its second: g, d, c or r; 0 none
+	kill    []rune   // what the last delete took, for p and P
+	undo    *vimSnap // the input before the last Normal-mode change, for u
 }
 
 // vimSnap is the input and its cursor at one moment.
@@ -72,13 +81,27 @@ func (m *Model) setVim(arg string) {
 // and a window's own input, not a list's filter or the pager's search.
 func (m *Model) inNormal() bool { return m.vi.on && m.vi.normal && m.mode == modeWin }
 
-// vimTag is the status line's mode tag: NORMAL while the input is in
-// Normal mode, nothing in Insert or with vim off.
+// listNormal reports whether a list or the pager is open in its Normal
+// mode, where typed keys move and act instead of narrowing it.
+func (m *Model) listNormal() bool { return m.vi.on && m.mode != modeWin && !m.vi.listIns }
+
+// vimTag is the status line's mode tag: NORMAL while the input, or the
+// open list or pager, is in Normal mode; nothing in Insert or with vim
+// off.
 func (m *Model) vimTag() string {
-	if m.inNormal() {
+	if m.inNormal() || m.listNormal() {
 		return "NORMAL"
 	}
 	return ""
+}
+
+// vimTypeTo is how the rule of a list or the pager says to narrow it or
+// search: "type to", or "/ to" in its Normal mode, where typing does not.
+func (m *Model) vimTypeTo() string {
+	if m.listNormal() {
+		return "/ to"
+	}
+	return "type to"
 }
 
 // vimRune is the one character a key types, Space included, or false for
@@ -95,21 +118,40 @@ func vimRune(k tea.KeyMsg) (rune, bool) {
 	return 0, false
 }
 
+// The keys Normal mode reads as arrows, so they do exactly what those do:
+// on the input j and k (Down and Up: between its rows, keeping the column,
+// then through the history at the first and the last row); in a list h
+// and l too (Left and Right: the action button, the setting's value; in
+// the pager the search's cursor).
+var (
+	vimArrows     = map[rune]tea.KeyType{'j': tea.KeyDown, 'k': tea.KeyUp}
+	vimListArrows = map[rune]tea.KeyType{'j': tea.KeyDown, 'k': tea.KeyUp, 'h': tea.KeyLeft, 'l': tea.KeyRight}
+)
+
 // vimBegin is vim mode's first look at a key, before key reads it. The
 // first key of a two-key command waiting for this one is taken off and
 // returned (any key ends the wait; vimKey reads this one as the second),
-// and in Normal mode with nothing waiting j and k become Down and Up, so
-// they move between input rows, keeping the column, and walk the history
-// at the first and the last row, exactly as those do.
+// and in Normal mode with nothing waiting the arrow letters become the
+// arrows. A digit right after an Esc in a list's Insert mode closes the
+// list before the digit switches windows: with vim off that Esc closed
+// it, and its filter never follows into a window's input.
 func (m *Model) vimBegin(k tea.KeyMsg) (tea.KeyMsg, rune) {
 	op := m.vi.op
 	m.vi.op = 0
-	if r, ok := vimRune(k); ok && op == 0 && m.inNormal() {
-		switch r {
-		case 'j':
-			k = tea.KeyMsg{Type: tea.KeyDown}
-		case 'k':
-			k = tea.KeyMsg{Type: tea.KeyUp}
+	r, ok := vimRune(k)
+	if ok && r >= '0' && r <= '9' && m.escPending && m.mode != modeWin {
+		m.mode, m.input, m.curBack = modeWin, nil, 0
+	}
+	if ok && op == 0 {
+		arrows := map[rune]tea.KeyType(nil)
+		switch {
+		case m.inNormal():
+			arrows = vimArrows
+		case m.listNormal():
+			arrows = vimListArrows
+		}
+		if t, ok := arrows[r]; ok {
+			k = tea.KeyMsg{Type: t}
 		}
 	}
 	return k, op
@@ -146,10 +188,10 @@ func (m *Model) vimSettle() {
 // of a two-key command this one completes. It reports false for a key it
 // leaves to the usual code: in Insert every key but Esc, in Normal every
 // key that types nothing and is not Esc or a scrolling key. The lists and
-// the pager keep their keys.
+// the pager have their own Normal mode (vimList).
 func (m *Model) vimKey(k tea.KeyMsg, op rune) (bool, tea.Cmd) {
 	if m.mode != modeWin {
-		return false, nil
+		return m.vimList(k, op)
 	}
 	if !m.vi.normal {
 		if k.Type != tea.KeyEsc {
@@ -311,6 +353,102 @@ func (m *Model) vimSecond(op, r rune) tea.Cmd {
 		}
 	}
 	return nil
+}
+
+// vimList reads a key in a list or the pager once the window keys have
+// passed it by; op is a g waiting for its second. In Normal mode (vimBegin
+// made j, k, h and l the arrows): gg and G go to the first and the last
+// row (the pager: the oldest and the newest line), Ctrl-D and Ctrl-U move
+// half a page, q closes as Esc does but arms no digit, since it is no Esc,
+// i enters Insert at the cursor, / at the end of the filter, and : as well
+// with "/" in an empty one, to type a command as in a window. Any other
+// typed character does nothing. In Insert every key but Esc is the usual
+// one, and Esc returns to Normal, the filter kept, arming Esc then a digit
+// as Esc does everywhere. It reports false for a key it leaves to the
+// usual code: Esc in Normal (it closes), Enter, a paste, the other keys.
+func (m *Model) vimList(k tea.KeyMsg, op rune) (bool, tea.Cmd) {
+	if m.vi.listIns {
+		if k.Type != tea.KeyEsc {
+			return false, nil
+		}
+		m.vi.listIns = false
+		m.escPending, m.escSaved = true, nil
+		return true, nil
+	}
+	r, ok := vimRune(k)
+	if !ok {
+		half := max(m.contentHeight()/2, 1)
+		switch {
+		case k.Type == tea.KeyCtrlD:
+			m.vimListBy(half)
+		case k.Type == tea.KeyCtrlU:
+			m.vimListBy(-half)
+		case (k.Type == tea.KeyRunes || k.Type == tea.KeySpace) && !k.Paste:
+			// An Alt chord: Normal types nothing (Alt-N switched windows already).
+		default:
+			return false, nil
+		}
+		return true, nil
+	}
+	switch {
+	case op == 'g':
+		if r == 'g' {
+			m.vimListEnd(true)
+		}
+	case r == 'g':
+		m.vi.op = r
+	case r == 'G':
+		m.vimListEnd(false)
+	case r == 'q':
+		m.mode, m.input, m.curBack = modeWin, nil, 0
+	case r == 'i':
+		m.vi.listIns = true
+	case r == '/':
+		m.vi.listIns, m.curBack = true, 0
+	case r == ':':
+		m.vi.listIns, m.curBack = true, 0
+		if len(m.input) == 0 {
+			m.input = []rune("/")
+		}
+	}
+	return true, nil
+}
+
+// vimListBy moves the list's selection d rows down (up when d < 0), within
+// its rows; the pager scrolls d lines toward the newest (Down's way).
+func (m *Model) vimListBy(d int) {
+	if m.mode == modePager {
+		w := m.wins[m.cur]
+		w.scroll = max(w.scroll-d, 0)
+		return
+	}
+	m.listCur = min(max(m.listCur+d, 0), max(m.listLen()-1, 0))
+}
+
+// vimListEnd selects the list's first row or its last; the pager goes to
+// the top, the oldest line, as Home, or to the bottom, as End.
+func (m *Model) vimListEnd(first bool) {
+	switch {
+	case m.mode == modePager && first:
+		m.wins[m.cur].scroll = 1 << 30
+	case m.mode == modePager:
+		m.wins[m.cur].scroll = 0
+	case first:
+		m.listCur = 0
+	default:
+		m.listCur = max(m.listLen()-1, 0)
+	}
+}
+
+// listLen is the number of rows the open list shows.
+func (m *Model) listLen() int {
+	switch m.listSrc {
+	case listWindows:
+		return len(m.wins)
+	case listSettings:
+		return len(m.settingRows())
+	}
+	return len(m.listItems())
 }
 
 // vimMove puts the cursor before rune p.

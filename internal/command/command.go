@@ -157,6 +157,6 @@ const HelpText = `Commands
   /mark-as-read          one receipt for this window's chat, now, whatever /read-receipts says
   /autojoin [on|off]     at start open a window for every chat with unread messages; on by default, kept
   /feed [on|off]         window 0 shows every chat's messages as they arrive (on, the default) or only its notices (off); kept; no argument shows
-  /vim [on|off]          vi keys on the input: Esc enters Normal mode, i returns to typing; off by default, kept; no argument shows
+  /vim [on|off]          vi keys: Normal and Insert modes on the input, in the lists and the pager (Esc enters Normal, i returns to typing; /keys lists the keys); off by default, kept; no argument shows
   /settings [text]       a menu of every kept setting, in window 0: Enter or Right sets the next value, Left the previous, typing narrows; also /set, /options
 Keyboard shortcuts: type /keys.`

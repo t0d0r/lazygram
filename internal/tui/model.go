@@ -1447,12 +1447,12 @@ func (m *Model) refresh() tea.Cmd {
 }
 
 func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
-	// Vim mode (vim.go) looks first: Normal mode reads a run of typed
-	// characters one at a time and j and k as Down and Up, and keeps its
-	// cursor on a character once the key is done.
+	// Vim mode (vim.go) looks first: Normal mode (the input's, a list's)
+	// reads a run of typed characters one at a time and j and k as Down and
+	// Up, and keeps its cursor on a character once the key is done.
 	var vop rune
 	if m.vi.on {
-		if m.inNormal() && k.Type == tea.KeyRunes && len(k.Runes) > 1 && !k.Paste && !k.Alt {
+		if (m.inNormal() || m.listNormal()) && k.Type == tea.KeyRunes && len(k.Runes) > 1 && !k.Paste && !k.Alt {
 			return m.vimEach(k)
 		}
 		k, vop = m.vimBegin(k)
@@ -1814,6 +1814,9 @@ func (m *Model) enter() (tea.Model, tea.Cmd) {
 	}
 	m.input, m.curBack = nil, 0
 	m.remember(line)
+	// Vim mode: a command line leaves a list's Insert mode, so the list it
+	// opens, or the one it leaves open, is in Normal, as every list opens.
+	m.vi.listIns = false
 	// A command typed in the settings menu that leaves it open (/clip,
 	// /theme nord, a typo) has the rule show what it said, as a change
 	// made in the menu does.
@@ -2890,7 +2893,7 @@ func (m *Model) View() string {
 			items := m.settingRows()
 			selectable, buttons = len(items) > 0, false
 			m.listCur = min(max(m.listCur, 0), max(len(items)-1, 0))
-			m.modeInfo = fmt.Sprintf("settings (%d): Up/Down, Enter or Right next value, Left previous, Esc closes, type to narrow", len(items))
+			m.modeInfo = fmt.Sprintf("settings (%d): Up/Down, Enter or Right next value, Left previous, Esc closes, %s narrow", len(items), m.vimTypeTo())
 			if m.listSaid && m.status != "" { // what the last change said, until the next key
 				m.modeInfo = ""
 			}
@@ -2899,7 +2902,7 @@ func (m *Model) View() string {
 			items := m.listItems()
 			selectable = len(items) > 0
 			m.listCur = min(max(m.listCur, 0), max(len(items)-1, 0))
-			m.modeInfo = fmt.Sprintf("chats (%d): Up/Down, Left/Right pick open/read/unread, Enter does it, Esc returns, type to narrow", len(items))
+			m.modeInfo = fmt.Sprintf("chats (%d): Up/Down, Left/Right pick open/read/unread, Enter does it, Esc returns, %s narrow", len(items), m.vimTypeTo())
 			rows = m.listLines(items)
 		}
 		// The selected row is highlighted and carries the action buttons;
@@ -2939,8 +2942,8 @@ func (m *Model) View() string {
 			showChat: w.chatID == "", fullDate: true, highlight: q, phase: m.phaseOpt(), hover: m.hover, cache: m.rcache})
 		body, w.scroll = window(lines, h, w.scroll)
 		bodySpans, _ = window(sp, h, w.scroll)
-		m.modeInfo = fmt.Sprintf("history of %s: %d of %d messages; type to search, Esc returns",
-			m.winName(m.cur), len(hits), len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})))
+		m.modeInfo = fmt.Sprintf("history of %s: %d of %d messages; %s search, Esc returns",
+			m.winName(m.cur), len(hits), len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})), m.vimTypeTo())
 	default:
 		lines, sp := m.richLines()
 		m.lastLines = len(lines)
@@ -3208,4 +3211,6 @@ const keyHelp = `Keys
   Ctrl-L                 redraw: drop notices and pictures (/redraw)
   F1                     the notes and the command list (/help); /keys prints this
   Esc                    close the list, the pager or the settings menu; clear the input
+  vim: Normal mode       /vim on: Esc enters it, i a I A o O leave it; typed keys are commands, never text: h l w b e 0 ^ $ move (Esc 0 is still window 0), j k as Down / Up, x X D dd dw cw cc S C r edit, u undoes, p P put back; Ctrl-E Y D U F B and gg G scroll; gt gT switch windows; : / ? a command, a search
+  vim: lists, pager      /vim on: they open in Normal: j k move, h l as Left / Right, gg G ends, Ctrl-D / Ctrl-U half a page, q closes; / or i to type, Esc stops
   Ctrl-C                 quit`

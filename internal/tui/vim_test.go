@@ -9,6 +9,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+
+	"lazygram/internal/domain"
 )
 
 // vimChat is @alice's window (chatOn, where Enter adds a line break and
@@ -957,5 +959,660 @@ func TestVimInsertIsTodaysKeys(t *testing.T) {
 		if !reflect.DeepEqual(a, b) || on.vi.normal {
 			t.Fatalf("key %d %v: with vim off %+v\nin Insert %+v", i, k, a, b)
 		}
+	}
+}
+
+// busyFake is newFake with 40 more chats, so /list is longer than a page,
+// and 60 more lines in #dev, so window 0 and its pager are too.
+func busyFake() *fake {
+	f := newFake()
+	for i := range 40 {
+		f.chats = append(f.chats, domain.Chat{ID: "r" + itoa(i), Alias: "room" + itoa(i), Title: "Room " + itoa(i), Kind: domain.ChatGroup})
+	}
+	for i := range 60 {
+		f.msgs = append(f.msgs, mk("c1", "x"+itoa(i), "ada", "busy line "+itoa(i), 10+i))
+	}
+	return f
+}
+
+// vimOn is setup with vim on, in window 0, its input in Insert.
+func vimOn(t *testing.T, f *fake) *Model {
+	t.Helper()
+	m := setup(t, f)
+	enter(m, "/vim on")
+	if !m.vi.on || m.vi.normal || m.mode != modeWin {
+		t.Fatalf("vim on, in Insert: on=%v normal=%v mode=%v", m.vi.on, m.vi.normal, m.mode)
+	}
+	return m
+}
+
+// ruleRow is the rule of the last frame, for a one-row input.
+func ruleRow(m *Model) string {
+	rows := strings.Split(ansi.Strip(m.View()), "\n")
+	return rows[len(rows)-4]
+}
+
+// TestVimListsOpenInNormal: with vim on /list, /win, /settings and the
+// pager open in Normal mode, say so (NORMAL, "/ to narrow"), and i, then
+// Esc, then Esc go to Insert, back to Normal and close; the window's own
+// mode is as it was.
+func TestVimListsOpenInNormal(t *testing.T) {
+	m := vimOn(t, newFake())
+	for _, c := range []struct{ line, normal, insert string }{
+		{"/list", "chats (3): Up/Down, Left/Right pick open/read/unread, Enter does it, Esc returns, / to narrow",
+			"chats (3): Up/Down, Left/Right pick open/read/unread, Enter does it, Esc returns, type to narrow"},
+		{"/win", "windows (4): Up/Down, Left/Right pick focus/read/unread/close, Enter does it, Esc returns",
+			"windows (4): Up/Down, Left/Right pick focus/read/unread/close, Enter does it, Esc returns"},
+		{"/settings", "settings (9): Up/Down, Enter or Right next value, Left previous, Esc closes, / to narrow",
+			"settings (9): Up/Down, Enter or Right next value, Left previous, Esc closes, type to narrow"},
+		{"/search", "history of server: 4 of 4 messages; / to search, Esc returns",
+			"history of server: 4 of 4 messages; type to search, Esc returns"},
+	} {
+		enter(m, c.line)
+		if m.mode == modeWin || !m.listNormal() || m.vi.listIns {
+			t.Fatalf("%s opens in Normal: mode=%v ins=%v", c.line, m.mode, m.vi.listIns)
+		}
+		if rule, status := ruleRow(m), statusRow(m); !strings.Contains(rule, c.normal) || !strings.Contains(status, "[0:server]  NORMAL  ") {
+			t.Fatalf("%s in Normal: rule %q status %q", c.line, rule, status)
+		}
+		typ(m, "i")
+		if rule, status := ruleRow(m), statusRow(m); m.listNormal() || !strings.Contains(rule, c.insert) || strings.Contains(status, "NORMAL") {
+			t.Fatalf("%s: i enters Insert: rule %q status %q", c.line, rule, status)
+		}
+		press(m, tea.KeyEsc)
+		if m.mode == modeWin || !m.listNormal() || !strings.Contains(statusRow(m), "NORMAL") {
+			t.Fatalf("%s: Esc in Insert returns to Normal, open: mode=%v", c.line, m.mode)
+		}
+		press(m, tea.KeyEsc)
+		if m.mode != modeWin || m.vi.normal || len(m.input) != 0 || strings.Contains(statusRow(m), "NORMAL") {
+			t.Fatalf("%s: Esc in Normal closes; the window is in Insert as before: mode=%v normal=%v", c.line, m.mode, m.vi.normal)
+		}
+	}
+}
+
+// TestVimListJKAndEnds: j and k are Down and Up, gg and G the first and
+// the last row; in the pager they scroll, gg as Home, G as End.
+func TestVimListJKAndEnds(t *testing.T) {
+	m := vimOn(t, busyFake())
+	for _, c := range []struct {
+		line string
+		n    int // the rows
+	}{{"/list", 43}, {"/list room1", 10}, {"/win", 4}, {"/settings", 9}, {"/settings mo", 2}} {
+		enter(m, c.line)
+		m.View()
+		if m.listCur != 0 || m.listLen() != c.n { // /win opens on window 0, the current one
+			t.Fatalf("%s: cursor %d of %d rows", c.line, m.listCur, m.listLen())
+		}
+		filter := string(m.input)
+		for i := 1; i <= 3; i++ {
+			typ(m, "j")
+			m.View() // a frame keeps Down within the rows
+			if m.listCur != min(i, c.n-1) {
+				t.Fatalf("%s: j %d times: row %d", c.line, i, m.listCur)
+			}
+		}
+		typ(m, "k")
+		if m.listCur != min(3, c.n-1)-1 {
+			t.Fatalf("%s: k: %d", c.line, m.listCur)
+		}
+		typ(m, "G")
+		if m.listCur != c.n-1 {
+			t.Fatalf("%s: G is the last row: %d of %d", c.line, m.listCur, c.n)
+		}
+		typ(m, "gg")
+		if m.listCur != 0 {
+			t.Fatalf("%s: gg is the first: %d", c.line, m.listCur)
+		}
+		typ(m, "k")
+		if m.listCur != 0 || string(m.input) != filter || !m.listNormal() {
+			t.Fatalf("%s: k on the first row stays; nothing typed: %d %q", c.line, m.listCur, string(m.input))
+		}
+		press(m, tea.KeyEsc)
+	}
+	// The pager, key for key with the arrows, Home and End.
+	keys, vi := setup(t, busyFake()), vimOn(t, busyFake())
+	enter(keys, "/search")
+	enter(vi, "/search")
+	for _, c := range []struct {
+		vim string
+		key tea.KeyType
+	}{{"k", tea.KeyUp}, {"k", tea.KeyUp}, {"k", tea.KeyUp}, {"j", tea.KeyDown}, {"gg", tea.KeyHome}, {"j", tea.KeyDown}, {"G", tea.KeyEnd}, {"j", tea.KeyDown}} {
+		typ(vi, c.vim)
+		press(keys, c.key)
+		vi.View()
+		keys.View()
+		if a, b := vi.wins[0].scroll, keys.wins[0].scroll; a != b || len(vi.input) != 0 || vi.mode != modePager {
+			t.Fatalf("pager %s: scroll %d, %v gives %d; input %q", c.vim, a, c.key, b, string(vi.input))
+		}
+	}
+	if vi.wins[0].scroll != 0 {
+		t.Fatal("the pager is at the bottom")
+	}
+	typ(vi, "gg")
+	vi.View()
+	if vi.wins[0].scroll < 40 {
+		t.Fatalf("gg: the top of the pager: %d", vi.wins[0].scroll)
+	}
+}
+
+// TestVimListHL: h and l are Left and Right: the action button in /list
+// and /win, the setting's value in /settings, the search's cursor in the
+// pager.
+func TestVimListHL(t *testing.T) {
+	m := vimOn(t, newFake())
+	enter(m, "/list")
+	for _, c := range []struct {
+		keys string
+		act  int
+	}{{"l", 1}, {"l", 2}, {"l", 2}, {"h", 1}, {"hh", 0}} {
+		typ(m, c.keys)
+		if m.listAct != c.act || len(m.input) != 0 {
+			t.Fatalf("/list %s: button %d, want %d; input %q", c.keys, m.listAct, c.act, string(m.input))
+		}
+	}
+	press(m, tea.KeyEsc)
+	enter(m, "/win")
+	typ(m, "llll")
+	if m.listAct != 3 {
+		t.Fatalf("/win: the close button: %d", m.listAct)
+	}
+	press(m, tea.KeyEsc)
+	enter(m, "/settings")
+	typ(m, "jjjjj") // fx
+	if m.fx {
+		t.Fatal("the lights start off")
+	}
+	typ(m, "l")
+	if !m.fx || menuValue(m, "fx") != "on" || !m.settingsOpen() {
+		t.Fatalf("l: the next value: fx=%v", m.fx)
+	}
+	typ(m, "h")
+	if m.fx || !m.settingsOpen() {
+		t.Fatalf("h: the previous value: fx=%v", m.fx)
+	}
+	press(m, tea.KeyEsc)
+	enter(m, "/search line")
+	typ(m, "hh")
+	if curText(m) != "li|ne" || m.mode != modePager {
+		t.Fatalf("pager hh: the search's cursor: %q", curText(m))
+	}
+	typ(m, "l")
+	if curText(m) != "lin|e" {
+		t.Fatalf("pager l: %q", curText(m))
+	}
+}
+
+// TestVimListCtrlDU: in Normal Ctrl-D and Ctrl-U move half a page within
+// the rows (the pager scrolls); in Insert they are the usual keys.
+func TestVimListCtrlDU(t *testing.T) {
+	m := vimOn(t, busyFake())
+	half := max(m.contentHeight()/2, 1)
+	enter(m, "/list")
+	n := m.listLen()
+	for _, c := range []struct {
+		key  tea.KeyType
+		want int
+	}{{tea.KeyCtrlD, half}, {tea.KeyCtrlD, 2 * half}, {tea.KeyCtrlU, half}, {tea.KeyCtrlU, 0}, {tea.KeyCtrlU, 0},
+		{tea.KeyCtrlD, half}, {tea.KeyCtrlD, 2 * half}, {tea.KeyCtrlD, 3 * half}, {tea.KeyCtrlD, 4 * half}, {tea.KeyCtrlD, 5 * half},
+		{tea.KeyCtrlD, n - 1}, {tea.KeyCtrlD, n - 1}, {tea.KeyCtrlU, n - 1 - half}} {
+		press(m, c.key) // no frame between: the key clamps by itself
+		if m.listCur != c.want || len(m.input) != 0 {
+			t.Fatalf("%v: row %d, want %d (half %d, %d rows)", c.key, m.listCur, c.want, half, n)
+		}
+	}
+	// Insert: Ctrl-U clears the filter, Ctrl-D does nothing, as with vim off.
+	typ(m, "/r")
+	m.listCur = 3
+	press(m, tea.KeyCtrlD)
+	if m.listCur != 3 || string(m.input) != "r" {
+		t.Fatalf("Insert Ctrl-D: row %d input %q", m.listCur, string(m.input))
+	}
+	press(m, tea.KeyCtrlU)
+	if m.listCur != 3 || len(m.input) != 0 || m.mode != modeList {
+		t.Fatalf("Insert Ctrl-U clears the filter: row %d input %q", m.listCur, string(m.input))
+	}
+	press(m, tea.KeyEsc)
+	press(m, tea.KeyEsc)
+	// The pager scrolls half a page: Ctrl-U toward the oldest, Ctrl-D back.
+	enter(m, "/search")
+	w := m.wins[0]
+	w.scroll = 0
+	for _, c := range []struct {
+		key  tea.KeyType
+		want int
+	}{{tea.KeyCtrlU, half}, {tea.KeyCtrlU, 2 * half}, {tea.KeyCtrlD, half}, {tea.KeyCtrlD, 0}, {tea.KeyCtrlD, 0}} {
+		press(m, c.key)
+		if w.scroll != c.want || len(m.input) != 0 {
+			t.Fatalf("pager %v: scroll %d, want %d", c.key, w.scroll, c.want)
+		}
+	}
+}
+
+// TestVimListEnterQAndEsc: Enter acts as with vim off; q closes without
+// arming Esc then a digit, Esc closes and arms it; the window's mode is
+// what it was before the list opened.
+func TestVimListEnterQAndEsc(t *testing.T) {
+	m := vimOn(t, newFake())
+	enter(m, "/list")
+	typ(m, "j")
+	press(m, tea.KeyEnter)
+	if m.mode != modeWin || m.winName(m.cur) != "@alice" {
+		t.Fatalf("j, Enter opens @alice: mode=%v %s", m.mode, m.winName(m.cur))
+	}
+	enter(m, "/win")
+	typ(m, "lll") // [close]
+	press(m, tea.KeyEnter)
+	if len(m.wins) != 3 || m.mode != modeList {
+		t.Fatalf("Enter runs the chosen button: %d windows, mode %v", len(m.wins), m.mode)
+	}
+	typ(m, "q")
+	if m.mode != modeWin || m.escPending || len(m.input) != 0 {
+		t.Fatalf("q closes, no digit armed: mode=%v esc=%v", m.mode, m.escPending)
+	}
+	cur := m.cur
+	if cur == 1 { // a 1 typed below must name another window than the current one
+		t.Fatalf("current window %d", cur)
+	}
+	typ(m, "2")
+	if m.cur != cur || string(m.input) != "2" {
+		t.Fatalf("after q a digit types, in Insert: cur=%d %q", m.cur, string(m.input))
+	}
+	m.input, m.curBack = nil, 0
+	enter(m, "/list")
+	typ(m, "/ali")
+	press(m, tea.KeyEsc)
+	typ(m, "q")
+	if m.mode != modeWin || len(m.input) != 0 || m.escPending {
+		t.Fatalf("q drops the filter, as Esc does: mode=%v %q", m.mode, string(m.input))
+	}
+	// From Normal: the window is in Normal again when the list closes.
+	m.input, m.curBack = []rune("/list"), 0
+	press(m, tea.KeyEsc)
+	press(m, tea.KeyEnter) // Enter runs the line in Normal too
+	if !m.listNormal() || !m.vi.normal {
+		t.Fatalf("the list in Normal, the window's Normal kept: %v %v", m.listNormal(), m.vi.normal)
+	}
+	typ(m, "q")
+	if m.mode != modeWin || !m.vi.normal || !strings.Contains(statusRow(m), "NORMAL") {
+		t.Fatalf("q: back to the window in Normal: mode=%v normal=%v", m.mode, m.vi.normal)
+	}
+	typ(m, "1")
+	if m.cur != cur {
+		t.Fatal("a digit after q switches nothing")
+	}
+	m.input, m.curBack = []rune("/settings"), 0
+	press(m, tea.KeyEnter)
+	press(m, tea.KeyEsc)
+	if m.mode != modeWin || !m.escPending || !m.vi.normal {
+		t.Fatalf("Esc closes and arms the digit: mode=%v esc=%v", m.mode, m.escPending)
+	}
+	typ(m, "1")
+	if m.cur != 1 || !m.vi.normal {
+		t.Fatalf("Esc 1: window 1: %d", m.cur)
+	}
+}
+
+// TestVimListInsertNarrows: / and i enter the list's Insert mode, where
+// typing narrows the filter; Esc returns to Normal with the filter kept,
+// and a digit right after that Esc closes the list, dropping the filter,
+// and switches windows, as Esc then a digit does with vim off.
+func TestVimListInsertNarrows(t *testing.T) {
+	m := vimOn(t, newFake())
+	enter(m, "/list")
+	typ(m, "al")
+	if len(m.input) != 0 || len(m.listItems()) != 3 || !m.listNormal() {
+		t.Fatalf("Normal: a and l narrow nothing: %q", string(m.input))
+	}
+	typ(m, "/ali")
+	if string(m.input) != "ali" || len(m.listItems()) != 1 || m.listNormal() {
+		t.Fatalf("/ then ali: %q, %d rows", string(m.input), len(m.listItems()))
+	}
+	press(m, tea.KeyEsc)
+	if string(m.input) != "ali" || m.mode != modeList || !m.listNormal() {
+		t.Fatalf("Esc: Normal, the filter kept: %q mode %v", string(m.input), m.mode)
+	}
+	typ(m, "xc")
+	if string(m.input) != "ali" {
+		t.Fatalf("Normal types nothing: %q", string(m.input))
+	}
+	m.curBack = 2
+	typ(m, "ic")
+	if curText(m) != "ac|li" {
+		t.Fatalf("i: Insert at the cursor: %q", curText(m))
+	}
+	press(m, tea.KeyEsc)
+	typ(m, "/e")
+	if curText(m) != "aclie|" {
+		t.Fatalf("/: Insert at the end: %q", curText(m))
+	}
+	press(m, tea.KeyEsc)
+	press(m, tea.KeyEsc)
+	if m.mode != modeWin || len(m.input) != 0 {
+		t.Fatalf("a second Esc closes: mode=%v %q", m.mode, string(m.input))
+	}
+	enter(m, "/list")
+	typ(m, "/ali")
+	press(m, tea.KeyEsc)
+	typ(m, "2")
+	if m.cur != 2 || m.mode != modeWin || len(m.input) != 0 {
+		t.Fatalf("Esc 2 from Insert: window 2, the list closed, no filter: cur=%d mode=%v %q", m.cur, m.mode, string(m.input))
+	}
+	enter(m, "/list")
+	typ(m, "/x")
+	press(m, tea.KeyEsc)
+	typ(m, "9")
+	if !m.isErr || m.cur != 2 || m.mode != modeWin || len(m.input) != 0 {
+		t.Fatalf("Esc 9: no window 9, the list closed: cur=%d mode=%v %q %q", m.cur, m.mode, string(m.input), m.status)
+	}
+	// A digit not right after Esc does nothing in Normal.
+	enter(m, "/list")
+	typ(m, "1")
+	if m.cur != 2 || m.mode != modeList || len(m.input) != 0 {
+		t.Fatalf("1 in Normal: cur=%d mode=%v %q", m.cur, m.mode, string(m.input))
+	}
+}
+
+// TestVimListColonAndCommands: : starts a command line in the filter; a
+// command line leaves Insert, so the list it opens, or the one it leaves
+// open, is in Normal.
+func TestVimListColonAndCommands(t *testing.T) {
+	m := vimOn(t, newFake())
+	enter(m, "/settings")
+	typ(m, ":")
+	if curText(m) != "/|" || m.listNormal() {
+		t.Fatalf(": in an empty filter: %q", curText(m))
+	}
+	typ(m, "feed off")
+	press(m, tea.KeyEnter)
+	if m.feed || !m.settingsOpen() || !m.listNormal() || len(m.input) != 0 {
+		t.Fatalf(":feed off runs it; the menu stays, in Normal: feed=%v open=%v normal=%v", m.feed, m.settingsOpen(), m.listNormal())
+	}
+	typ(m, "/fe")
+	press(m, tea.KeyEsc)
+	m.curBack = 1
+	typ(m, ":")
+	if curText(m) != "fe|" || m.listNormal() {
+		t.Fatalf(": with a filter: Insert at its end, nothing overwritten: %q", curText(m))
+	}
+	m.input, m.curBack = []rune("/nope"), 0
+	press(m, tea.KeyEnter)
+	if !m.isErr || !m.settingsOpen() || !m.listNormal() {
+		t.Fatalf("an unknown command leaves Insert too: err=%v normal=%v", m.isErr, m.listNormal())
+	}
+	typ(m, "i")
+	m.input, m.curBack = []rune("/list"), 0
+	press(m, tea.KeyEnter)
+	if m.mode != modeList || m.listSrc != listChats || !m.listNormal() {
+		t.Fatalf("a list opened from another's Insert mode opens in Normal: src=%v normal=%v", m.listSrc, m.listNormal())
+	}
+	typ(m, "i")
+	press(m, tea.KeyDown)
+	press(m, tea.KeyEnter) // a row opened: Insert lasts until the next list opens
+	if m.mode != modeWin {
+		t.Fatalf("Enter opened the row: %v", m.mode)
+	}
+	enter(m, "/win")
+	if !m.listNormal() {
+		t.Fatal("the next list opens in Normal")
+	}
+}
+
+// TestVimListNormalNeverTypes: in a list's or the pager's Normal mode no
+// typed character that is not mapped, no pair g with another key and no
+// Alt chord changes the filter, the selection or the view.
+func TestVimListNormalNeverTypes(t *testing.T) {
+	f := newFake()
+	m := vimOn(t, f)
+	const mapped = "jkhlgGqi/:"
+	var unmapped []rune
+	for r := rune(' '); r <= '~'; r++ {
+		if !strings.ContainsRune(mapped, r) {
+			unmapped = append(unmapped, r)
+		}
+	}
+	unmapped = append(unmapped, []rune("éж€\u00a0")...)
+	sent := len(f.sent)
+	for _, line := range []string{"/list", "/win", "/settings", "/search"} {
+		enter(m, line)
+		mode, src := m.mode, m.listSrc
+		reset := func() {
+			m.mode, m.listSrc, m.listCur, m.listAct, m.input, m.curBack = mode, src, 1, 1, nil, 0
+			m.vi.listIns, m.vi.op, m.wins[0].scroll = false, 0, 1
+		}
+		check := func(what string) {
+			t.Helper()
+			if m.mode != mode || m.listSrc != src || m.listCur != 1 || m.listAct != 1 || len(m.input) != 0 ||
+				m.vi.listIns || m.vi.op != 0 || m.wins[0].scroll != 1 || m.cur != 0 || m.vi.normal {
+				t.Fatalf("%s %s: mode=%v cur=%d act=%d input=%q ins=%v op=%q scroll=%d", line, what, m.mode, m.listCur, m.listAct,
+					string(m.input), m.vi.listIns, m.vi.op, m.wins[0].scroll)
+			}
+		}
+		for _, r := range unmapped {
+			reset()
+			typ(m, string(r))
+			check(string(r))
+			if r != 'g' {
+				reset()
+				typ(m, "g"+string(r))
+				check("g" + string(r))
+			}
+			if r < '0' || r > '9' {
+				reset()
+				alt(m, r)
+				check("Alt-" + string(r))
+			}
+		}
+		for _, r := range mapped {
+			reset()
+			alt(m, r)
+			check("Alt-" + string(r))
+			if r != 'g' { // g then a mapped key is no pair either: both keys do nothing
+				reset()
+				typ(m, "g"+string(r))
+				check("g" + string(r))
+			}
+		}
+		press(m, tea.KeyEsc)
+	}
+	if len(f.sent) != sent {
+		t.Fatalf("nothing is sent: %q", f.sent[sent:])
+	}
+}
+
+// TestVimListRunsAndPaste: keys that arrive as one run in a list's Normal
+// mode are read one at a time; a paste narrows the filter, as with vim off.
+func TestVimListRunsAndPaste(t *testing.T) {
+	m := vimOn(t, newFake())
+	enter(m, "/list")
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("jj")})
+	if m.listCur != 2 || len(m.input) != 0 {
+		t.Fatalf("jj as one key: row %d input %q", m.listCur, string(m.input))
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("gg")})
+	if m.listCur != 0 {
+		t.Fatalf("gg as one key: row %d", m.listCur)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/al")})
+	if string(m.input) != "al" || m.listNormal() {
+		t.Fatalf("/al as one key: Insert takes the rest: %q", string(m.input))
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("ic")})
+	if string(m.input) != "alic" {
+		t.Fatalf("Insert takes a run as it always did: %q", string(m.input))
+	}
+	press(m, tea.KeyEsc)
+	m.input, m.curBack = nil, 0
+	paste(m, "new")
+	if string(m.input) != "new" || !m.listNormal() || len(m.listItems()) != 1 {
+		t.Fatalf("a paste in Normal narrows: %q normal=%v", string(m.input), m.listNormal())
+	}
+}
+
+// TestVimSettingsMenuTurnsVimOn: the vim row turns vim on in the open
+// menu, which is in Normal at once; Left, Right and Enter go on stepping.
+func TestVimSettingsMenuTurnsVimOn(t *testing.T) {
+	m := setup(t, newFake())
+	openAt(t, m, "vim")
+	press(m, tea.KeyEnter)
+	if !m.vi.on || !m.listNormal() || !m.settingsOpen() {
+		t.Fatalf("on: the menu in Normal: on=%v normal=%v", m.vi.on, m.listNormal())
+	}
+	typ(m, "kh")                                                    // clip, its previous value
+	if m.listCur != 7 || m.clipMode != "off" || len(m.input) != 0 { // auto wraps back to off
+		t.Fatalf("k h: clip %q row %d input %q", m.clipMode, m.listCur, string(m.input))
+	}
+	typ(m, "jl")
+	if m.vi.on || m.listNormal() || !m.settingsOpen() {
+		t.Fatal("j l: vim off again; the menu's keys are the usual ones")
+	}
+	typ(m, "k")
+	if string(m.input) != "k" {
+		t.Fatalf("with vim off typing narrows: %q", string(m.input))
+	}
+}
+
+// listState is what a key can change in a list or the pager.
+type listState struct {
+	keyState
+	ListCur, ListAct int
+	Src              listSrc
+	EscPending       bool
+}
+
+func listStateOf(m *Model) listState {
+	return listState{stateOf(m), m.listCur, m.listAct, m.listSrc, m.escPending}
+}
+
+// TestVimOffListsKeepTodaysKeys: with vim off, never on or turned off
+// again, the lists' keys are what they were before vim mode: every typed
+// character narrows, Ctrl-U clears the filter, Esc closes.
+func TestVimOffListsKeepTodaysKeys(t *testing.T) {
+	for _, how := range []string{"never on", "turned off"} {
+		start := func() *Model {
+			m := setup(t, newFake())
+			if how == "turned off" {
+				enter(m, "/vim on")
+				enter(m, "/list")
+				typ(m, ":vim off")
+				press(m, tea.KeyEnter)
+				press(m, tea.KeyEsc)
+				if m.vi.on {
+					t.Fatal("off")
+				}
+			}
+			enter(m, "/list e") // all three chats
+			m.listCur = 1
+			m.status, m.isErr, m.escPending = "", false, false
+			return m
+		}
+		for _, c := range []struct {
+			name string
+			keys []tea.KeyMsg
+			want func(s *listState)
+		}{
+			{"Space types", []tea.KeyMsg{{Type: tea.KeySpace}}, func(s *listState) { s.Input, s.Pos = "e ", 2 }},
+			{"Ctrl-U clears", []tea.KeyMsg{{Type: tea.KeyCtrlU}}, func(s *listState) { s.Input, s.Pos = "", 0 }},
+			{"Ctrl-D nothing", []tea.KeyMsg{{Type: tea.KeyCtrlD}}, func(*listState) {}},
+			{"Down", []tea.KeyMsg{{Type: tea.KeyDown}}, func(s *listState) { s.ListCur = 2 }},
+			{"Up", []tea.KeyMsg{{Type: tea.KeyUp}}, func(s *listState) { s.ListCur = 0 }},
+			{"Right", []tea.KeyMsg{{Type: tea.KeyRight}}, func(s *listState) { s.ListAct = 1 }},
+			{"Esc closes", []tea.KeyMsg{{Type: tea.KeyEsc}}, func(s *listState) { s.Mode, s.Input, s.Pos, s.EscPending = modeWin, "", 0, true }},
+			{"Esc 2", []tea.KeyMsg{{Type: tea.KeyEsc}, {Type: tea.KeyRunes, Runes: []rune{'2'}}},
+				func(s *listState) { s.Mode, s.Input, s.Pos, s.Cur = modeWin, "", 0, 2 }},
+			{"Alt-x types", []tea.KeyMsg{{Type: tea.KeyRunes, Runes: []rune{'x'}, Alt: true}}, func(s *listState) { s.Input, s.Pos, s.ListCur = "ex", 2, 0 }},
+			{"a run types", []tea.KeyMsg{{Type: tea.KeyRunes, Runes: []rune("gg")}}, func(s *listState) { s.Input, s.Pos, s.ListCur = "egg", 3, 0 }},
+			{"a paste types", []tea.KeyMsg{{Type: tea.KeyRunes, Runes: []rune("a\nb"), Paste: true}}, func(s *listState) { s.Input, s.Pos, s.ListCur = "eab", 3, 0 }},
+			{"Enter opens", []tea.KeyMsg{{Type: tea.KeyEnter}}, func(s *listState) { s.Mode, s.Input, s.Pos, s.Cur = modeWin, "", 0, 3 }},
+		} {
+			m := start()
+			want := listStateOf(m)
+			c.want(&want)
+			for _, k := range c.keys {
+				m.Update(k)
+			}
+			if got := listStateOf(m); !reflect.DeepEqual(got, want) {
+				t.Errorf("%s: %s:\n got %+v\nwant %+v", how, c.name, got, want)
+			}
+		}
+		for r := rune('!'); r <= '~'; r++ {
+			m := start()
+			typ(m, string(r))
+			if string(m.input) != "e"+string(r) || m.listCur != 0 || m.mode != modeList || m.vimTag() != "" {
+				t.Errorf("%s: %c narrows: %q row %d mode %v", how, r, string(m.input), m.listCur, m.mode)
+			}
+		}
+		m := start()
+		if v := ruleRow(m); !strings.Contains(v, "type to narrow") || strings.Contains(statusRow(m), "NORMAL") {
+			t.Errorf("%s: the rule says type to narrow: %q", how, v)
+		}
+	}
+}
+
+// TestVimListInsertIsTodaysKeys: in a list's or the pager's Insert mode
+// every key but Esc does exactly what it does with vim off, compared key
+// for key on two models.
+func TestVimListInsertIsTodaysKeys(t *testing.T) {
+	var keys []tea.KeyMsg
+	for _, r := range "jkhlgGqi/:x0 " {
+		if r == ' ' {
+			keys = append(keys, tea.KeyMsg{Type: tea.KeySpace})
+		} else {
+			keys = append(keys, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		}
+	}
+	for _, kt := range []tea.KeyType{tea.KeyLeft, tea.KeyRight, tea.KeyRight, tea.KeyDown, tea.KeyDown, tea.KeyUp,
+		tea.KeyCtrlA, tea.KeyCtrlE, tea.KeyBackspace, tea.KeyDelete, tea.KeyCtrlW, tea.KeyCtrlD, tea.KeyCtrlY,
+		tea.KeyCtrlF, tea.KeyCtrlB, tea.KeyPgUp, tea.KeyPgDown, tea.KeyHome, tea.KeyEnd, tea.KeyTab, tea.KeyCtrlK} {
+		keys = append(keys, tea.KeyMsg{Type: kt})
+	}
+	keys = append(keys, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}, Alt: true}, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("ab")},
+		tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c\nd"), Paste: true}, tea.KeyMsg{Type: tea.KeyCtrlU},
+		tea.KeyMsg{Type: tea.KeyTab}, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'e'}}, tea.KeyMsg{Type: tea.KeyEnter})
+	for _, line := range []string{"/list", "/win", "/settings", "/search"} {
+		off, on := setup(t, busyFake()), setup(t, busyFake())
+		on.setVim("on")
+		enter(off, line)
+		enter(on, line)
+		typ(on, "i")
+		off.status, on.status = "", ""
+		for i, k := range keys {
+			off.Update(k)
+			on.Update(k)
+			if a, b := listStateOf(off), listStateOf(on); !reflect.DeepEqual(a, b) || (on.mode != modeWin && !on.vi.listIns) {
+				t.Fatalf("%s key %d %v: with vim off %+v\nin Insert %+v", line, i, k, a, b)
+			}
+		}
+	}
+}
+
+// TestVimHelpAndKeysDescribeVimMode: /keys and /help name vim mode, and a
+// start hint offers it.
+func TestVimHelpAndKeysDescribeVimMode(t *testing.T) {
+	printed := func(line string) string {
+		m := setup(t, newFake())
+		enter(m, line)
+		drain(m)
+		var out []string
+		for _, n := range m.wins[0].notes {
+			out = append(out, n.text)
+		}
+		return strings.Join(out, "\n")
+	}
+	keys, help := printed("/keys"), printed("/help")
+	for _, want := range []string{
+		"\n  vim: Normal mode       /vim on: Esc enters it, i a I A o O leave it; typed keys are commands, never text",
+		"h l w b e 0 ^ $ move (Esc 0 is still window 0), j k as Down / Up, x X D dd dw cw cc S C r edit, u undoes, p P put back",
+		"Ctrl-E Y D U F B and gg G scroll; gt gT switch windows; : / ? a command, a search",
+		"\n  vim: lists, pager      /vim on: they open in Normal: j k move, h l as Left / Right, gg G ends, Ctrl-D / Ctrl-U half a page, q closes; / or i to type, Esc stops",
+	} {
+		if !strings.Contains(keys, want) {
+			t.Errorf("/keys lacks %q", want)
+		}
+	}
+	if want := "\n  /vim [on|off]          vi keys: Normal and Insert modes on the input, in the lists and the pager"; !strings.Contains(help, want) {
+		t.Errorf("/help lacks %q", want)
+	}
+	if !slices.Contains(hintPool, "hint: /vim on gives the input vi keys; Esc for Normal mode, i to type") {
+		t.Error("no start hint for /vim")
 	}
 }
