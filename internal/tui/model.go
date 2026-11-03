@@ -169,9 +169,10 @@ type Model struct {
 	pendingSeq int
 
 	lastWin *win                                 // the window current before this one (/win last, a double Tab); nil: none yet (lastwin.go)
-	focusN  int                                  // counts the changes of the current window; a receipt held back by a Tab checks it
 	tabAt   time.Time                            // when an empty-prompt Tab switched windows: a second one within tabGap is a double Tab
 	tabGo   tabHop                               // what that Tab left behind, for the second one
+	held    *tabHeld                             // the window an empty-prompt Tab showed, until it is left or its receipt goes
+	heldSeq int                                  // numbers the held receipts, so a late tabReadMsg finds only its own
 	after   func(time.Duration, tea.Msg) tea.Cmd // delivers a message after a pause (tickAfter: the Tab's held receipt); tests replace it
 
 	listCur     int     // selected row in the list view
@@ -1366,22 +1367,24 @@ func (m *Model) openWin(chatID string) (int, *win) {
 func (m *Model) switchTo(i int) tea.Cmd { return m.focus(i, false) }
 
 // focus is switchTo; held (an empty-prompt Tab) holds the read receipt
-// back until the window has stayed current for tabGap (heldRead).
+// back until the window has stayed current for tabGap, and puts back what
+// it cleared when the window is left sooner (lastwin.go).
 func (m *Model) focus(i int, held bool) tea.Cmd {
 	i = min(max(i, 0), len(m.wins)-1)
+	var left tea.Cmd
 	if i != m.cur {
+		left = m.leaveHeld()
 		m.lastWin = m.wins[m.cur] // by identity: /move and closing other windows keep it
 		m.cur = i
-		m.focusN++
+		m.tabAt = time.Time{} // a double Tab never spans another focus (tab arms it after its own)
 		m.saveLayout()
 	}
 	m.mode = modeWin
 	m.lastCtrlX = time.Time{} // a double Ctrl-X never spans two windows
-	m.tabAt = time.Time{}     // nor does a double Tab span another focus (tab arms it after its own)
 	w := m.wins[i]
 	receipt := m.readCmd(w) // a focus that clears unread messages is what a receipt reports
-	if held && receipt != nil {
-		receipt = m.after(tabGap, tabReadMsg{w: w, seq: m.focusN, receipt: receipt})
+	if held && w.unread > 0 {
+		receipt = m.hold(w, receipt)
 	}
 	w.clearUnread()
 	if w.chatID != "" {
@@ -1391,6 +1394,9 @@ func (m *Model) focus(i int, held bool) tea.Cmd {
 		m.setInfo("")
 	}
 	cmds := m.typingTimers() // the window shown decides whether the light runs
+	if left != nil {
+		cmds = append(cmds, left)
+	}
 	if receipt != nil {
 		cmds = append(cmds, receipt)
 	}

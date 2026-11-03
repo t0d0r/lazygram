@@ -178,11 +178,13 @@ completion, and an activity indicator.
   switches to the next window at once, as a single Tab always did; a
   second Tab within 400 ms of it (`tabGap`, the same as `clickGap` for a
   double click; exactly 400 ms still counts), with no other key and no
-  other focus change between, switches instead to the window that was the
-  last focused one before the first Tab. The double Tab as a whole is "go
-  to the last window": afterwards the last focused window is the one where
-  it began, so another double Tab goes back. When the window the first Tab
-  showed is the last window itself, the second Tab stays there. With no
+  other focus change between (a click on the window already shown, its
+  tag or its chat name, is no focus change), switches instead to the
+  window that was the last focused one before the first Tab. The double
+  Tab as a whole is "go to the last window": afterwards the last focused
+  window is the one where it began, so another double Tab goes back.
+  When the window the first Tab showed is the last window itself, the
+  second Tab stays there. With no
   last window the second Tab is a plain Tab (the next window). A second
   Tab never arms a third: a third fast Tab is a first Tab again (the next
   window), and a fourth fast one is its second. Shift-Tab is unchanged and
@@ -193,23 +195,31 @@ completion, and an activity indicator.
   The window the first Tab passed through is left as it was: its unread
   count comes back (so `Act` and the window bar mark it again) and no read
   receipt is sent for it, even with `/read-receipts on` (see Read
-  receipts). The first fetch of a window never shown before, its member
-  list and a heal its show started may still run: they are reads, they
-  change nothing at the service. The chats-visited count of the exit
-  statistics keeps it. A window that a plain second Tab (no last window)
-  passed through, or any window left within 400 ms of the Tab that showed
-  it, keeps its unread count cleared, as a focus always did, but is not
-  reported read either. Fast Tabs therefore no longer walk two windows:
-  walking needs a pause of more than 400 ms between Tabs, or Ctrl-N /
-  Ctrl-P. Decision: the first Tab acts at once, so a single Tab stays as
-  immediate as it always was, as a click does (the first click of a double
-  click acts at once too); waiting 400 ms for a possible second Tab would
-  slow every window switch. Decision: the hop is undone and its receipt
-  held back because a receipt tells the other side that a message was
-  read, and a window flashed for a fraction of a second on the way to
-  another was not read; its unread count comes back for the same reason.
-  Only an empty-prompt Tab holds its receipt back, and only for 400 ms;
-  every other way of focusing reports at once, as before.
+  receipts). A message deleted while it was shown (by the service, or by
+  the first fetch that the show started) does not come back in that
+  count, so the count still goes with the window's messages. The first
+  fetch of a window never shown before, its member list and a heal its
+  show started may still run: they are reads, they change nothing at the
+  service. The chats-visited count of the exit statistics keeps it. The
+  same holds for every window an empty-prompt Tab showed and that is left
+  within 400 ms of that Tab, whatever leaves it: a plain second Tab (no
+  last window), a third fast Tab, Shift-Tab, Ctrl-N, Alt-N, a click or a
+  command. It was only passed through: it gets its unread count back and
+  nothing is sent for that Tab, so whatever focuses it again reports it
+  as that focus does (Alt-N at once, another Tab 400 ms later). A window
+  left later than 400 ms after the Tab was read. Fast Tabs therefore no
+  longer walk two windows: walking needs a pause of more than 400 ms
+  between Tabs, or Ctrl-N / Ctrl-P. Decision: the first Tab acts at once,
+  so a single Tab stays as immediate as it always was, as a click does
+  (the first click of a double click acts at once too); waiting 400 ms for
+  a possible second Tab would slow every window switch. Decision: the hop
+  is undone and its receipt held back because a receipt tells the other
+  side that a message was read, and a window flashed for a fraction of a
+  second on the way to another was not read; its unread count comes back
+  for the same reason, whatever leaves it, so that a window is never
+  marked read here without being reported read once it is read. Only an
+  empty-prompt Tab holds its receipt back, and only for 400 ms; every
+  other way of focusing reports at once, as before.
 - The status line shows `[Act: 2,3]`: the windows with unread messages.
   When a sync brings messages from others the status message (on the
   rule) says where they went: `3 new messages in 2:#dev (2), 3:@alice`,
@@ -1171,21 +1181,26 @@ argument says so. `/read-receipts on` (kept in the state store under
 `read_receipts`; absent or unreadable means off) makes lazygram report a
 chat read at the moments it marks the chat read itself: when a window
 with unread messages is focused (`/win N`, `/win @name`, `/win last`,
-Alt-N, Ctrl-N, Tab, a click on the window bar or a list row). The report covers the
-newest message lazygram holds for the chat (`Provider.MarkRead` with that
-message id), so what lazygram has not shown stays unread at the service;
-with no message of the chat known yet nothing is sent. A window focused by
-Tab on an empty prompt (either Tab of a double Tab included) is reported
-later: the receipt, for the newest message held at the Tab, is sent 400 ms
-(`tabGap`) after the Tab, and only if that window is still current and no
-other window was focused in between (a delayed message, checked when it
-arrives). So the window a double Tab passes through, or any window left
-within 400 ms, is not reported (see Windows for the reason); every other
-way of focusing reports at once. Nothing is sent
-for the server window, for a window without unread messages, for a
-message arriving in the window already shown, for opening or filtering a
-list, or for the pager. A failed report shows in the status line and the
-server window and is not retried; the local unread count is cleared
+Alt-N, Ctrl-N, a click on the window bar or a list row, and Tab, 400 ms
+later as below). The report covers the newest message lazygram holds
+for the chat (`Provider.MarkRead` with that message id), so what
+lazygram has not shown stays unread at the service; with no message of
+the chat known yet nothing is sent. A window focused by Tab on an empty
+prompt (either Tab of a double Tab included) is reported once it has
+stayed current for 400 ms (`tabGap`): the receipt, for the newest
+message held at the Tab, is sent when a delayed message comes 400 ms
+after the Tab and the window was neither left since nor closed (and,
+should the window be left later than 400 ms after the Tab before that
+message comes, as it is left). A window left within those 400 ms was
+only passed through: it gets its unread count back and nothing is sent
+for that Tab; whatever focuses it again reports it as that focus does,
+once. So the window a double Tab passes through is not reported (see
+Windows for the reason); every other way of focusing reports at once.
+Nothing is sent for the server window, for a window without unread
+messages, for a message arriving in the window already shown, for
+opening or filtering a list, or for the pager. A failed report shows in
+the status line and the server window and is not retried; the local
+unread count is cleared
 either way. `/mark-as-read` sends one report for the current window's
 chat on request, clears its unread count, and leaves the setting alone:
 it works with receipts off and never turns them on. It is an error in

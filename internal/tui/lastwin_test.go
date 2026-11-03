@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"maps"
 	"slices"
 	"strings"
 	"testing"
@@ -209,15 +210,16 @@ func TestDoubleTabTiming(t *testing.T) {
 	press(m, tea.KeyTab)
 	step(tabGap)
 	press(m, tea.KeyTab)
-	if m.winName(m.cur) != "#news" {
-		t.Fatalf("tabGap exactly is still a double Tab: %s", m.winName(m.cur))
+	if m.winName(m.cur) != "#news" || m.wins[3].unread != 2 {
+		t.Fatalf("tabGap exactly is still a double Tab, and @alice gets its count back: %s, unread %d", m.winName(m.cur), m.wins[3].unread)
 	}
 	m, step, _ = fromDev(t, newFake())
 	press(m, tea.KeyTab)
 	step(tabGap + time.Millisecond)
 	press(m, tea.KeyTab)
-	if m.cur != 0 || m.winName(m.lastWindow()) != "@alice" {
-		t.Fatalf("a longer pause makes two plain Tabs: cur %d, last %s", m.cur, m.winName(m.lastWindow()))
+	if m.cur != 0 || m.winName(m.lastWindow()) != "@alice" || m.wins[3].unread != 0 {
+		t.Fatalf("a longer pause makes two plain Tabs, and @alice was read: cur %d, last %s, unread %d",
+			m.cur, m.winName(m.lastWindow()), m.wins[3].unread)
 	}
 }
 
@@ -330,17 +332,22 @@ func TestDoubleTabHopLeavesNoTrace(t *testing.T) {
 	m, step, held := fromDev(t, f)
 	enter(m, "/read-receipts on")
 	alice := m.wins[3]
-	counted := alice.counted
-	if alice.unread != 2 || len(counted) != 2 {
-		t.Fatalf("@alice starts with 2 unread: %d %v", alice.unread, counted)
+	if alice.unread != 2 || len(alice.counted) != 2 {
+		t.Fatalf("@alice starts with 2 unread: %d %v", alice.unread, alice.counted)
 	}
 	runAll(m, press(m, tea.KeyTab))
 	if m.wins[m.cur] != alice || alice.unread != 0 || len(f.read) != 0 || len(*held) != 1 {
 		t.Fatalf("the first Tab shows @alice and holds its receipt back: unread %d, read %v, held %d", alice.unread, f.read, len(*held))
 	}
+	// Its first fetch ran meanwhile, and the service no longer has c2:7: the
+	// count that comes back is the one message still there.
+	if !m.gone[domain.Message{ChatID: "c2", ID: "7"}.Key()] {
+		t.Fatal("the fetch drops c2:7")
+	}
 	step(100 * time.Millisecond)
 	press(m, tea.KeyTab)
-	if m.winName(m.cur) != "#news" || alice.unread != 2 || len(alice.counted) != 2 || !strings.Contains(m.View(), "Act: 3") {
+	want := map[string]bool{domain.Message{ChatID: "c2", ID: "1"}.Key(): true}
+	if m.winName(m.cur) != "#news" || alice.unread != 1 || !maps.Equal(alice.counted, want) || !strings.Contains(m.View(), "Act: 3") {
 		t.Fatalf("the hop is undone: in %s, @alice unread %d counted %v", m.winName(m.cur), alice.unread, alice.counted)
 	}
 	passGap(m, step, held)
@@ -451,8 +458,158 @@ func TestHeldReceiptNeverGoesTwiceOrForAClosedWindow(t *testing.T) {
 	enter(m, "/read-receipts on")
 	press(m, tea.KeyTab) // @alice, receipt held
 	enter(m, "/close")   // gone before tabGap
+	step(tabGap + time.Millisecond)
+	runAll(m, altN(m, '1')) // and the window shown since is left later
 	passGap(m, step, held)
 	if len(f.read) != 0 {
 		t.Fatalf("a closed window is not reported: %v", f.read)
+	}
+}
+
+// altN presses Alt and a window number.
+func altN(m *Model, n rune) tea.Cmd {
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{n}, Alt: true})
+	return cmd
+}
+
+// TestDoubleTabSurvivesAClickOnTheCurrentWindow: a click that focuses the
+// window already shown is no focus change, and does not break a double
+// Tab.
+func TestDoubleTabSurvivesAClickOnTheCurrentWindow(t *testing.T) {
+	m, step, _ := fromDev(t, newFake())
+	press(m, tea.KeyTab) // @alice
+	m.View()
+	x, y := find(m, spanWin, "3") // @alice's own tag
+	click(m, x, y)
+	step(100 * time.Millisecond)
+	press(m, tea.KeyTab)
+	if m.winName(m.cur) != "#news" {
+		t.Fatalf("still a double Tab: %s", m.winName(m.cur))
+	}
+}
+
+// TestDeletionDuringTheHopIsNotPutBack: a message deleted while a Tab
+// shows its window is not counted again when the hop is undone, so the
+// count still goes with the window's messages.
+func TestDeletionDuringTheHopIsNotPutBack(t *testing.T) {
+	m, step, _ := fromDev(t, newFake())
+	alice := m.wins[3]
+	press(m, tea.KeyTab) // @alice; its first fetch is not run
+	runAll(m, m.applyChange(domain.Change{Kind: domain.Deleted, ChatID: "c2", IDs: []string{"7"}}))
+	step(100 * time.Millisecond)
+	press(m, tea.KeyTab) // #news
+	want := map[string]bool{domain.Message{ChatID: "c2", ID: "1"}.Key(): true}
+	if m.winName(m.cur) != "#news" || alice.unread != 1 || !maps.Equal(alice.counted, want) {
+		t.Fatalf("only the message still there comes back: in %s, @alice unread %d, counted %v",
+			m.winName(m.cur), alice.unread, alice.counted)
+	}
+	runAll(m, m.applyChange(domain.Change{Kind: domain.Deleted, ChatID: "c2", IDs: []string{"1"}}))
+	if alice.unread != 0 || len(alice.counted) != 0 || strings.Contains(m.View(), "Act: 3") {
+		t.Fatalf("the last one takes the mark with it: unread %d, counted %v", alice.unread, alice.counted)
+	}
+}
+
+// TestPlainSecondTabLeavesNoTraceEither: with no last window the second
+// fast Tab is a plain one, and the window the first showed is left as it
+// was all the same; focused again, it is reported as that focus reports.
+func TestPlainSecondTabLeavesNoTraceEither(t *testing.T) {
+	f := newFake()
+	m, step, held := fromDev(t, f)
+	enter(m, "/close 1") // #news, the last window: none now; 0 server, 1 #dev, 2 @alice
+	enter(m, "/read-receipts on")
+	alice := m.wins[2]
+	unread, counted := alice.unread, maps.Clone(alice.counted)
+	press(m, tea.KeyTab) // @alice, receipt held
+	step(100 * time.Millisecond)
+	press(m, tea.KeyTab) // a plain Tab: on to the server window
+	if m.cur != 0 || unread != 2 || alice.unread != unread || !maps.Equal(alice.counted, counted) {
+		t.Fatalf("@alice is left as it was: cur %d, unread %d (was %d), counted %v", m.cur, alice.unread, unread, alice.counted)
+	}
+	passGap(m, step, held)
+	if len(f.read) != 0 {
+		t.Fatalf("a window passed through is not reported read: %v", f.read)
+	}
+	runAll(m, altN(m, '2'))
+	if len(f.read) != 1 || f.read[0] != "c2:7" || alice.unread != 0 {
+		t.Fatalf("focused again, it is reported at once: %v, unread %d", f.read, alice.unread)
+	}
+}
+
+// TestWindowLeftWithinTabGapComesBack: a window a Tab showed and another
+// focus left within tabGap was only passed through too; whatever brings it
+// back reports it, once.
+func TestWindowLeftWithinTabGapComesBack(t *testing.T) {
+	f := newFake()
+	m, step, held := fromDev(t, f)
+	enter(m, "/read-receipts on")
+	alice := m.wins[3]
+	press(m, tea.KeyTab) // @alice, receipt held
+	step(100 * time.Millisecond)
+	altN(m, '2') // #dev
+	if alice.unread != 2 || len(alice.counted) != 2 {
+		t.Fatalf("left within tabGap, @alice gets its count back: %d %v", alice.unread, alice.counted)
+	}
+	step(100 * time.Millisecond)
+	runAll(m, altN(m, '3')) // @alice again, still within tabGap of the Tab
+	if len(f.read) != 1 || f.read[0] != "c2:7" || alice.unread != 0 {
+		t.Fatalf("Alt-3 reports @alice at once: %v, unread %d", f.read, alice.unread)
+	}
+	passGap(m, step, held)
+	if len(f.read) != 1 {
+		t.Fatalf("the Tab's held receipt does not go as well: %v", f.read)
+	}
+	// Tab, Shift-Tab, Tab: the last Tab is a first Tab, and its own receipt
+	// goes tabGap later, once.
+	f.read = nil
+	m, step, held = fromDev(t, f)
+	enter(m, "/read-receipts on")
+	alice = m.wins[3]
+	press(m, tea.KeyTab)      // @alice
+	press(m, tea.KeyShiftTab) // #dev: @alice's count back
+	step(300 * time.Millisecond)
+	press(m, tea.KeyTab) // @alice again
+	if len(f.read) != 0 || alice.unread != 0 || len(*held) != 2 {
+		t.Fatalf("in @alice, its receipt held: %v, unread %d, held %d", f.read, alice.unread, len(*held))
+	}
+	// The first Tab's message comes 100 ms into the last one's wait: it is
+	// not that Tab's, and sends nothing.
+	step(100 * time.Millisecond)
+	runAll(m, func() tea.Msg { return (*held)[0] })
+	*held = (*held)[1:]
+	if len(f.read) != 0 {
+		t.Fatalf("a message of a Tab whose window was left sends nothing: %v", f.read)
+	}
+	passGap(m, step, held)
+	if len(f.read) != 1 || f.read[0] != "c2:7" {
+		t.Fatalf("@alice is reported once, tabGap later: %v", f.read)
+	}
+}
+
+// TestWindowLeftAfterTabGapIsReported: a window that stayed current for
+// tabGap was read; left before its held message came (a late timer), its
+// receipt goes as it is left, and only then.
+func TestWindowLeftAfterTabGapIsReported(t *testing.T) {
+	f := newFake()
+	m, step, held := fromDev(t, f)
+	enter(m, "/read-receipts on")
+	alice := m.wins[3]
+	press(m, tea.KeyTab) // @alice, receipt held
+	step(tabGap + time.Millisecond)
+	runAll(m, altN(m, '2'))
+	if len(f.read) != 1 || f.read[0] != "c2:7" || alice.unread != 0 {
+		t.Fatalf("@alice was read, and is reported as it is left: %v, unread %d", f.read, alice.unread)
+	}
+	passGap(m, step, held)
+	if len(f.read) != 1 {
+		t.Fatalf("the late message sends nothing more: %v", f.read)
+	}
+	// Reported when its message came, a window stays read as it is left,
+	// however soon after.
+	alice.unread = 2     // news for @alice
+	press(m, tea.KeyTab) // from #dev: @alice, receipt held
+	passGap(m, step, held)
+	runAll(m, altN(m, '2'))
+	if len(f.read) != 2 || m.wins[3].unread != 0 {
+		t.Fatalf("@alice was reported tabGap later, and stays read: %v, unread %d", f.read, m.wins[3].unread)
 	}
 }
