@@ -77,6 +77,9 @@ var settings = []setting{
 	{name: "clip", key: clipKey, desc: "where a mouse selection is copied",
 		values: func() []string { return clipModes }, value: func(m *Model) string { return m.clipMode },
 		set: func(m *Model, v string) tea.Cmd { m.clip(v); return nil }},
+	{name: "vim", key: vimKey, desc: "vi keys: Esc for Normal, i for Insert",
+		values: onOffValues, value: func(m *Model) string { return onOffOf(m.vi.on) },
+		set: func(m *Model, v string) tea.Cmd { m.setVim(v); return nil }},
 }
 
 // settingsOpen reports whether the menu is what window 0 shows now.

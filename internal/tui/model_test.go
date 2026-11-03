@@ -1494,13 +1494,15 @@ func TestFastDoubleCtrlXKeepsTheTextAndOnlyToggles(t *testing.T) {
 
 func TestTabOnEmptyPromptCyclesWindows(t *testing.T) {
 	m := setup(t, newFake()) // 0 server, 1 #news, 2 #dev, 3 @alice
+	step := pinClock(m)
 	press(m, tea.KeyTab)
 	if m.cur != 1 {
 		t.Fatalf("tab: %d", m.cur)
 	}
-	press(m, tea.KeyTab)
-	press(m, tea.KeyTab)
-	press(m, tea.KeyTab)
+	for range 3 { // slow Tabs: each is a single one (two fast ones are the double Tab, lastwin_test.go)
+		step(tabGap + time.Millisecond)
+		press(m, tea.KeyTab)
+	}
 	if m.cur != 0 {
 		t.Fatalf("wraps to the server window: %d", m.cur)
 	}
@@ -2037,7 +2039,7 @@ func TestSendFile(t *testing.T) {
 func TestCompleteArgumentsAndPaths(t *testing.T) {
 	m := setup(t, newFake())
 	for typed, want := range map[string]string{
-		"/win l": "/win list ", "/list -": "/list --show-deleted ",
+		"/win l": "/win l", "/win li": "/win list ", "/win la": "/win last ", "/list -": "/list --show-deleted ",
 		"/win @al": "/win @alice ", "/open o": "/open o", // nothing after /open in the server window
 		" ": " ", "  ": "  ", " @al": " @alice ", "   x": "   x", // blank prefixes never crash
 	} {

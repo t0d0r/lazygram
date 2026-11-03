@@ -127,7 +127,9 @@ func (m *Model) sharedList() []string {
 
 // dropAcross removes the messages with the given ids from the given chats
 // in memory, in one pass. A message that arrived this session from someone
-// else takes its count off its window's unread messages.
+// else takes its count off its window's unread messages, and off what a
+// Tab cleared there and may put back (m.held), so a window a Tab passed
+// through never gets back the count of a message that is gone.
 func (m *Model) dropAcross(chats, ids []string) {
 	inChat := make(map[string]bool, len(chats))
 	for _, c := range chats {
@@ -148,14 +150,24 @@ func (m *Model) dropAcross(chats, ids []string) {
 			kept = append(kept, x)
 			continue
 		}
-		if _, w := m.winFor(x.ChatID); w != nil && w.counted[x.Key()] {
-			delete(w.counted, x.Key())
-			if w.unread > 0 {
-				w.unread--
+		if _, w := m.winFor(x.ChatID); w != nil {
+			w.unread = uncount(w.unread, w.counted, x.Key())
+			if h := m.held; h != nil && h.w == w {
+				h.unread = uncount(h.unread, h.counted, x.Key())
 			}
 		}
 		delete(m.live, x.Key())
 	}
 	m.msgs = kept
 	m.rcache = &renderCache{}
+}
+
+// uncount takes a deleted message off an unread count when it was counted
+// in it, and returns the count: a deletion takes back only its own.
+func uncount(n int, counted map[string]bool, key string) int {
+	if !counted[key] {
+		return n
+	}
+	delete(counted, key)
+	return max(n-1, 0)
 }
