@@ -175,8 +175,8 @@ completion, and an activity indicator.
 
 People are `@alias`, groups and channels are `#alias`. The provider decides
 the alias (Telegram: username, else a slug of the title). `/win`, `/last`
-and completion accept names with or without the sigil; a sigil restricts
-the kind.
+and completion accept names with or without the sigil, by alias or by
+title (see Names: nick or title); a sigil restricts the kind.
 
 ## Members
 
@@ -323,8 +323,38 @@ commands complete and resolve every chat, in every window, and so do
 `/names` toggles how chats are shown everywhere (window bar, status tag,
 server window column, lists): by nick, `@alias` / `#alias` (default), or
 by name, the sigil followed by the chat's title (`@Alice Smith`,
-`#News`). Commands, completion and `/whois` keep accepting the alias (and
-the title, as before); the choice is kept across restarts.
+`#News`); the choice is kept across restarts.
+
+Commands, completion and `/whois` accept the alias and the title, in
+either script, in both modes: `/win @alice`, `/win @Alice Smith` and
+`/win alice smi` find the same chat (`domain.ResolveChat`, whose tiers
+are under Search in either script). `/win` and `/whois` take their whole
+argument as the name, spaces and all; `/msg` takes the longest leading
+part of its argument that is a chat's name (see Commands).
+
+Tab offers a chat when the typed word begins its alias or its title as
+shown (without control characters), in either script, by nick and by
+name alike: with the window bar showing `[4:@Kamen]` for a person whose
+alias is the unrelated username `stuckoff`, `/win @ka` offers that chat.
+Tab fills in the chat's name as `/names` shows it: `@stuckoff` by nick,
+`@Kamen` by name (see Completion). Invariant: every name Tab fills in
+resolves through `domain.ResolveChat` to the chat it was offered for, by
+nick and by name. When the shown name would not (two chats of a kind
+show the same title, the title is another chat's alias or id, or showing
+it dropped control characters so it no longer equals the stored title),
+that chat is filled in as its `@alias` / `#alias` instead. The second Tab
+lists the candidates as they would be filled in; one filled in by its
+alias that matched by its title and not by its alias has the title after
+it, `@stuckoff (Kamen)`, as the member listing has
+`@alice_s (Alice Smith)`. Whenever a listed candidate shows a title (by
+name, or in those parentheses) the candidates are separated by `, `, as
+titles have spaces; otherwise by two spaces, as before.
+Decision: completion offers what the window bar shows, so a name read on
+the screen can be typed back. Before, Tab matched and listed only the
+alias, so a chat shown by a title unrelated to its username could not be
+completed from what the screen said. The fallback to the alias keeps Tab
+from filling in a name that `/win` would call ambiguous or send to
+another chat.
 
 ## Line format
 
@@ -455,7 +485,7 @@ last, as the table does in `/keys`.
 | `/whois [name]`               | print what is known about a chat (default: this window's); in a group or channel window a name is one of its members first (see Members) |
 | `/stats`                      | print client statistics                              |
 | `/me <text>`                  | send `* text` to this window's chat (shown as `* you text`) |
-| `/msg <@user|#chan> <text>`   | send to that chat, opening and focusing its window if missing |
+| `/msg <@user|#chan> <text>`   | send to that chat, opening and focusing its window if missing; the name may have spaces: it is the longest leading part of the argument, ending at a space, that is (ignoring case) a chat's name as `/names` shows it, its `@Title` / `#Title` or its title alone (`/msg @Ivan Petrov hi` sends `hi`, by nick and by name), else the first word, as before (`/msg @alice hi there` sends `hi there`); an argument that is all such a name has no text and gets the usage error, so it never sends its last word |
 | `/send <path> [caption]`      | send a local file to this chat (pictures as photos), with an optional caption |
 | `/edit [text]`                | edit your last message in this chat; without text it is put in the prompt as `/edit <text>` |
 | `/delete`                     | delete your last message in this chat, for everyone  |
@@ -1126,16 +1156,41 @@ transliterated match too, and comparing the transliterations is the
 whole rule). Combining marks are dropped from Latin text as well, so a
 decomposed accent does not hide a name. A query that transliterates to
 nothing (combining marks only) matches every text, like an empty one,
-but never resolves a chat name. Chat names given to
-`/whois`, `/win @name` and `/msg` resolve the same way in a last step of
-`domain.ResolveChat`: exact id or alias, alias prefix and plain substring
-first, as typed; the either-script substring only when those found
-nothing, so it never turns a unique match ambiguous. Tab completion
-matches prefixes in either script (`domain.PrefixMatch`, the
-transliteration of the word a prefix of the transliteration of the name):
-chat names (`/win iv` completes `@иван-петров`, `/win нов` completes
-`#novini`) and the members of a group (see Members). The candidate is
-filled in as the name is written. A common prefix of several candidates
+but never resolves a chat name.
+
+Chat names given to `/whois`, `/win @name` and `/msg` resolve through
+`domain.ResolveChat` in tiers, ignoring case, the first tier with any
+hit deciding (one hit resolves, several are ambiguous) and a sigil
+restricting the kind as before: (1) the exact id or alias; (2) the exact
+title (trimmed), so the name `/names` shows resolves even when another
+title contains it or another alias begins with it; (3) a prefix of the
+alias; (4) a substring of the alias or the title; then in either script,
+both sides transliterated (`domain.Matcher`): (5) the exact alias or
+title; (6) a prefix of the alias or the title; (7) a substring of either.
+A query that transliterates to nothing gets no either-script tier. So
+with two people aliased `ivan` and `ivanka` in Cyrillic, `ivan` and
+`@ivan` find the first, as its Cyrillic spelling does; with channels
+aliased `novini` and `novini-sport` in Cyrillic, `novini` and `#novini`
+find the first; `kamen` and `@Kamen` (Cyrillic) find the chat titled
+Kamen even when one titled Kamenov exists; a title two chats share stays
+ambiguous. Decision: the exact and prefix tiers in either script make a
+Latin spelling as decisive as the Cyrillic one (before, `ivan` was a
+substring of both transliterated aliases and ambiguous while the
+Cyrillic spelling was exact), and they come after the plain tiers, so
+they never make a plain match ambiguous or change a name that resolved
+before. The exact title comes right after the exact alias so the name
+the window bar shows by name always finds its chat; the only names that
+resolve differently because of it are queries that are some chat's exact
+title and begin another chat's alias: they now find the titled chat (or
+are ambiguous when several chats of the kind have that title) instead of
+the one whose alias they begin.
+
+Tab completion matches prefixes in either script (`domain.PrefixMatch`,
+the transliteration of the word a prefix of the transliteration of the
+name): chat names by alias or title (`/win iv` completes `@иван-петров`,
+`/win нов` completes `#novini`) and the members of a group (see
+Members). A chat is filled in as `/names` shows it (see Names: nick or
+title), a member as `@username`. A common prefix of several candidates
 extends the word only when it says more than the word (compared in
 transliteration, so `zhiv` is extended to `Живк`) and still starts with
 it, sigils aside and in either script; otherwise the word stays and the
@@ -1247,12 +1302,26 @@ where the command takes a chat: the first argument of `/win`, `/msg`,
 `/whois` and `/list`, every word of `/me` and `/edit` text, and every
 word of a line without a command (message text). After any other
 command (`/last`, `/search`, `/press`, the settings) Tab offers no chat
-names: those arguments are numbers, settings or free text. A chat name
-is every non-deleted chat whose `@name`/`#name` starts with the word,
-or whose bare alias starts with it when the word has no sigil (then the
-sigil is added), in either script (see Search in either script).
-Decision: chat names after every command filled settings like
-`/autojoin` with nicks. One
+names: those arguments are numbers, settings or free text. A chat is
+offered when the word begins its alias or its title as shown, in either
+script (see Search in either script), by nick and by name alike; a
+typed `@` or `#` must be the chat's own sigil, and without one the alias
+or the title alone is matched (the sigil is added). Deleted accounts are
+never offered. The chat is filled in as `/names` shows it, or by its
+alias when that name would not find it (see Names: nick or title). A
+title may have spaces, so the name being typed may span words: the first
+argument of `/win`, `/msg`, `/whois` and `/list` is one name when all of
+it begins a chat's alias or title (by name `/msg @Ivan P` -> `/msg @Ivan
+Petrov `, and a common prefix may end in a space: `/win @Kal` -> `/win
+@Kaloyan ` when two titles go on differently, after which the second Tab
+lists them), and in message text and in `/me` and `/edit` text the name starts
+at the earliest of the last four word starts whose rest of the line
+begins some chat's alias or title, else at the last word, as for members
+(`hi Kaloyan G` -> `hi @Kaloyan GPS`). Text after the name of `/msg`
+stays free text. Decision: chat names after every command filled
+settings like `/autojoin` with nicks. Decision: a title completes across
+its spaces because a common prefix that ends in a space would otherwise
+leave the next Tab with an empty word. One
 candidate is filled in with a trailing space; several are extended to
 their longest common prefix, and a second Tab that cannot extend further
 prints the candidates into the window as a notice (base names for paths).

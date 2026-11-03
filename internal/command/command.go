@@ -27,7 +27,7 @@ const (
 	Open          // fetch and open the attachment of the latest message with one, or of message Arg
 	Theme         // list the colour themes, or switch to Arg
 	Move          // move the current window to position Arg
-	Msg           // send a message: Arg is "<@user|#chan> <text>"; the window opens if missing
+	Msg           // send a message: Arg is "<@user|#chan> <text>" (the name may be a title with spaces); the window opens if missing
 	About         // print version, author and build information
 	Fx            // toggle the running lights over clickable text
 	Mouse         // toggle mouse reporting (off lets the terminal select text)
@@ -136,7 +136,7 @@ const HelpText = `Commands
   /whois [name]          what is known about a chat, or in a group about one of its members; also /wi, /info
   /stats                 client statistics; also /uptime
   /me <text>             send an action line; also /action
-  /msg <@user|#chan> <text>  send to that chat, opening its window; also /say, /tell
+  /msg <@user|#chan> <text>  send to that chat, opening its window; the name may be its title as /names shows it, spaces and all; also /say, /tell
   /send <path> [caption]  send a local file; pictures go as photos (Tab completes the path); also /file, /upload
   /redraw, /clear        drop the notices and pictures from this window; the messages stay
   /edit [text]           edit your last message here (no text: put it in the prompt); also /e

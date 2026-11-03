@@ -136,6 +136,29 @@ func TestResolveChat(t *testing.T) {
 	}
 }
 
+// The name /names shows, the sigil and the title, resolves to its chat
+// even when another title contains it or another alias begins with it; a
+// title two chats share stays ambiguous.
+func TestResolveChatExactTitle(t *testing.T) {
+	chats := []Chat{
+		{ID: "c1", Alias: "stuckoff", Title: "Камен", Kind: ChatUser},
+		{ID: "c2", Alias: "каменов", Title: "Каменов", Kind: ChatUser},
+		{ID: "c3", Alias: "tsvetan_i", Title: " Цветан Иванов ", Kind: ChatUser},
+		{ID: "c4", Alias: "vanko", Title: "Иван", Kind: ChatUser},
+		{ID: "c5", Alias: "ivan_p", Title: "Иван", Kind: ChatUser},
+	}
+	for q, want := range map[string]string{
+		"@Камен": "c1", "камен": "c1", "@Цветан Иванов": "c3", "цветан иванов": "c3",
+	} {
+		if c, err := ResolveChat(chats, q); err != nil || c.ID != want {
+			t.Errorf("%q: got %q, %v; want %s", q, c.ID, err, want)
+		}
+	}
+	if _, err := ResolveChat(chats, "@Иван"); !errors.Is(err, ErrAmbiguous) {
+		t.Errorf("a shared title: %v", err)
+	}
+}
+
 func TestFilterChats(t *testing.T) {
 	chats := []Chat{{ID: "1", Alias: "dev"}, {ID: "2", Alias: "ops", Title: "Developers"}}
 	if len(FilterChats(chats, "dev")) != 2 || len(FilterChats(chats, "")) != 2 || len(FilterChats(chats, "ops")) != 1 {

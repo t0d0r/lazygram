@@ -111,6 +111,21 @@ const nameWords = 4
 // the last word. Anchoring on members without a username too keeps "Ada L"
 // from completing the "L" to someone else's nick.
 func memberStart(ms []domain.Member, input []rune, from, last int) int {
+	return nameStart(input, from, last, func(typed string) bool {
+		for _, mb := range ms {
+			if matches(mb, typed) {
+				return true
+			}
+		}
+		return false
+	})
+}
+
+// nameStart is where a name being typed in input starts: the earliest of
+// the last nameWords word starts, from from on, whose rest of the input
+// begins some name (begins says), as a name may have spaces; else last,
+// the start of the last word. Members and chat titles use it alike.
+func nameStart(input []rune, from, last int, begins func(typed string) bool) int {
 	var starts []int
 	for i := from; i < last; i++ {
 		if (i == from || input[i-1] == ' ') && input[i] != ' ' {
@@ -121,11 +136,8 @@ func memberStart(ms []domain.Member, input []rune, from, last int) int {
 		starts = starts[len(starts)-nameWords:]
 	}
 	for _, i := range starts {
-		typed := string(input[i:])
-		for _, mb := range ms {
-			if matches(mb, typed) {
-				return i
-			}
+		if begins(string(input[i:])) {
+			return i
 		}
 	}
 	return last

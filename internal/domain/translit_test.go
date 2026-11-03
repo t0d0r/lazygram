@@ -100,6 +100,62 @@ func TestResolveChatInEitherScript(t *testing.T) {
 	}
 }
 
+// A Latin spelling is as decisive as the Cyrillic one: an exact alias or
+// title in either script resolves before a prefix, and a prefix before a
+// substring, so "ivan" is иван although иванка starts with it too.
+func TestResolveChatExactInEitherScript(t *testing.T) {
+	chats := []Chat{
+		{ID: "c1", Alias: "иван", Title: "Иван", Kind: ChatUser},
+		{ID: "c2", Alias: "иванка", Title: "Иванка", Kind: ChatUser},
+		{ID: "c3", Alias: "новини", Title: "Новини", Kind: ChatChannel},
+		{ID: "c4", Alias: "новини-спорт", Title: "Новини Спорт", Kind: ChatChannel},
+		{ID: "c5", Alias: "stuckoff", Title: "Камен", Kind: ChatUser},
+		{ID: "c6", Alias: "каменов", Title: "Каменов", Kind: ChatUser},
+	}
+	for q, want := range map[string]string{
+		"иван": "c1", "ivan": "c1", "@ivan": "c1", "IVAN": "c1",
+		"новини": "c3", "novini": "c3", "#novini": "c3",
+		"kamen": "c5", "@kamen": "c5", "kamenov": "c6",
+		"ivanka": "c2", "novini sport": "c4",
+	} {
+		if c, err := ResolveChat(chats, q); err != nil || c.ID != want {
+			t.Errorf("%q: got %q, %v; want %s", q, c.ID, err, want)
+		}
+	}
+	if _, err := ResolveChat(chats, "iva"); !errors.Is(err, ErrAmbiguous) {
+		t.Errorf("iva begins both: %v", err)
+	}
+}
+
+// A unique prefix in either script resolves where the substring would be
+// ambiguous: "kalo" begins one title and is inside another.
+func TestResolveChatPrefixInEitherScript(t *testing.T) {
+	chats := []Chat{
+		{ID: "c1", Alias: "калоян-gps", Title: "Калоян GPS", Kind: ChatUser},
+		{ID: "c2", Alias: "свети-калоян", Title: "Свети Калоян", Kind: ChatGroup},
+	}
+	for _, q := range []string{"kalo", "@kalo", "kaloyan g"} {
+		if c, err := ResolveChat(chats, q); err != nil || c.ID != "c1" {
+			t.Errorf("%q: got %q, %v", q, c.ID, err)
+		}
+	}
+	if c, err := ResolveChat(chats, "#kalo"); err != nil || c.ID != "c2" {
+		t.Errorf("#kalo: the sigil still picks the kind: %q, %v", c.ID, err)
+	}
+}
+
+func TestMatcherExactAndPrefix(t *testing.T) {
+	mt := NewMatcher(" Kamen ")
+	for s, want := range map[string][2]bool{
+		"Камен": {true, true}, "kamen": {true, true}, "Каменов": {false, true},
+		"Ками": {false, false}, "Стар Камен": {false, false},
+	} {
+		if got := [2]bool{mt.MatchExact(s), mt.MatchPrefix(s)}; got != want {
+			t.Errorf("%q: exact, prefix = %v, want %v", s, got, want)
+		}
+	}
+}
+
 func TestFilterSearchesBothScripts(t *testing.T) {
 	at := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
 	msgs := []Message{

@@ -278,13 +278,17 @@ var (
 	ErrAmbiguous = errors.New("ambiguous chat")
 )
 
-// ResolveChat finds one chat by exact ID or alias, then by unique
-// case-insensitive prefix, then by unique substring of alias or title,
-// then by unique substring in either script (a Latin query finds a title
-// written in Cyrillic and the other way round; only when the plain
-// substring found nothing, so it never turns a unique match ambiguous). A
-// leading @ restricts the search to people, a leading # to groups and
-// channels.
+// ResolveChat finds one chat by name, case-insensitively, in tiers, the
+// first tier with any hit deciding (one hit resolves, several are
+// ambiguous): the exact ID or alias, the exact title (the name /names
+// shows resolves even when another title contains it), a prefix of the
+// alias, a substring of the alias or title; then in either script (a Latin
+// query finds a title written in Cyrillic and the other way round): the
+// exact alias or title, a prefix of either, a substring of either. The
+// either-script tiers make a Latin spelling as decisive as the Cyrillic
+// one and come after the plain ones, so they never turn a plain match
+// ambiguous. A leading @ restricts the search to people, a leading # to
+// groups and channels.
 func ResolveChat(chats []Chat, query string) (Chat, error) {
 	q := strings.ToLower(strings.TrimSpace(query))
 	switch {
@@ -298,8 +302,10 @@ func ResolveChat(chats []Chat, query string) (Chat, error) {
 	if q == "" {
 		return Chat{}, ErrNoChat
 	}
+	title := func(c Chat) string { return strings.TrimSpace(c.Title) }
 	tiers := []func(Chat) bool{
 		func(c Chat) bool { return strings.ToLower(c.ID) == q || strings.ToLower(c.Alias) == q },
+		func(c Chat) bool { return strings.ToLower(title(c)) == q },
 		func(c Chat) bool { return strings.HasPrefix(strings.ToLower(c.Alias), q) },
 		func(c Chat) bool {
 			return strings.Contains(strings.ToLower(c.Alias), q) ||
@@ -309,7 +315,10 @@ func ResolveChat(chats []Chat, query string) (Chat, error) {
 	// A query that transliterates to nothing (only combining marks) would
 	// match every chat in either script; it gets no such tier.
 	if either := NewMatcher(q); !either.Empty() {
-		tiers = append(tiers, func(c Chat) bool { return either.Match(c.Alias) || either.Match(c.Title) })
+		tiers = append(tiers,
+			func(c Chat) bool { return either.MatchExact(c.Alias) || either.MatchExact(title(c)) },
+			func(c Chat) bool { return either.MatchPrefix(c.Alias) || either.MatchPrefix(title(c)) },
+			func(c Chat) bool { return either.Match(c.Alias) || either.Match(c.Title) })
 	}
 	for _, match := range tiers {
 		var hits []Chat
