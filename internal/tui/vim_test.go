@@ -1191,8 +1191,8 @@ func TestVimListsOpenInNormal(t *testing.T) {
 			"chats (3): Up/Down, Left/Right pick open/read/unread, Enter does it, Esc returns, type to narrow"},
 		{"/win", "windows (4): Up/Down, Left/Right pick focus/read/unread/close, Enter does it, Esc returns",
 			"windows (4): Up/Down, Left/Right pick focus/read/unread/close, Enter does it, Esc returns"},
-		{"/settings", "settings (9): Up/Down, Enter or Right next value, Left previous, Esc closes, / to narrow",
-			"settings (9): Up/Down, Enter or Right next value, Left previous, Esc closes, type to narrow"},
+		{"/settings", "settings (11): Up/Down, Enter or Right next value, Left previous, Esc closes, / to narrow",
+			"settings (11): Up/Down, Enter or Right next value, Left previous, Esc closes, type to narrow"},
 		{"/search", "history of server: 4 of 4 messages; / to search, Esc returns",
 			"history of server: 4 of 4 messages; type to search, Esc returns"},
 	} {
@@ -1225,7 +1225,7 @@ func TestVimListJKAndEnds(t *testing.T) {
 	for _, c := range []struct {
 		line string
 		n    int // the rows
-	}{{"/list", 43}, {"/list room1", 10}, {"/win", 4}, {"/settings", 9}, {"/settings mo", 2}} {
+	}{{"/list", 43}, {"/list room1", 10}, {"/win", 4}, {"/settings", 11}, {"/settings mo", 2}} {
 		enter(m, c.line)
 		m.View()
 		if m.listCur != 0 || m.listLen() != c.n { // /win opens on window 0, the current one

@@ -1499,12 +1499,21 @@ func TestTabOnEmptyPromptCyclesWindows(t *testing.T) {
 	if m.cur != 1 {
 		t.Fatalf("tab: %d", m.cur)
 	}
-	for range 3 { // slow Tabs: each is a single one (two fast ones are the double Tab, lastwin_test.go)
-		step(tabGap + time.Millisecond)
+	for range 3 { // fast Tabs: with /doubletab off, the default, each is a single one
 		press(m, tea.KeyTab)
 	}
 	if m.cur != 0 {
 		t.Fatalf("wraps to the server window: %d", m.cur)
+	}
+	// With /doubletab last two fast ones are the double Tab
+	// (lastwin_test.go); slow ones still walk.
+	enter(m, "/doubletab last")
+	for range 4 {
+		step(m.tabGap + time.Millisecond)
+		press(m, tea.KeyTab)
+	}
+	if m.cur != 0 {
+		t.Fatalf("slow Tabs walk round to the server window: %d", m.cur)
 	}
 	press(m, tea.KeyShiftTab)
 	if m.cur != 3 {

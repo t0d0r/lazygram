@@ -14,13 +14,14 @@ import (
 
 // holdTicks keeps what the model schedules with after (a Tab's held read
 // receipt) instead of starting a timer, so nothing sleeps; passGap
-// delivers it. Whatever is held is held for tabGap.
+// delivers it. Whatever is held is held for the double Tab's time as it
+// is set at that moment (m.tabGap).
 func holdTicks(t *testing.T, m *Model) *[]tea.Msg {
 	t.Helper()
 	held := &[]tea.Msg{}
 	m.after = func(d time.Duration, msg tea.Msg) tea.Cmd {
-		if d != tabGap {
-			t.Errorf("held for %v, want tabGap", d)
+		if d != m.tabGap {
+			t.Errorf("held for %v, want the double Tab's time %v", d, m.tabGap)
 		}
 		*held = append(*held, msg)
 		return nil
@@ -28,10 +29,10 @@ func holdTicks(t *testing.T, m *Model) *[]tea.Msg {
 	return held
 }
 
-// passGap moves the clock on by tabGap and delivers the held messages, as
-// their timers would, running whatever they start.
+// passGap moves the clock on by the double Tab's time and delivers the
+// held messages, as their timers would, running whatever they start.
 func passGap(m *Model, step func(time.Duration), held *[]tea.Msg) {
-	step(tabGap)
+	step(m.tabGap)
 	msgs := *held
 	*held = nil
 	for _, msg := range msgs {
@@ -43,18 +44,48 @@ func passGap(m *Model, step func(time.Duration), held *[]tea.Msg) {
 // fromDev is a model in #dev (window 2) with #news (window 1) the last
 // focused window, so that from there a Tab shows @alice (3), a plain
 // second Tab the server window (0) and a double Tab #news: three
-// different windows.
+// different windows. It sets /doubletab last, as the tests of that
+// gesture need; fromDevWith sets any mode.
 func fromDev(t *testing.T, f *fake) (*Model, func(time.Duration), *[]tea.Msg) {
+	t.Helper()
+	return fromDevWith(t, f, "last")
+}
+
+// fromDevWith is fromDev with /doubletab set to mode: off, last or unread.
+// #news and #dev are read; @alice has 2 unread messages.
+func fromDevWith(t *testing.T, f *fake, mode string) (*Model, func(time.Duration), *[]tea.Msg) {
 	t.Helper()
 	m := setup(t, f) // 0 server, 1 #news, 2 #dev, 3 @alice
 	step := pinClock(m)
 	held := holdTicks(t, m)
+	enter(m, "/doubletab "+mode)
 	enter(m, "/win 1")
 	enter(m, "/win 2")
-	if m.cur != 2 || m.lastWindow() != 1 {
-		t.Fatalf("in #dev after #news: cur %d, last %d", m.cur, m.lastWindow())
+	if m.cur != 2 || m.lastWindow() != 1 || m.dblTab.String() != mode || m.wins[3].unread != 2 {
+		t.Fatalf("in #dev after #news, double Tab %s: cur %d, last %d, mode %v, @alice unread %d",
+			mode, m.cur, m.lastWindow(), m.dblTab, m.wins[3].unread)
 	}
 	return m, step, held
+}
+
+// allModes runs a test of what holds whatever /doubletab says: off, last
+// and unread.
+func allModes(t *testing.T, test func(t *testing.T, mode string)) {
+	t.Helper()
+	for _, mode := range doubleTabWords {
+		t.Run("doubletab "+mode, func(t *testing.T) { test(t, mode) })
+	}
+}
+
+// walkModes runs a test of a second fast Tab that leaves the window the
+// first one showed: off (the next window) and last (the last window). With
+// unread the second Tab stays on that window when it has unread messages
+// (TestDoubleTabUnread...).
+func walkModes(t *testing.T, test func(t *testing.T, mode string)) {
+	t.Helper()
+	for _, mode := range []string{"off", "last"} {
+		t.Run("doubletab "+mode, func(t *testing.T) { test(t, mode) })
+	}
 }
 
 func TestWinLastSwitchesAndToggles(t *testing.T) {
@@ -222,14 +253,14 @@ func TestDoubleTabGoesToTheLastWindowAndBack(t *testing.T) {
 func TestDoubleTabTiming(t *testing.T) {
 	m, step, _ := fromDev(t, newFake())
 	press(m, tea.KeyTab)
-	step(tabGap)
+	step(m.tabGap)
 	press(m, tea.KeyTab)
 	if m.winName(m.cur) != "#news" || m.wins[3].unread != 2 {
 		t.Fatalf("tabGap exactly is still a double Tab, and @alice gets its count back: %s, unread %d", m.winName(m.cur), m.wins[3].unread)
 	}
 	m, step, _ = fromDev(t, newFake())
 	press(m, tea.KeyTab)
-	step(tabGap + time.Millisecond)
+	step(m.tabGap + time.Millisecond)
 	press(m, tea.KeyTab)
 	if m.cur != 0 || m.winName(m.lastWindow()) != "@alice" || m.wins[3].unread != 0 {
 		t.Fatalf("a longer pause makes two plain Tabs, and @alice was read: cur %d, last %s, unread %d",
@@ -293,6 +324,7 @@ func TestDoubleTabWithTextCompletes(t *testing.T) {
 func TestDoubleTabWithoutLastWindowIsTwoTabs(t *testing.T) {
 	m := setup(t, newFake()) // 0 server, 1 #news, 2 #dev, 3 @alice; nothing left yet
 	pinClock(m)
+	enter(m, "/doubletab last")
 	var got []int
 	for range 4 {
 		press(m, tea.KeyTab)
@@ -309,6 +341,7 @@ func TestDoubleTabWithoutLastWindowIsTwoTabs(t *testing.T) {
 func TestThirdFastTabIsAFirstTab(t *testing.T) {
 	m := setup(t, newFake()) // 0 server, 1 #news, 2 #dev, 3 @alice
 	step := pinClock(m)
+	enter(m, "/doubletab last")
 	enter(m, "/win 3")
 	enter(m, "/win 1") // in #news, @alice last
 	var got []string
@@ -393,6 +426,7 @@ func TestDoubleTabHoldsItsDestinationsReceipt(t *testing.T) {
 	m := setup(t, f) // 0 server, 1 #news, 2 #dev, 3 @alice
 	step := pinClock(m)
 	held := holdTicks(t, m)
+	enter(m, "/doubletab last")
 	enter(m, "/win 3")
 	enter(m, "/win 1") // in #news, @alice last
 	enter(m, "/read-receipts on")
@@ -411,10 +445,12 @@ func TestDoubleTabHoldsItsDestinationsReceipt(t *testing.T) {
 
 // TestTabReceiptWaitsForTabGap: a window a single Tab focused is reported
 // read once it stayed current for tabGap; every other way of focusing
-// reports at once.
-func TestTabReceiptWaitsForTabGap(t *testing.T) {
+// reports at once. Whatever /doubletab says.
+func TestTabReceiptWaitsForTabGap(t *testing.T) { allModes(t, testTabReceiptWaitsForTabGap) }
+
+func testTabReceiptWaitsForTabGap(t *testing.T, mode string) {
 	f := newFake()
-	m, step, held := fromDev(t, f)
+	m, step, held := fromDevWith(t, f, mode)
 	enter(m, "/read-receipts on")
 	runAll(m, press(m, tea.KeyTab)) // @alice, 2 unread
 	if len(f.read) != 0 || len(*held) != 1 {
@@ -449,15 +485,20 @@ func TestTabReceiptWaitsForTabGap(t *testing.T) {
 	}
 }
 
-// TestHeldReceiptNeverGoesTwiceOrForAClosedWindow: the held receipt goes
-// only when its window is still current and was not left in between.
-func TestHeldReceiptNeverGoesTwiceOrForAClosedWindow(t *testing.T) {
+// TestHeldReceiptNeverGoesTwice: the held receipt goes only when its
+// window was not left in between: off and last, whose second Tab leaves
+// it.
+func TestHeldReceiptNeverGoesTwice(t *testing.T) {
+	walkModes(t, testHeldReceiptNeverGoesTwice)
+}
+
+func testHeldReceiptNeverGoesTwice(t *testing.T, mode string) {
 	f := newFake()
-	m, step, held := fromDev(t, f)
+	m, step, held := fromDevWith(t, f, mode)
 	enter(m, "/read-receipts on")
 	press(m, tea.KeyTab) // @alice, receipt held
 	step(100 * time.Millisecond)
-	press(m, tea.KeyTab) // back to #news: @alice unread again
+	press(m, tea.KeyTab) // back to #news (last) or on to the server window (off): @alice unread again
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'3'}, Alt: true})
 	runAll(m, cmd) // @alice again, reported at once
 	if len(f.read) != 1 {
@@ -467,12 +508,21 @@ func TestHeldReceiptNeverGoesTwiceOrForAClosedWindow(t *testing.T) {
 	if len(f.read) != 1 {
 		t.Fatalf("the Tab's held receipt does not go as well: %v", f.read)
 	}
-	m, step, held = fromDev(t, f)
-	f.read = nil
+}
+
+// TestHeldReceiptNeverGoesForAClosedWindow: nor when its window was
+// closed. Whatever /doubletab says.
+func TestHeldReceiptNeverGoesForAClosedWindow(t *testing.T) {
+	allModes(t, testHeldReceiptNeverGoesForAClosedWindow)
+}
+
+func testHeldReceiptNeverGoesForAClosedWindow(t *testing.T, mode string) {
+	f := newFake()
+	m, step, held := fromDevWith(t, f, mode)
 	enter(m, "/read-receipts on")
 	press(m, tea.KeyTab) // @alice, receipt held
 	enter(m, "/close")   // gone before tabGap
-	step(tabGap + time.Millisecond)
+	step(m.tabGap + time.Millisecond)
 	runAll(m, altN(m, '1')) // and the window shown since is left later
 	passGap(m, step, held)
 	if len(f.read) != 0 {
@@ -560,12 +610,17 @@ func TestDeletionDuringTheHopIsNotPutBack(t *testing.T) {
 	}
 }
 
-// TestPlainSecondTabLeavesNoTraceEither: with no last window the second
-// fast Tab is a plain one, and the window the first showed is left as it
-// was all the same; focused again, it is reported as that focus reports.
+// TestPlainSecondTabLeavesNoTraceEither: with no last window (or with
+// /doubletab off) the second fast Tab is a plain one, and the window the
+// first showed is left as it was all the same; focused again, it is
+// reported as that focus reports.
 func TestPlainSecondTabLeavesNoTraceEither(t *testing.T) {
+	walkModes(t, testPlainSecondTabLeavesNoTraceEither)
+}
+
+func testPlainSecondTabLeavesNoTraceEither(t *testing.T, mode string) {
 	f := newFake()
-	m, step, held := fromDev(t, f)
+	m, step, held := fromDevWith(t, f, mode)
 	enter(m, "/close 1") // #news, the last window: none now; 0 server, 1 #dev, 2 @alice
 	enter(m, "/read-receipts on")
 	alice := m.wins[2]
@@ -588,10 +643,14 @@ func TestPlainSecondTabLeavesNoTraceEither(t *testing.T) {
 
 // TestWindowLeftWithinTabGapComesBack: a window a Tab showed and another
 // focus left within tabGap was only passed through too; whatever brings it
-// back reports it, once.
+// back reports it, once. Whatever /doubletab says.
 func TestWindowLeftWithinTabGapComesBack(t *testing.T) {
+	allModes(t, testWindowLeftWithinTabGapComesBack)
+}
+
+func testWindowLeftWithinTabGapComesBack(t *testing.T, mode string) {
 	f := newFake()
-	m, step, held := fromDev(t, f)
+	m, step, held := fromDevWith(t, f, mode)
 	enter(m, "/read-receipts on")
 	alice := m.wins[3]
 	press(m, tea.KeyTab) // @alice, receipt held
@@ -612,7 +671,7 @@ func TestWindowLeftWithinTabGapComesBack(t *testing.T) {
 	// Tab, Shift-Tab, Tab: the last Tab is a first Tab, and its own receipt
 	// goes tabGap later, once.
 	f.read = nil
-	m, step, held = fromDev(t, f)
+	m, step, held = fromDevWith(t, f, mode)
 	enter(m, "/read-receipts on")
 	alice = m.wins[3]
 	press(m, tea.KeyTab)      // @alice
@@ -638,14 +697,18 @@ func TestWindowLeftWithinTabGapComesBack(t *testing.T) {
 
 // TestWindowLeftAfterTabGapIsReported: a window that stayed current for
 // tabGap was read; left before its held message came (a late timer), its
-// receipt goes as it is left, and only then.
+// receipt goes as it is left, and only then. Whatever /doubletab says.
 func TestWindowLeftAfterTabGapIsReported(t *testing.T) {
+	allModes(t, testWindowLeftAfterTabGapIsReported)
+}
+
+func testWindowLeftAfterTabGapIsReported(t *testing.T, mode string) {
 	f := newFake()
-	m, step, held := fromDev(t, f)
+	m, step, held := fromDevWith(t, f, mode)
 	enter(m, "/read-receipts on")
 	alice := m.wins[3]
 	press(m, tea.KeyTab) // @alice, receipt held
-	step(tabGap + time.Millisecond)
+	step(m.tabGap + time.Millisecond)
 	runAll(m, altN(m, '2'))
 	if len(f.read) != 1 || f.read[0] != "c2:7" || alice.unread != 0 {
 		t.Fatalf("@alice was read, and is reported as it is left: %v, unread %d", f.read, alice.unread)
@@ -682,11 +745,12 @@ func TestTabHoldsItsReceiptOnARealTimer(t *testing.T) {
 	}
 }
 
-// TestWinLastDoubleTabInVimNormal: with vim on, a double Tab on an empty
-// prompt goes back to the last window in Normal as in Insert, and gt is
-// a window switch like Ctrl-N: a Tab right after it is a first Tab.
+// TestWinLastDoubleTabInVimNormal: with vim on and /doubletab last, a
+// double Tab on an empty prompt goes back to the last window in Normal as
+// in Insert, and gt is a window switch like Ctrl-N: a Tab right after it
+// is a first Tab.
 func TestWinLastDoubleTabInVimNormal(t *testing.T) {
-	m, _, _ := fromDev(t, newFake())
+	m, _, _ := fromDevWith(t, newFake(), "last")
 	enter(m, "/vim on")
 	press(m, tea.KeyEsc)
 	if !m.inNormal() || len(m.input) != 0 || m.cur != 2 {

@@ -21,7 +21,7 @@ import (
 )
 
 // menuOrder is the order of the settings menu's rows.
-var menuOrder = []string{"feed", "autojoin", "read-receipts", "names", "theme", "fx", "mouse", "clip", "vim"}
+var menuOrder = []string{"feed", "autojoin", "read-receipts", "names", "theme", "fx", "mouse", "clip", "vim", "doubletab", "doubletab-time"}
 
 // menuRows are the rows the menu shows, as name and value, in order.
 func menuRows(m *Model) [][2]string {
@@ -132,16 +132,17 @@ func TestSettingsOpensInWindow0FromAChatWindow(t *testing.T) {
 	if !strings.HasPrefix(input, "settings > ") || m.prompt() != "settings > " {
 		t.Fatalf("the prompt: %q", input)
 	}
-	if !strings.Contains(v, "settings (9): Up/Down, Enter or Right next value, Left previous, Esc closes, type to narrow") {
+	if !strings.Contains(v, "settings (11): Up/Down, Enter or Right next value, Left previous, Esc closes, type to narrow") {
 		t.Fatalf("the rule explains the keys:\n%s", v)
 	}
 	if strings.Contains(v, "[open]") || strings.Contains(v, "[focus]") || strings.Contains(v, "first dev line") {
 		t.Fatalf("the menu has no buttons and covers window 0's lines:\n%s", v)
 	}
 	want := [][2]string{{"feed", "on"}, {"autojoin", "on"}, {"read-receipts", "off"}, {"names", "nick"},
-		{"theme", "default"}, {"fx", "off"}, {"mouse", "on"}, {"clip", "auto"}, {"vim", "off"}}
+		{"theme", "default"}, {"fx", "off"}, {"mouse", "on"}, {"clip", "auto"}, {"vim", "off"},
+		{"doubletab", "off"}, {"doubletab-time", "400ms"}}
 	if got := menuRows(m); !reflect.DeepEqual(got, want) {
-		t.Fatalf("the nine rows in order with their values:\n%q\nwant\n%q", got, want)
+		t.Fatalf("the eleven rows in order with their values:\n%q\nwant\n%q", got, want)
 	}
 	// The columns line up (whatever the values, see
 	// TestSettingsDescriptionsStayPut).
@@ -195,9 +196,12 @@ func TestSettingsDescriptionsStayPut(t *testing.T) {
 	}
 	enter(m, "/theme "+longest)
 	enter(m, "/clip osc52")
+	enter(m, "/doubletab 1000") // a time the row does not list, shown as it is
 	enter(m, "/settings")
-	if got := descColumn(t, m); got != at || menuValue(m, "theme") != longest || menuValue(m, "clip") != "osc52" {
-		t.Fatalf("theme %s and clip osc52: the descriptions at %d, not %d", menuValue(m, "theme"), got, at)
+	if got := descColumn(t, m); got != at || menuValue(m, "theme") != longest || menuValue(m, "clip") != "osc52" ||
+		menuValue(m, "doubletab-time") != "1000ms" {
+		t.Fatalf("theme %s, clip osc52, doubletab-time %s: the descriptions at %d, not %d",
+			menuValue(m, "theme"), menuValue(m, "doubletab-time"), got, at)
 	}
 }
 
@@ -338,7 +342,8 @@ func TestSettingsChangeAsTheirCommandsDo(t *testing.T) {
 		"read-receipts": func(v string) string { return "/read-receipts " + v }, "names": func(string) string { return "/names" },
 		"theme": func(v string) string { return "/theme " + v }, "fx": func(string) string { return "/fx" },
 		"mouse": func(string) string { return "/mouse" }, "clip": func(v string) string { return "/clip " + v },
-		"vim": func(v string) string { return "/vim " + v },
+		"vim": func(v string) string { return "/vim " + v }, "doubletab": func(v string) string { return "/doubletab " + v },
+		"doubletab-time": func(v string) string { return "/doubletab " + v },
 	}
 	for _, name := range menuOrder {
 		menu, typed := setup(t, newFake()), setup(t, newFake())
@@ -373,13 +378,13 @@ func TestSettingsChangeAsTheirCommandsDo(t *testing.T) {
 				t.Fatalf("%s: kept as %v, the command keeps %v", name, a, b)
 			}
 			// The rule shows what was said, until the next key.
-			if v := ansi.Strip(menu.View()); !strings.Contains(v, ansi.Truncate(menu.status, 60, "")) || strings.Contains(v, "settings (9)") {
+			if v := ansi.Strip(menu.View()); !strings.Contains(v, ansi.Truncate(menu.status, 60, "")) || strings.Contains(v, "settings (11)") {
 				t.Fatalf("%s: the rule shows the change's status %q:\n%s", name, menu.status, v)
 			}
 		}
 		press(menu, tea.KeyDown)
 		press(menu, tea.KeyUp)
-		if v := ansi.Strip(menu.View()); !strings.Contains(v, "settings (9): Up/Down") {
+		if v := ansi.Strip(menu.View()); !strings.Contains(v, "settings (11): Up/Down") {
 			t.Fatalf("%s: after another key the rule explains the keys again:\n%s", name, v)
 		}
 	}
@@ -764,7 +769,8 @@ func TestSettingsRowsFollowTheSettings(t *testing.T) {
 		press(m, tea.KeyEsc)
 	}
 	check("at start")
-	for _, line := range []string{"/feed off", "/autojoin off", "/read-receipts on", "/names", "/theme nord", "/fx", "/mouse", "/clip tool"} {
+	for _, line := range []string{"/feed off", "/autojoin off", "/read-receipts on", "/names", "/theme nord", "/fx", "/mouse", "/clip tool",
+		"/doubletab unread", "/doubletab 250"} {
 		enter(m, line)
 	}
 	check("after the commands")
@@ -776,7 +782,7 @@ func TestSettingsRowsFollowTheSettings(t *testing.T) {
 			out = append(out, r[1])
 		}
 		return out
-	}(); !reflect.DeepEqual(values, []string{"off", "off", "on", "name", "nord", "on", "off", "tool", "off"}) {
+	}(); !reflect.DeepEqual(values, []string{"off", "off", "on", "name", "nord", "on", "off", "tool", "off", "unread", "250ms"}) {
 		t.Fatalf("the values after the commands: %q", values)
 	}
 	// A command typed in the open menu: it stays open, the row follows and
@@ -795,7 +801,7 @@ func TestSettingsRowsFollowTheSettings(t *testing.T) {
 		t.Fatalf("so does a line that is no command:\n%s", v)
 	}
 	press(m, tea.KeyDown)
-	if v := ansi.Strip(m.View()); !strings.Contains(v, "settings (9): ") {
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "settings (11): ") {
 		t.Fatalf("the next key brings the keys back:\n%s", v)
 	}
 	press(m, tea.KeyEsc)
@@ -804,7 +810,9 @@ func TestSettingsRowsFollowTheSettings(t *testing.T) {
 
 // TestEveryKeptSettingHasARow fails when a store key for a setting is
 // added (a const named ...Key with a string value in this package) without
-// a row in the menu, and when a row names no command of its own.
+// a row in the menu, and when a row runs no command of its own: one named
+// after another command (doubletab-time runs /doubletab) starts with that
+// command's name.
 func TestEveryKeptSettingHasARow(t *testing.T) {
 	notSettings := map[string]bool{layoutKey: true, sharedKey: true} // the window layout, the chats sharing ids
 	files, err := filepath.Glob("*.go")
@@ -849,9 +857,12 @@ func TestEveryKeptSettingHasARow(t *testing.T) {
 		if !keys[s.key] {
 			t.Errorf("row %s keeps %q, which is no store key here", s.name, s.key)
 		}
-		c, err := command.Parse("/" + s.name)
+		c, err := command.Parse("/" + s.command())
 		if err != nil || c.Kind == command.Settings {
-			t.Errorf("row %s is not the name of its command: %v", s.name, err)
+			t.Errorf("row %s runs no command of its own (/%s): %v", s.name, s.command(), err)
+		}
+		if s.name != s.command() && !strings.HasPrefix(s.name, s.command()+"-") {
+			t.Errorf("row %s runs /%s: its name starts with the command's", s.name, s.command())
 		}
 		if len(s.values()) < 2 || !slices.Contains(s.values(), s.value(setup(t, newFake()))) {
 			t.Errorf("row %s: values %q", s.name, s.values())

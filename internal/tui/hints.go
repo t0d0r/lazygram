@@ -41,7 +41,8 @@ var hintPool = []string{
 	"hint: /move N moves a chat window to position N; /close closes it",
 	"hint: /feed off keeps chat messages and reactions out of window 0",
 	"hint: /settings lists every setting; Enter or Left/Right change one",
-	"hint: /win last, or Tab twice fast, jumps back to the last window",
+	"hint: /win last jumps back, /unread to the next unread window",
+	"hint: /doubletab last or unread turns Tab twice fast into a jump",
 	"hint: /vim on gives the input vi keys; Esc for Normal mode, i to type",
 }
 

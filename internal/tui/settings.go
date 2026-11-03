@@ -11,7 +11,8 @@ import (
 )
 
 // The settings menu (/settings, its only name) lists every kept setting,
-// one row each: its name (the command without the slash), its current
+// one row each: its name (the command without the slash; the double Tab's
+// time, a second value /doubletab keeps, is doubletab-time), its current
 // value and what it does. It belongs to the client, not to a chat, so it
 // opens in window 0, the server window, which /settings focuses first
 // wherever it was typed, as /help and /keys do; any switch to a window
@@ -24,12 +25,25 @@ import (
 // setting is one row of the menu: a kept setting, its store key, its
 // values in the order Enter and Right step through them, and the
 // command's own code that reads and sets it. set returns what the command
-// returns, such as the command that turns mouse reporting on or off.
+// returns, such as the command that turns mouse reporting on or off. The
+// row is named after its command, unless cmd names it: doubletab-time is
+// the time /doubletab takes. near, when set, is the value Enter and Right
+// (d = 1) or Left (d = -1) step to from a current value the row does not
+// list; without it they step to the first or the last.
 type setting struct {
-	name, key, desc string
-	values          func() []string
-	value           func(m *Model) string
-	set             func(m *Model, v string) tea.Cmd
+	name, cmd, key, desc string
+	values               func() []string
+	value                func(m *Model) string
+	set                  func(m *Model, v string) tea.Cmd
+	near                 func(m *Model, d int) string
+}
+
+// command is the name of the command the row runs, without the slash.
+func (s setting) command() string {
+	if s.cmd != "" {
+		return s.cmd
+	}
+	return s.name
 }
 
 // onOff are the values of a setting that is on or off.
@@ -80,6 +94,13 @@ var settings = []setting{
 	{name: "vim", key: vimKey, desc: "vi keys: Esc for Normal, i for Insert",
 		values: onOffValues, value: func(m *Model) string { return onOffOf(m.vi.on) },
 		set: func(m *Model, v string) tea.Cmd { m.setVim(v); return nil }},
+	{name: "doubletab", key: doubleTabKey, desc: "Tab twice fast: last or next unread window",
+		values: func() []string { return doubleTabWords }, value: func(m *Model) string { return m.dblTab.String() },
+		set: func(m *Model, v string) tea.Cmd { m.setDoubleTab(v); return nil }},
+	{name: "doubletab-time", cmd: "doubletab", key: doubleTabTimeKey, desc: "the double Tab's pause, and a Tab's read delay",
+		values: func() []string { return tabGapValues }, value: func(m *Model) string { return msOf(m.tabGap) },
+		set:  func(m *Model, v string) tea.Cmd { m.setDoubleTab(v); return nil },
+		near: func(m *Model, d int) string { return nearTabGap(m.tabGap, d) }},
 }
 
 // settingsOpen reports whether the menu is what window 0 shows now.
@@ -142,14 +163,19 @@ func (m *Model) stepSetting(d int) (tea.Model, tea.Cmd) {
 	s := rows[m.listCur]
 	vals := s.values()
 	i := slices.Index(vals, s.value(m))
-	if i < 0 { // a value the row does not list: the first (or, going back, the last)
-		i = 0
-		if d > 0 {
-			i = -1
-		}
+	var v string
+	switch {
+	case i >= 0:
+		n := len(vals)
+		v = vals[((i+d)%n+n)%n]
+	case s.near != nil: // a value the row does not list, between two it does
+		v = s.near(m, d)
+	case d > 0: // a value the row does not list: the first (or, going back, the last)
+		v = vals[0]
+	default:
+		v = vals[len(vals)-1]
 	}
-	n := len(vals)
-	cmd := s.set(m, vals[((i+d)%n+n)%n])
+	cmd := s.set(m, v)
 	m.listSaid = true
 	return m, cmd
 }

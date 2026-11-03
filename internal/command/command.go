@@ -12,39 +12,40 @@ type Kind int
 
 // Command kinds.
 const (
-	Help     Kind = iota
-	Quit          // leave
-	Refresh       // sync now
-	List          // print the chats; Arg filters
-	Win           // switch or open a window: Arg is a number or a chat name; empty lists windows
-	Close         // close window Arg (number), or the current one
-	Last          // fetch the last N messages for the current window's chat
-	Search        // open the local history pager; Arg is the search text
-	Stats         // print client statistics into the current window
-	Whois         // print what is known about a chat (Arg) or the current window's chat
-	Me            // send an action line ("* text") to the current window's chat
-	Press         // press a bot button: Arg is "N" or "<message id> N"
-	Open          // fetch and open the attachment of the latest message with one, or of message Arg
-	Theme         // list the colour themes, or switch to Arg
-	Move          // move the current window to position Arg
-	Msg           // send a message: Arg is "<@user|#chan> <text>" (the name may be a title with spaces); the window opens if missing
-	About         // print version, author and build information
-	Fx            // toggle the running lights over clickable text
-	Mouse         // toggle mouse reporting (off lets the terminal select text)
-	Clip          // clipboard mode for the mouse selection: Arg is auto, osc52, tool or off; empty shows
-	Edit          // edit the last own message in this window: Arg is the new text (empty: prefill)
-	Delete        // delete the last own message in this window
-	Nicks         // toggle showing chats by nick (@alias) or by name (@title)
-	SendFile      // send a local file: Arg is "<path> [caption]"
-	Redraw        // drop the notices and pictures from the window, keep the messages
-	Keys          // print the keyboard shortcut reference into the server window
-	Receipts      // read receipts to the service: Arg is on or off; empty shows the setting
-	MarkRead      // one read receipt for the current window's chat, whatever the setting
-	AutoJoin      // open windows for unread chats at start: Arg is on or off; empty shows the setting
-	Feed          // chat messages in the server window: Arg is on or off; empty shows the setting
-	Settings      // the menu of every kept setting, in the server window: Arg narrows its rows
-	Vim           // vi keys (Normal and Insert modes) on the input, the lists and the pager: Arg is on or off; empty shows the setting
-	Unread        // focus the next window with unread messages after the current one, wrapping round
+	Help      Kind = iota
+	Quit           // leave
+	Refresh        // sync now
+	List           // print the chats; Arg filters
+	Win            // switch or open a window: Arg is a number or a chat name; empty lists windows
+	Close          // close window Arg (number), or the current one
+	Last           // fetch the last N messages for the current window's chat
+	Search         // open the local history pager; Arg is the search text
+	Stats          // print client statistics into the current window
+	Whois          // print what is known about a chat (Arg) or the current window's chat
+	Me             // send an action line ("* text") to the current window's chat
+	Press          // press a bot button: Arg is "N" or "<message id> N"
+	Open           // fetch and open the attachment of the latest message with one, or of message Arg
+	Theme          // list the colour themes, or switch to Arg
+	Move           // move the current window to position Arg
+	Msg            // send a message: Arg is "<@user|#chan> <text>" (the name may be a title with spaces); the window opens if missing
+	About          // print version, author and build information
+	Fx             // toggle the running lights over clickable text
+	Mouse          // toggle mouse reporting (off lets the terminal select text)
+	Clip           // clipboard mode for the mouse selection: Arg is auto, osc52, tool or off; empty shows
+	Edit           // edit the last own message in this window: Arg is the new text (empty: prefill)
+	Delete         // delete the last own message in this window
+	Nicks          // toggle showing chats by nick (@alias) or by name (@title)
+	SendFile       // send a local file: Arg is "<path> [caption]"
+	Redraw         // drop the notices and pictures from the window, keep the messages
+	Keys           // print the keyboard shortcut reference into the server window
+	Receipts       // read receipts to the service: Arg is on or off; empty shows the setting
+	MarkRead       // one read receipt for the current window's chat, whatever the setting
+	AutoJoin       // open windows for unread chats at start: Arg is on or off; empty shows the setting
+	Feed           // chat messages in the server window: Arg is on or off; empty shows the setting
+	Settings       // the menu of every kept setting, in the server window: Arg narrows its rows
+	Vim            // vi keys (Normal and Insert modes) on the input, the lists and the pager: Arg is on or off; empty shows the setting
+	Unread         // focus the next window with unread messages after the current one, wrapping round
+	DoubleTab      // what Tab twice fast on an empty prompt does: Arg is off, last, unread or the time in ms; empty shows the setting
 )
 
 // Command is a parsed slash command.
@@ -87,6 +88,7 @@ var table = map[string]Kind{
 	"settings":     Settings,
 	"vim":          Vim,
 	"unread":       Unread,
+	"doubletab":    DoubleTab,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -131,10 +133,10 @@ const HelpText = `Commands
   /refresh, /r           sync now; also /sync
   /list [text]           chat list: @people and #channels; also /ls, /chats
   /win, /win list        list of the open windows
-  /win last              back to the window focused before this one; again goes back (Tab twice fast does it too); a chat named last is /win @last
+  /win last              back to the window focused before this one; again goes back (with /doubletab last, Tab twice fast does it too); a chat named last is /win @last
   /win N                 switch to window N (0 is the server window)
   /win @user | #chan     open or switch to that chat's window; /win is also /w, /window, /j, /join, /query
-  /unread                the next window with unread messages after this one, in window order, wrapping round; none: an error
+  /unread                the next window with unread messages after this one, in window order, wrapping round (with /doubletab unread, Tab twice fast does it too); none: an error
   /close [N]             close a window; also /wc, /part
   /move N                move this window to position N; also /mv
   /last [N]              fetch the last N messages here (default 10); also /history, /hist
@@ -162,5 +164,6 @@ const HelpText = `Commands
   /autojoin [on|off]     at start open a window for every chat with unread messages; on by default, kept
   /feed [on|off]         window 0 shows every chat's messages and the reactions someone adds as they arrive (on, the default) or only its notices (off); kept; no argument shows
   /vim [on|off]          vi keys: Normal and Insert modes on the input, in the lists and the pager (Esc enters Normal, i returns to typing; /keys lists the keys); off by default, kept; no argument shows
+  /doubletab [off|last|unread|<ms>]  what Tab twice fast on an empty prompt does: off (the default) nothing, every Tab goes to the next window; last: back to the last window, as /win last; unread: to the next window with unread messages, as /unread; <ms>: how fast the two Tabs must be, 150 to 1000 (default 400), which is also how long a window a Tab shows must stay to count as read; kept; no argument shows
   /settings [text]       a menu of every kept setting, in window 0: Enter or Right sets the next value, Left the previous, typing narrows
 Keyboard shortcuts: type /keys.`

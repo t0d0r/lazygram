@@ -39,7 +39,8 @@ completion, and an activity indicator.
   `/theme`, `/autojoin`, `/read-receipts`, `/whois`, `/send`,
   `/open <link>`, Ctrl-L, `/about`, `/mark-as-read`, `/names`, `/last`,
   Up and Down, `/mouse`, PgUp and PgDn, `/move` and `/close`, `/feed
-  off`, `/settings`, `/win last` and the double Tab, `/vim on`), so
+  off`, `/settings`, `/win last` and `/unread`, `/doubletab last` or
+  `unread`, `/vim on`), so
   the pair differs between starts (`Options.Rand` draws them,
   `rand.IntN` unless a test injects one). They are printed once per start, in window 0 only,
   as part of its start-up screen, so they roll in with it when window 0
@@ -187,66 +188,93 @@ completion, and an activity indicator.
 - The last focused window is the window that was current before the
   current one, Alt-Tab style. Every focus change sets it: Tab, Shift-Tab,
   Ctrl-N / Ctrl-P, Alt-N, Esc N, `/win N`, `/win @name`, `/win last`,
-  `/unread`, `/msg` opening or focusing a window, a click on a window tag, a chat
-  name or a nick, Enter or a click in `/list` and `/win`, and `/help`,
-  F1, `/keys` and `/settings`, which focus window 0; only the first Tab of
-  a double Tab does not (below). It is the window, not its number: `/move`
-  and closing other windows do not change which window it is. Closing it
-  leaves none, and so does closing the current window when that makes the
-  last one current. Window 0 counts like any other. It is kept for the
-  session only, never in the layout. `/win last` (any spelling of `/win`:
-  `/w last`, `/j last`) switches to it, so repeated it toggles between
-  two windows; with none it is the error `no last window` and nothing
-  switches. `last` is a fixed first word of `/win`, as `list` is, and Tab
-  completes both: a chat named last (or list) is reached with its sigil,
-  `/win @last`, `/win #last`.
-  On an empty prompt (in a window, or in the settings menu, where Tab
-  switches windows too) Tab twice fast does the same. The first Tab
-  switches to the next window at once, as a single Tab always did; a
-  second Tab within 400 ms of it (`tabGap`, the same as `clickGap` for a
-  double click; exactly 400 ms still counts), with no other key and no
-  other focus change between (a click on the window already shown, its
-  tag or its chat name, is no focus change), switches instead to the
-  window that was the last focused one before the first Tab. The double
-  Tab as a whole is "go to the last window": afterwards the last focused
-  window is the one where it began, so another double Tab goes back.
-  When the window the first Tab showed is the last window itself, the
-  second Tab stays there. With no
-  last window the second Tab is a plain Tab (the next window). A second
-  Tab never arms a third: a third fast Tab is a first Tab again (the next
-  window), and a fourth fast one is its second. Shift-Tab is unchanged and
-  never part of a double Tab; any key between two Tabs, Shift-Tab
-  included, makes them two plain Tabs. With text in the prompt Tab
-  completes as before, its own "a second Tab lists" included (see
-  Completion).
-  The window the first Tab passed through is left as it was: its unread
-  count comes back (so `Act` and the window bar mark it again) and no read
-  receipt is sent for it, even with `/read-receipts on` (see Read
-  receipts). A message deleted while it was shown (by the service, or by
-  the first fetch that the show started) does not come back in that
-  count, so the count still goes with the window's messages. The first
-  fetch of a window never shown before, its member list and a heal its
-  show started may still run: they are reads, they change nothing at the
-  service. The chats-visited count of the exit statistics keeps it. The
-  same holds for every window an empty-prompt Tab showed and that is left
-  within 400 ms of that Tab, whatever leaves it: a plain second Tab (no
-  last window), a third fast Tab, Shift-Tab, Ctrl-N, Alt-N, a click or a
-  command. It was only passed through: it gets its unread count back and
-  nothing is sent for that Tab, so whatever focuses it again reports it
-  as that focus does (Alt-N at once, another Tab 400 ms later). A window
-  left later than 400 ms after the Tab was read. Fast Tabs therefore no
-  longer walk two windows: walking needs a pause of more than 400 ms
-  between Tabs, or Ctrl-N / Ctrl-P. Decision: the first Tab acts at once,
-  so a single Tab stays as immediate as it always was, as a click does
-  (the first click of a double click acts at once too); waiting 400 ms for
-  a possible second Tab would slow every window switch. Decision: the hop
-  is undone and its receipt held back because a receipt tells the other
-  side that a message was read, and a window flashed for a fraction of a
-  second on the way to another was not read; its unread count comes back
-  for the same reason, whatever leaves it, so that a window is never
-  marked read here without being reported read once it is read. Only an
-  empty-prompt Tab holds its receipt back, and only for 400 ms; every
-  other way of focusing reports at once, as before.
+  `/unread`, `/msg` opening or focusing a window, a click on a window
+  tag, a chat name or a nick, Enter or a click in `/list` and `/win`, and
+  `/help`, F1, `/keys` and `/settings`, which focus window 0; only the
+  first Tab of a double Tab that jumps does not (below). It is the
+  window, not its number: `/move` and closing other windows do not
+  change which window it is. Closing it leaves none, and so does closing
+  the current window when that makes the last one current. Window 0
+  counts like any other. It is kept for the session only, never in the
+  layout. `/win last` (any spelling of `/win`: `/w last`, `/j last`)
+  switches to it, so repeated it toggles between two windows; with none
+  it is the error `no last window` and nothing switches. `last` is a
+  fixed first word of `/win`, as `list` is, and Tab completes both: a
+  chat named last (or list) is reached with its sigil, `/win @last`,
+  `/win #last`.
+- Tab on an empty prompt (in a window, or in the settings menu, where
+  Tab switches windows too) switches to the next window at once, as a
+  single Tab always did. A second Tab within the double Tab's time of it
+  (400 ms unless `/doubletab <ms>` sets another, `Model.tabGap`; at 400
+  ms the same as `clickGap` for a double click; exactly that time still
+  counts), with no other key and no other focus change between (a click
+  on the window already shown, its tag or its chat name, is no focus
+  change), does what `/doubletab` says (below; code:
+  `internal/tui/lastwin.go`, `tab`). With `/doubletab off`, the default,
+  it is a plain Tab like any other: every Tab on an empty prompt goes to
+  the next window, however fast, so fast Tabs walk the windows as they
+  did before `/win last` existed, and only `/win last` and `/unread`
+  jump. With `/doubletab last` the second Tab switches instead to the
+  window that was the last focused one before the first Tab, as `/win
+  last` would have there. The double Tab as a whole is "go to the last
+  window": afterwards the last focused window is the one where it began,
+  so another double Tab goes back. When the window the first Tab showed
+  is the last window itself, the second Tab stays there. With no last
+  window the second Tab is a plain Tab (the next window). With
+  `/doubletab unread` the second Tab takes the gesture as a whole where
+  `/unread` (below) would go from the window current before the first
+  Tab: the next window with unread messages after it, in window order,
+  wrapping round. The window the first Tab showed was only passed
+  through, so it gets its unread count back first (see below) and is the
+  target when it has unread messages, since it is the next window after
+  the one the gesture began in: the second Tab then stays there, and the
+  window counts as shown by that Tab (its count is cleared again and its
+  read receipt held from the second Tab). Afterwards the last focused
+  window is the one where the gesture began, as with `last`. With no
+  window with unread messages the second Tab is a plain Tab (the next
+  window). A second Tab never arms a third: a third fast Tab is a first
+  Tab again (the next window), and a fourth fast one is its second.
+  Shift-Tab is unchanged and never part of a double Tab; any key between
+  two Tabs, Shift-Tab included, makes them two plain Tabs. With text in
+  the prompt Tab completes as before, its own "a second Tab lists"
+  included (see Completion).
+  In every mode of `/doubletab` the window a Tab passed through is left
+  as it was: its unread count comes back (so `Act` and the window bar
+  mark it again) and no read receipt is sent for it, even with
+  `/read-receipts on` (see Read receipts). A message deleted while it was
+  shown (by the service, or by the first fetch that the show started)
+  does not come back in that count, so the count still goes with the
+  window's messages. The first fetch of a window never shown before, its
+  member list and a heal its show started may still run: they are reads,
+  they change nothing at the service. The chats-visited count of the
+  exit statistics keeps it. This holds for every window an empty-prompt
+  Tab showed and that is left within the double Tab's time of that Tab,
+  whatever leaves it: the second Tab of a double Tab, a plain second Tab
+  (`off`, or no last window, or no unread one), a third fast Tab,
+  Shift-Tab, Ctrl-N, Alt-N, a click or a command (`/unread` included).
+  It was only passed through: it gets its unread count back and nothing
+  is sent for that Tab, so whatever focuses it again reports it as that
+  focus does (Alt-N at once, another Tab the double Tab's time later). A
+  window left later than that time after the Tab was read. A Tab whose
+  receipt is already held keeps the time it was held with, whatever
+  `/doubletab <ms>` sets meanwhile. With `last` or `unread`, fast Tabs
+  therefore do not walk two windows: walking needs a pause longer than
+  the double Tab's time between Tabs, or Ctrl-N / Ctrl-P; with `off`
+  they walk, and every window they pass keeps its unread count.
+  Decision: the first Tab acts at once, so a single Tab stays as
+  immediate as it always was, as a click does (the first click of a
+  double click acts at once too); waiting for a possible second Tab
+  would slow every window switch. Decision: the hop is undone and its
+  receipt held back because a receipt tells the other side that a
+  message was read, and a window flashed for a fraction of a second on
+  the way to another was not read; its unread count comes back for the
+  same reason, whatever leaves it, so that a window is never marked read
+  here without being reported read once it is read. Decision: this
+  pass-through protection stays on in every mode of `/doubletab`, `off`
+  included, because a window flashed for a moment was not read, whether
+  the Tabs that pass it walk on or jump. Only an empty-prompt Tab holds
+  its receipt back, and only for the double Tab's time; every other way
+  of focusing reports at once, as before.
 - `/unread` focuses the next window with unread messages: the first chat
   window after the current one, in window order and wrapping round past
   the last one and window 0 to window 1, whose unread count is above 0
@@ -258,13 +286,59 @@ completion, and an activity indicator.
   would. It is a focus like `/win N` (code: `internal/tui/lastwin.go`,
   `nextUnread`): the read receipt at once (see Read receipts), the last
   focused window, the first fetch, and a window an empty-prompt Tab
-  showed that it leaves within 400 ms of that Tab gets its unread count
-  back and is not reported (see above). With no window with unread
-  messages it is the error `no unread window` and nothing changes. It
-  takes no argument (one typed is ignored, as after `/keys`) and has no
-  short form; Tab completes it. Decision: it goes in window order from
-  the current window, as Tab and Ctrl-N do, so repeated it visits the
-  windows `Act` lists in turn and never stops on a read one.
+  showed that it leaves within the double Tab's time of that Tab gets
+  its unread count back and is not reported (see above). With no window
+  with unread messages it is the error `no unread window` and nothing
+  changes. It takes no argument (one typed is ignored, as after `/keys`)
+  and has no short form; Tab completes it. With `/doubletab unread` Tab
+  twice fast does the same from the window the first Tab left (above).
+  Decision: it goes in window order from the current window, as Tab and
+  Ctrl-N do, so repeated it visits the windows `Act` lists in turn and
+  never stops on a read one.
+- `/doubletab [off|last|unread|<ms>]` is the double Tab's setting (code:
+  `internal/tui/doubletab.go`). With no argument it shows the setting and
+  its time and keeps nothing: `double tab off (400 ms): Tab walks the
+  windows; /doubletab last or unread makes Tab twice fast jump`, `double
+  tab last (400 ms): Tab twice fast jumps back to the last window;
+  /doubletab off makes Tab walk` or `double tab unread (400 ms): Tab
+  twice fast jumps to the next unread window; /doubletab off makes Tab
+  walk`. `off`, `last` and `unread` (ignoring case) set what Tab twice
+  does, keep it in the state store under `doubletab` as that word
+  (absent, unreadable or any other stored value means off) and take
+  effect at once, saying `double tab off: Tab walks the windows, however
+  fast`, `double tab last: Tab twice within 400 ms jumps back to the last
+  window` or `double tab unread: Tab twice within 400 ms jumps to the
+  next unread window` (with the time set). A number of milliseconds,
+  with or without `ms` after it (ignoring case, a space between allowed:
+  `300`, `300ms`, `300 ms`), from 150 to 1000 both included, sets the
+  double Tab's time, keeps it under `doubletab-time` as a number of
+  milliseconds (absent, unreadable or out of range means 400) and takes
+  effect at once, for the double Tab, the held receipt and the counts
+  that come back alike, in every mode; it says `double tab time 300 ms:
+  Tab twice within it jumps back to the last window` with `last`,
+  `double tab time 300 ms: Tab twice within it jumps to the next unread
+  window` with `unread` and `double tab time 300 ms: Tab twice is off; a
+  window a Tab shows for less stays unread` with `off`. Any other
+  argument (`on`, `149`, `1001`, `+300`, `3e2`, `300s`, another word) is
+  the error `/doubletab takes off, last, unread or a time from 150 to
+  1000 ms` and changes nothing, the store included. Tab completes `off`,
+  `last` and `unread` after `/doubletab`; `/help` lists `/doubletab
+  [off|last|unread|<ms>]` and says under `/win last` and `/unread` that
+  Tab twice fast does the same with `/doubletab last` or `unread`;
+  `/keys` says in the Tab entry that Tab twice fast does as `/doubletab`
+  says; two start hints offer `/unread` and `/doubletab` (`hint: /win
+  last jumps back, /unread to the next unread window`, `hint: /doubletab
+  last or unread turns Tab twice fast into a jump`). It is the
+  `doubletab` and `doubletab-time` rows of the settings menu (see
+  Settings menu). Decision: the double Tab is off by default because it
+  changes what fast Tabs do: with it on, two fast Tabs no longer walk two
+  windows, which surprises anyone used to Tab walking the windows, so it
+  is opt-in. Decision: it offers `last` or `unread` because both are a
+  jump one may want under the hand: back and forth between two windows,
+  or on to the next chat with news. Decision: one time serves the double
+  Tab and the held receipt, since both ask how long a glance at a window
+  lasts; 150 ms is about the fastest two key presses, and past 1000 ms a
+  pause is not a double press and a receipt waits too long.
 - The status line shows `[Act: 2,3]`: the windows with unread messages.
   When a sync brings messages from others the status message (on the
   rule) says where they went: `3 new messages in 2:#dev (2), 3:@alice`,
@@ -597,11 +671,11 @@ last, as the table does in `/keys`.
 | `/refresh`, `/r`              | sync now                                             |
 | `/list [text]`, `/ls`         | selectable chat list; `--show-deleted` includes deleted accounts |
 | `/win`, `/win list`           | selectable list of the open windows; Enter focuses   |
-| `/win last`                   | switch to the last focused window (the one current before this one); repeated, it toggles between two windows; `no last window` when there is none; Tab twice fast on an empty prompt does the same; a chat named last is `/win @last` (see Windows) |
+| `/win last`                   | switch to the last focused window (the one current before this one); repeated, it toggles between two windows; `no last window` when there is none; with `/doubletab last`, Tab twice fast on an empty prompt does the same; a chat named last is `/win @last` (see Windows) |
 | `/win N`                      | switch to window N (0 is the server window)          |
 | `/move N`                     | move this window to position N                       |
 | `/win @user`, `/win #chan`    | open or switch to that chat's window                 |
-| `/unread`                     | focus the next window with unread messages after the current one, in window order and wrapping round (never window 0; the current window last); a focus like `/win N`; `no unread window` when there is none, and nothing changes (see Windows) |
+| `/unread`                     | focus the next window with unread messages after the current one, in window order and wrapping round (never window 0; the current window last); a focus like `/win N`; `no unread window` when there is none, and nothing changes; with `/doubletab unread`, Tab twice fast on an empty prompt does the same from the window the first Tab left (see Windows) |
 | `/close [N]`                  | close window N or the current one                    |
 | `/last [N]`                   | fetch the last N messages (default 10, max 100)      |
 | `/search [text]`              | pager over the current window's local history        |
@@ -626,6 +700,7 @@ last, as the table does in `/keys`.
 | `/autojoin [on\|off]`         | at start open a window for every chat with unread messages: on by default, kept; no argument shows the setting (see Windows) |
 | `/feed [on\|off]`             | window 0 shows every chat's messages as they arrive and the reactions someone adds (on, the default) or only its notices (off); kept; no argument shows the setting (see Windows, Reactions) |
 | `/vim [on\|off]`              | vi keys: Normal and Insert modes on the input, in the lists and the pager; off by default, kept, takes effect at once; no argument shows the setting (see Vim mode) |
+| `/doubletab [off\|last\|unread\|<ms>]` | what Tab twice fast on an empty prompt does: `off` (the default) nothing, every Tab goes to the next window; `last`: the last window, as `/win last`; `unread`: the next window with unread messages, as `/unread`; `<ms>` (150 to 1000, default 400) is the double Tab's time, also how long a window a Tab showed must stay to count as read, in every mode; kept, takes effect at once; `on` and any other word are an error; no argument shows the setting (see Windows) |
 | `/names`                      | show chats by nick (`@alias`) or by name (`@Title`), kept |
 | `/settings [text]`            | focus the server window and open the menu of every kept setting there; Enter or Right sets the selected one's next value, Left its previous; text narrows the rows; it has no short form (see Settings menu) |
 
@@ -654,17 +729,21 @@ only name (`/set` and `/options`, its short forms before, are unknown
 commands now, so typing one gives `unknown command /set, try /help` as
 any unknown name does, and Tab completes `/set` to `/settings`). It
 belongs to window 0: typed in any window, `/settings` first focuses the
-server window, as `/help` and `/keys` do, and opens the menu there. While it is open the window bar and the status line show
-`[0:server]` as the current window, window 0's content area shows the
-menu's rows, the prompt is `settings > ` and the rule explains the keys:
-`settings (9): Up/Down, Enter or Right next value, Left previous, Esc
-closes, type to narrow` (the number counts the rows shown; with `/vim
-on`, in the menu's Normal mode, it ends `/ to narrow`, see Vim mode).
+server window, as `/help` and `/keys` do, and opens the menu there.
+While it is open the window bar and the status line show `[0:server]`
+as the current window, window 0's content area shows the menu's rows,
+the prompt is `settings > ` and the rule explains the keys: `settings
+(11): Up/Down, Enter or Right next value, Left previous, Esc closes,
+type to narrow` (the number counts the rows shown, eleven in all; with
+`/vim on`, in the menu's Normal mode, it ends `/ to narrow`, see Vim
+mode).
 
 One row per kept setting, in this order: the setting's name (its command
-without the slash), its current value and a short description, in
-aligned columns. The value column is as wide as the longest value any
-row can take, so a change never moves the descriptions.
+without the slash; the double Tab's time, a second kept value of
+`/doubletab`, is `doubletab-time`), its current value and a short
+description, in aligned columns. The value column is as wide as the
+longest value any row can take, so a change never moves the
+descriptions.
 
 | row             | values                                   | command          |
 |-----------------|------------------------------------------|------------------|
@@ -677,6 +756,14 @@ row can take, so a change never moves the descriptions.
 | `mouse`         | `on`, `off`                              | `/mouse`         |
 | `clip`          | `auto`, `osc52`, `tool`, `off`           | `/clip`          |
 | `vim`           | `on`, `off`                              | `/vim`           |
+| `doubletab`     | `off`, `last`, `unread`                  | `/doubletab`     |
+| `doubletab-time` | `200ms`, `300ms`, `400ms`, `500ms`, `600ms`, `800ms` | `/doubletab <ms>` |
+
+A time `/doubletab <ms>` set that the `doubletab-time` row does not list
+shows as it is (`250ms`, `1000ms`); from it Enter and Right go to the
+next longer listed time and Left to the next shorter one, wrapping round
+as the other rows wrap (`250ms`: Right `300ms`, Left `200ms`; `1000ms`:
+Right `200ms`, Left `800ms`; `150ms`: Right `200ms`, Left `800ms`).
 
 The selected row is highlighted like the other lists; there is no
 button strip. Up and Down (and the mouse wheel) select. Enter or Right
@@ -689,7 +776,8 @@ runs the command's own code: the same store key, the same status
 message and the same side effects (mouse reporting turned on or off in
 the terminal, the theme switched, the rendered lines redrawn after
 `names`, `clip` as `/clip <mode>`, so a mode that cannot work here
-reports as `/clip` does), so it is kept and takes effect at once. The
+reports as `/clip` does, the double Tab's rows as `/doubletab last`,
+`/doubletab 500ms`), so it is kept and takes effect at once. The
 menu stays open on the same row with the new value shown, and the rule
 shows the change's status message (an error in the error colour) in
 place of the keys until the next key. A line starting with `/` typed in
@@ -704,7 +792,18 @@ With `/vim on` the menu opens in Normal mode: `j` and `k` select, `h`
 and `l` are Left and Right, and typing narrows only after `/` or `i`
 (see Vim mode). Decision: the `vim` row's description is `vi keys: Esc
 for Normal, i for Insert`, without the letters `mo`, so typing `mo`
-still narrows the menu to `mouse` and `clip` alone.
+still narrows the menu to `mouse` and `clip` alone. Decision: for the
+same reason the double Tab's rows say `Tab twice fast: last or next
+unread window` and `the double Tab's pause, and a Tab's read delay`: no
+`mo`, `receipts`, `selection`, `colours` or another row's name in them,
+and `tab` narrows the menu to those two rows; `read` and `unread` in
+them are about read windows, as `autojoin`'s `unread chat` is.
+Decision: the time is a row of its own, named after its command,
+because the menu has one row per kept value and the time is kept apart
+from the mode. Decision: a time off the list steps to its listed
+neighbours, not to the first or the last listed time, because the list
+is ordered and the next value Right shows should be longer, as it is
+from a listed time.
 The filter stays after a change. With no row left the menu says `no
 setting matches`, and Enter, Left and Right change nothing. Tab in the
 filter completes the names of the settings; on an empty prompt Tab and
@@ -1374,21 +1473,26 @@ argument says so. `/read-receipts on` (kept in the state store under
 `read_receipts`; absent or unreadable means off) makes lazygram report a
 chat read at the moments it marks the chat read itself: when a window
 with unread messages is focused (`/win N`, `/win @name`, `/win last`,
-`/unread`, Alt-N, Ctrl-N, a click on the window bar or a list row, and Tab, 400 ms
-later as below). The report covers the newest message lazygram holds
-for the chat (`Provider.MarkRead` with that message id), so what
+`/unread`, Alt-N, Ctrl-N, a click on the window bar or a list row, and
+Tab, the double Tab's time later as below). The report covers the newest
+message lazygram holds for the chat (`Provider.MarkRead` with that message id), so what
 lazygram has not shown stays unread at the service; with no message of
 the chat known yet nothing is sent. A window focused by Tab on an empty
-prompt (either Tab of a double Tab included) is reported once it has
-stayed current for 400 ms (`tabGap`): the receipt, for the newest
-message held at the Tab, is sent when a delayed message comes 400 ms
-after the Tab and the window was neither left since nor closed (and,
-should the window be left later than 400 ms after the Tab before that
-message comes, as it is left). A window left within those 400 ms was
-only passed through: it gets its unread count back and nothing is sent
-for that Tab; whatever focuses it again reports it as that focus does,
-once. So the window a double Tab passes through is not reported (see
-Windows for the reason); every other way of focusing reports at once.
+prompt, whatever `/doubletab` says (either Tab of a double Tab
+included), is reported once it has stayed current for the double Tab's
+time (400 ms unless `/doubletab <ms>` sets another, see Windows;
+`Model.tabGap`): the receipt, for the newest message held at the Tab, is
+sent when a delayed message comes that time after the Tab and the
+window was neither left since nor closed (and, should the window be
+left later than that time after the Tab before that message comes, as
+it is left). A window left within that time was only passed through:
+it gets its unread count back and nothing is sent for that Tab;
+whatever focuses it again reports it as that focus does, once. So the
+window a double Tab passes through is not reported, nor is any window
+fast Tabs walk past with `/doubletab off` (see Windows for the reason);
+the window a double Tab of `unread` stays on is reported once it has
+stayed for that time after the second Tab. Every other way of focusing
+reports at once.
 Nothing is sent for the server window, for a window without unread
 messages, for a message arriving in the window already shown, for
 opening or filtering a list, or for the pager. A failed report shows in
@@ -1504,7 +1608,7 @@ match the plain comparison would find.
 
 | key                  | action                                            |
 |----------------------|---------------------------------------------------|
-| Tab / Shift-Tab      | empty prompt: next / previous window (from the settings menu too, which the switch closes), at once; Tab twice within 400 ms: the last focused window, as `/win last`, leaving the window the first Tab showed as it was (unread count, no read receipt; see Windows); Shift-Tab is never part of a double Tab; else complete like bash (a second Tab lists): commands, chats, themes, `out`, attachment ids and the chat's recent links after `/open`, paths after `/send`, a command's settings (`/autojoin off`, `/clip tool`); in a group or channel window its `@nicks` after `/whois` and in message text |
+| Tab / Shift-Tab      | empty prompt: next / previous window (from the settings menu too, which the switch closes), at once; what Tab twice within the double Tab's time (400 ms by default) does is `/doubletab`'s: with `off` (the default) nothing, every Tab is the next window, however fast; with `last` the last focused window, as `/win last`; with `unread` the next window with unread messages, as `/unread`; in every mode a window a Tab showed and that is left within that time stays as it was (unread count, no read receipt; see Windows); Shift-Tab is never part of a double Tab; else complete like bash (a second Tab lists): commands, chats, themes, `out`, attachment ids and the chat's recent links after `/open`, paths after `/send`, a command's settings (`/autojoin off`, `/clip tool`); in a group or channel window its `@nicks` after `/whois` and in message text |
 | Ctrl-X twice         | toggle "Enter sends" for this window (Ctrl-X then adds a line break to plain text) |
 | Ctrl-N / Ctrl-P      | next / previous window (Alt-Right / Alt-Left too) |
 | Alt-0 .. Alt-9       | window 0 .. 9; Esc followed by the digit does the same (the typed input survives) |
@@ -1799,9 +1903,12 @@ onto a character instead, see Vim mode).
 
 On an empty prompt in a window, and in the settings menu (the switch
 closes it), Tab switches to the next window and Shift-Tab to the
-previous one; Tab twice within 400 ms goes to the last focused window
-(see Windows). In the settings menu's filter Tab completes the names of
-the settings (`re` -> `read-receipts`); a line starting with `/` there
+previous one; Tab twice within the double Tab's time (400 ms by
+default) does as `/doubletab` says: with `off`, the default, every Tab
+goes to the next window, with `last` the second goes to the last
+focused window and with `unread` to the next window with unread
+messages (see Windows). In the settings menu's filter Tab completes the
+names of the settings (`re` -> `read-receipts`); a line starting with `/` there
 completes as a command line. With text typed, Tab completes the word
 before the cursor like bash and keeps what follows the cursor. A line that is one
 word starting with `/` completes command names; after `/theme ` theme
@@ -1827,7 +1934,7 @@ message text complete that chat's `@nicks` instead (see Members).
 Otherwise a command's own first-argument words, whatever its spelling
 (`/win list|last`, `/list --show-deleted`, `/autojoin on|off`,
 `/feed on|off`, `/read-receipts on|off`, `/vim on|off`,
-`/clip auto|osc52|tool|off`),
+`/doubletab off|last|unread`, `/clip auto|osc52|tool|off`),
 and chat names
 where the command takes a chat: the first argument of `/win`, `/msg`,
 `/whois` and `/list`, every word of `/me` and `/edit` text, and every

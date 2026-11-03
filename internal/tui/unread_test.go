@@ -157,7 +157,7 @@ func TestUnreadIsACommandOfItsOwn(t *testing.T) {
 	}
 	help := strings.Join(out, "\n")
 	for _, want := range []string{
-		"  /unread                the next window with unread messages after this one, in window order, wrapping round; none: an error",
+		"  /unread                the next window with unread messages after this one, in window order, wrapping round (with /doubletab unread, Tab twice fast does it too); none: an error",
 		"[Act: 1,2] in the status line lists windows with unread messages, and /unread goes to the next of them",
 	} {
 		if !strings.Contains(help, want) {
