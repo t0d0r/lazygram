@@ -257,10 +257,15 @@ completion, and an activity indicator.
   focus does (Alt-N at once, another Tab the double Tab's time later). A
   window left later than that time after the Tab was read. A Tab whose
   receipt is already held keeps the time it was held with, whatever
-  `/doubletab <ms>` sets meanwhile. With `last` or `unread`, fast Tabs
-  therefore do not walk two windows: walking needs a pause longer than
-  the double Tab's time between Tabs, or Ctrl-N / Ctrl-P; with `off`
-  they walk, and every window they pass keeps its unread count.
+  `/doubletab <ms>` sets meanwhile. With `last` or `unread`, two fast
+  Tabs therefore do not walk two windows when the second Tab has a
+  target (a last window for `last`, a window with unread messages for
+  `unread`): walking two windows then needs a pause longer than the
+  double Tab's time between Tabs, or Ctrl-N / Ctrl-P. With no target,
+  and always with `off`, fast Tabs walk, and every window they pass
+  keeps its unread count. With `unread` no window with unread messages
+  is the usual case, so there fast Tabs usually walk, and jump only
+  when some chat has news.
   Decision: the first Tab acts at once, so a single Tab stays as
   immediate as it always was, as a click does (the first click of a
   double click acts at once too); waiting for a possible second Tab
@@ -291,58 +296,62 @@ completion, and an activity indicator.
   with unread messages it is the error `no unread window` and nothing
   changes. It takes no argument (one typed is ignored, as after `/keys`)
   and has no short form; Tab completes it. With `/doubletab unread` Tab
-  twice fast does the same from the window the first Tab left (above).
-  Decision: it goes in window order from the current window, as Tab and
-  Ctrl-N do, so repeated it visits the windows `Act` lists in turn and
-  never stops on a read one.
+  twice fast does the same from the window the first Tab left (above),
+  but with no window with unread messages it is a plain Tab, not an
+  error. Decision: it goes in window order from the current window, as
+  Tab and Ctrl-N do, so repeated it visits the windows `Act` lists in
+  turn and never stops on a read one.
 - `/doubletab [off|last|unread|<ms>]` is the double Tab's setting (code:
-  `internal/tui/doubletab.go`). With no argument it shows the setting and
-  its time and keeps nothing: `double tab off (400 ms): Tab walks the
-  windows; /doubletab last or unread makes Tab twice fast jump`, `double
-  tab last (400 ms): Tab twice fast jumps back to the last window;
-  /doubletab off makes Tab walk` or `double tab unread (400 ms): Tab
-  twice fast jumps to the next unread window; /doubletab off makes Tab
-  walk`. `off`, `last` and `unread` (ignoring case) set what Tab twice
-  does, keep it in the state store under `doubletab` as that word
-  (absent, unreadable or any other stored value means off) and take
+  `internal/tui/doubletab.go`). With no argument it shows the setting
+  and its time and keeps nothing: `double tab off (400 ms): Tab walks
+  the windows; /doubletab last or unread makes Tab twice fast jump`,
+  `double tab last (400 ms): Tab twice fast jumps back to the last
+  window; /doubletab off makes Tab walk` or `double tab unread (400 ms):
+  Tab twice fast jumps to the next unread window if any; /doubletab off
+  makes Tab walk`. `off`, `last` and `unread` (ignoring case) set what
+  Tab twice does, keep it in the state store under `doubletab` as that
+  word (absent, unreadable or any other stored value means off) and take
   effect at once, saying `double tab off: Tab walks the windows, however
-  fast`, `double tab last: Tab twice within 400 ms jumps back to the last
-  window` or `double tab unread: Tab twice within 400 ms jumps to the
-  next unread window` (with the time set). A number of milliseconds,
-  with or without `ms` after it (ignoring case, a space between allowed:
-  `300`, `300ms`, `300 ms`), from 150 to 1000 both included, sets the
-  double Tab's time, keeps it under `doubletab-time` as a number of
-  milliseconds (absent, unreadable or out of range means 400) and takes
-  effect at once, for the double Tab, the held receipt and the counts
-  that come back alike, in every mode; it says `double tab time 300 ms:
-  Tab twice within it jumps back to the last window` with `last`,
-  `double tab time 300 ms: Tab twice within it jumps to the next unread
-  window` with `unread` and `double tab time 300 ms: Tab twice is off; a
-  window a Tab shows for less stays unread` with `off`. Any other
-  argument (`on`, `149`, `1001` or any larger number, however many
-  digits, `+300`, `3e2`, `300s`, another word) is the error `/doubletab
-  takes off, last, unread or a time from 150 to 1000 ms` and changes
-  nothing, the store included, and a kept time outside 150 to 1000 means
-  400 as well. Decision: the range is checked on the number of
-  milliseconds as typed or kept (code: `tabGapOf`), before it becomes a
-  time, because a time counts 64-bit nanoseconds and a huge number of
-  milliseconds wraps round in it (2^58 + 300 becomes exactly 300 ms),
-  so it would pass as one within the range. Tab completes `off`, `last`
-  and `unread` after `/doubletab`; `/help` lists `/doubletab
-  [off|last|unread|<ms>]` and says under `/win last` and `/unread` that
-  Tab twice fast does the same with `/doubletab last` or `unread`;
-  `/keys` says in the Tab entry that Tab twice fast does as `/doubletab`
-  says; two start hints offer `/unread` and `/doubletab` (`hint: /win
-  last jumps back, /unread to the next unread window`, `hint: /doubletab
-  last or unread turns Tab twice fast into a jump`). It is the
-  `doubletab` and `doubletab-time` rows of the settings menu (see
-  Settings menu). Decision: the double Tab is off by default because it
-  changes what fast Tabs do: with it on, two fast Tabs no longer walk two
-  windows, which surprises anyone used to Tab walking the windows, so it
-  is opt-in. Decision: it offers `last` or `unread` because both are a
-  jump one may want under the hand: back and forth between two windows,
-  or on to the next chat with news. Decision: one time serves the double
-  Tab and the held receipt, since both ask how long a glance at a window
+  fast`, `double tab last: Tab twice within 400 ms jumps back to the
+  last window` or `double tab unread: Tab twice within 400 ms jumps to
+  the next unread window if any` (with the time set). A number of
+  milliseconds, with or without `ms` after it (ignoring case, a space
+  between allowed: `300`, `300ms`, `300 ms`), from 150 to 1000 both
+  included, sets the double Tab's time, keeps it under `doubletab-time`
+  as a number of milliseconds (absent, unreadable or out of range means
+  400) and takes effect at once, for the double Tab, the held receipt
+  and the counts that come back alike, in every mode; it says `double
+  tab time 300 ms: Tab twice within it jumps back to the last window`
+  with `last`, `double tab time 300 ms: Tab twice within it jumps to the
+  next unread window if any` with `unread` and `double tab time 300 ms:
+  Tab twice is off; a window a Tab shows for less stays unread` with
+  `off`. Decision: the `unread` texts say `if any` because with no
+  window with unread messages, the usual case, Tab twice is two plain
+  Tabs and walks. Any other argument (`on`, `149`, `1001` or any larger
+  number, however many digits, `+300`, `3e2`, `300s`, another word) is
+  the error `/doubletab takes off, last, unread or a time from 150 to
+  1000 ms` and changes nothing, the store included, and a kept time
+  outside 150 to 1000 means 400 as well. Decision: the range is checked
+  on the number of milliseconds as typed or kept (code: `tabGapOf`),
+  before it becomes a time, because a time counts 64-bit nanoseconds and
+  a huge number of milliseconds wraps round in it (2^58 + 300 becomes
+  exactly 300 ms), so it would pass as one within the range. Tab
+  completes `off`, `last` and `unread` after `/doubletab`; `/help` lists
+  `/doubletab [off|last|unread|<ms>]` and says under `/win last` and
+  `/unread` that Tab twice fast does the same with `/doubletab last` or
+  `unread`; `/keys` says in the Tab entry that Tab twice fast does as
+  `/doubletab` says; two start hints offer `/unread` and `/doubletab`
+  (`hint: /win last jumps back, /unread to the next unread window`,
+  `hint: /doubletab last or unread turns Tab twice fast into a jump`).
+  It is the `doubletab` and `doubletab-time` rows of the settings menu
+  (see Settings menu). Decision: the double Tab is off by default
+  because it changes what fast Tabs do: with it on, two fast Tabs jump
+  instead of walking two windows whenever there is a window to jump to,
+  which surprises anyone used to Tab walking the windows, so it is
+  opt-in. Decision: it offers `last` or `unread` because both are a jump
+  one may want under the hand: back and forth between two windows, or on
+  to the next chat with news. Decision: one time serves the double Tab
+  and the held receipt, since both ask how long a glance at a window
   lasts; 150 ms is about the fastest two key presses, and past 1000 ms a
   pause is not a double press and a receipt waits too long.
 - The status line shows `[Act: 2,3]`: the windows with unread messages.
@@ -706,7 +715,7 @@ last, as the table does in `/keys`.
 | `/autojoin [on\|off]`         | at start open a window for every chat with unread messages: on by default, kept; no argument shows the setting (see Windows) |
 | `/feed [on\|off]`             | window 0 shows every chat's messages as they arrive and the reactions someone adds (on, the default) or only its notices (off); kept; no argument shows the setting (see Windows, Reactions) |
 | `/vim [on\|off]`              | vi keys: Normal and Insert modes on the input, in the lists and the pager; off by default, kept, takes effect at once; no argument shows the setting (see Vim mode) |
-| `/doubletab [off\|last\|unread\|<ms>]` | what Tab twice fast on an empty prompt does: `off` (the default) nothing, every Tab goes to the next window; `last`: the last window, as `/win last`; `unread`: the next window with unread messages, as `/unread`; `<ms>` (150 to 1000, default 400) is the double Tab's time, also how long a window a Tab showed must stay to count as read, in every mode; kept, takes effect at once; `on` and any other word are an error; no argument shows the setting (see Windows) |
+| `/doubletab [off\|last\|unread\|<ms>]` | what Tab twice fast on an empty prompt does: `off` (the default) nothing, every Tab goes to the next window; `last`: the last window, as `/win last`; `unread`: the next window with unread messages, as `/unread` (with none, the next window); `<ms>` (150 to 1000, default 400) is the double Tab's time, also how long a window a Tab showed must stay to count as read, in every mode; kept, takes effect at once; `on` and any other word are an error; no argument shows the setting (see Windows) |
 | `/names`                      | show chats by nick (`@alias`) or by name (`@Title`), kept |
 | `/settings [text]`            | focus the server window and open the menu of every kept setting there; Enter or Right sets the selected one's next value, Left its previous; text narrows the rows; it has no short form (see Settings menu) |
 
@@ -1495,7 +1504,8 @@ it is left). A window left within that time was only passed through:
 it gets its unread count back and nothing is sent for that Tab;
 whatever focuses it again reports it as that focus does, once. So the
 window a double Tab passes through is not reported, nor is any window
-fast Tabs walk past with `/doubletab off` (see Windows for the reason);
+fast Tabs walk past (with `/doubletab off`, or with nowhere for the
+second Tab to jump; see Windows for the reason);
 the window a double Tab of `unread` stays on is reported once it has
 stayed for that time after the second Tab. Every other way of focusing
 reports at once.
@@ -1614,7 +1624,7 @@ match the plain comparison would find.
 
 | key                  | action                                            |
 |----------------------|---------------------------------------------------|
-| Tab / Shift-Tab      | empty prompt: next / previous window (from the settings menu too, which the switch closes), at once; what Tab twice within the double Tab's time (400 ms by default) does is `/doubletab`'s: with `off` (the default) nothing, every Tab is the next window, however fast; with `last` the last focused window, as `/win last`; with `unread` the next window with unread messages, as `/unread`; in every mode a window a Tab showed and that is left within that time stays as it was (unread count, no read receipt; see Windows); Shift-Tab is never part of a double Tab; else complete like bash (a second Tab lists): commands, chats, themes, `out`, attachment ids and the chat's recent links after `/open`, paths after `/send`, a command's settings (`/autojoin off`, `/clip tool`); in a group or channel window its `@nicks` after `/whois` and in message text |
+| Tab / Shift-Tab      | empty prompt: next / previous window (from the settings menu too, which the switch closes), at once; what Tab twice within the double Tab's time (400 ms by default) does is `/doubletab`'s: with `off` (the default) nothing, every Tab is the next window, however fast; with `last` the last focused window, as `/win last`; with `unread` the next window with unread messages, as `/unread` (with none, the next window); in every mode a window a Tab showed and that is left within that time stays as it was (unread count, no read receipt; see Windows); Shift-Tab is never part of a double Tab; else complete like bash (a second Tab lists): commands, chats, themes, `out`, attachment ids and the chat's recent links after `/open`, paths after `/send`, a command's settings (`/autojoin off`, `/clip tool`); in a group or channel window its `@nicks` after `/whois` and in message text |
 | Ctrl-X twice         | toggle "Enter sends" for this window (Ctrl-X then adds a line break to plain text) |
 | Ctrl-N / Ctrl-P      | next / previous window (Alt-Right / Alt-Left too) |
 | Alt-0 .. Alt-9       | window 0 .. 9; Esc followed by the digit does the same (the typed input survives) |

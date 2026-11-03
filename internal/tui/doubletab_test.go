@@ -324,7 +324,7 @@ func TestDoubleTabCommand(t *testing.T) {
 		mode            doubleTab
 	}{
 		{"last", "last", "double tab last: Tab twice within 400 ms jumps back to the last window", tabLast},
-		{"UNREAD", "unread", "double tab unread: Tab twice within 400 ms jumps to the next unread window", tabUnread},
+		{"UNREAD", "unread", "double tab unread: Tab twice within 400 ms jumps to the next unread window if any", tabUnread},
 		{" Off ", "off", "double tab off: Tab walks the windows, however fast", tabOff},
 		{"Last", "last", "double tab last: Tab twice within 400 ms jumps back to the last window", tabLast},
 	} {
@@ -348,14 +348,14 @@ func TestDoubleTabCommand(t *testing.T) {
 		bad(arg, tabLast, 300*time.Millisecond)
 	}
 	enter(m, "/doubletab unread")
-	if m.status != "double tab unread: Tab twice within 300 ms jumps to the next unread window" {
+	if m.status != "double tab unread: Tab twice within 300 ms jumps to the next unread window if any" {
 		t.Fatalf("unread says the time set: %q", m.status)
 	}
 	enter(m, "/doubletab 300ms")
-	if m.status != "double tab time 300 ms: Tab twice within it jumps to the next unread window" {
+	if m.status != "double tab time 300 ms: Tab twice within it jumps to the next unread window if any" {
 		t.Fatalf("a time, unread: %q", m.status)
 	}
-	shows("double tab unread (300 ms): Tab twice fast jumps to the next unread window; /doubletab off makes Tab walk")
+	shows("double tab unread (300 ms): Tab twice fast jumps to the next unread window if any; /doubletab off makes Tab walk")
 	enter(m, "/doubletab off")
 	enter(m, "/doubletab 300")
 	if m.status != "double tab time 300 ms: Tab twice is off; a window a Tab shows for less stays unread" {
@@ -535,7 +535,7 @@ func TestDoubleTabCompletesAndIsDescribed(t *testing.T) {
 	}
 	help, keys := printed("/help"), printed("/keys")
 	for _, want := range []string{
-		"  /doubletab [off|last|unread|<ms>]  what Tab twice fast on an empty prompt does: off (the default) nothing, every Tab goes to the next window; last: back to the last window, as /win last; unread: to the next window with unread messages, as /unread; <ms>: how fast",
+		"  /doubletab [off|last|unread|<ms>]  what Tab twice fast on an empty prompt does: off (the default) nothing, every Tab goes to the next window; last: back to the last window, as /win last; unread: to the next window with unread messages, as /unread (none: the next window); <ms>: how fast",
 		"again goes back (with /doubletab last, Tab twice fast does it too)",
 		"wrapping round (with /doubletab unread, Tab twice fast does it too)",
 	} {

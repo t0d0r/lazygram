@@ -40,13 +40,14 @@ var doubleTabWords = []string{"off", "last", "unread"}
 func (d doubleTab) String() string { return doubleTabWords[d] }
 
 // jump is what Tab twice does under d, for the status messages; "" for
-// off.
+// off. unread says "if any": with no window with unread messages, the
+// usual case, the second Tab is a plain one and fast Tabs walk.
 func (d doubleTab) jump() string {
 	switch d {
 	case tabLast:
 		return "jumps back to the last window"
 	case tabUnread:
-		return "jumps to the next unread window"
+		return "jumps to the next unread window if any"
 	}
 	return ""
 }

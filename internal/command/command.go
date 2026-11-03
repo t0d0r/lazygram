@@ -164,6 +164,6 @@ const HelpText = `Commands
   /autojoin [on|off]     at start open a window for every chat with unread messages; on by default, kept
   /feed [on|off]         window 0 shows every chat's messages and the reactions someone adds as they arrive (on, the default) or only its notices (off); kept; no argument shows
   /vim [on|off]          vi keys: Normal and Insert modes on the input, in the lists and the pager (Esc enters Normal, i returns to typing; /keys lists the keys); off by default, kept; no argument shows
-  /doubletab [off|last|unread|<ms>]  what Tab twice fast on an empty prompt does: off (the default) nothing, every Tab goes to the next window; last: back to the last window, as /win last; unread: to the next window with unread messages, as /unread; <ms>: how fast the two Tabs must be, 150 to 1000 (default 400), which is also how long a window a Tab shows must stay to count as read; kept; no argument shows
+  /doubletab [off|last|unread|<ms>]  what Tab twice fast on an empty prompt does: off (the default) nothing, every Tab goes to the next window; last: back to the last window, as /win last; unread: to the next window with unread messages, as /unread (none: the next window); <ms>: how fast the two Tabs must be, 150 to 1000 (default 400), which is also how long a window a Tab shows must stay to count as read; kept; no argument shows
   /settings [text]       a menu of every kept setting, in window 0: Enter or Right sets the next value, Left the previous, typing narrows
 Keyboard shortcuts: type /keys.`
