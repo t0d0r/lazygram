@@ -1423,8 +1423,9 @@ Decision: in Normal Ctrl-X's line break goes after the character under
 the cursor, not before it, because Esc stepped back onto the last typed
 character: before it, the break would split that character off, and the
 double Ctrl-X, which removes only a break at the end, would leave the
-draft changed. Decision: the cursor stands on a character, Esc steps back, `$` and `l`
-stop on the last character, `^` and `I` skip leading blanks, `cw` keeps
+draft changed. Decision: the cursor stands on a character, Esc steps
+back, `$` and `l` stop on the last character, `^` and `I` skip leading
+blanks, `cw` keeps
 the blank after the word and a second `u` puts the change back: these
 follow vi, so a vi habit does here what it does in vi. Decision: `dd`,
 `cc` and `S` clear the whole input, a draft of several lines too, rather
@@ -1454,10 +1455,11 @@ mode is kept, and it is in force again when the list closes.
 
 - Any other typed character, Space included, does nothing in Normal,
   nor does `g` followed by a typed character other than `g` (neither
-  key acts), nor an Alt chord (Alt-0 .. Alt-9 still switch windows). Every other key is what it is with vim off:
-  the arrows, Tab and Shift-Tab, Backspace, Ctrl-W, Ctrl-K, PgUp and
-  PgDn, the mouse wheel and clicks, a paste (it narrows, as typing does
-  with vim off), Ctrl-N and Ctrl-P, Alt-N.
+  key acts), nor an Alt chord (Alt-0 .. Alt-9 still switch windows).
+  Every other key is what it is with vim off: the arrows, Tab and
+  Shift-Tab, Backspace, Ctrl-W, Ctrl-K, PgUp and PgDn, the mouse wheel
+  and clicks, a paste (it narrows, as typing does with vim off), Ctrl-N
+  and Ctrl-P, Alt-N.
 - In Insert typing narrows the filter (in the pager it edits the
   search) and every key is what it is with vim off, Ctrl-U clearing the
   filter included, except Esc: it returns to Normal with the filter
