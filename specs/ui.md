@@ -161,8 +161,10 @@ completion, and an activity indicator.
   fails the waiting sync goes ahead, chats named by their ids, and the
   chat list's error stays on the status line (the sync's own error, if
   any, is told too). While a sync waits it counts as running: no second
-  one starts, and `/refresh` says a sync is running. An edit reported
-  while it waits shows when it goes ahead, as the store already has it.
+  one starts, and `/refresh` says a sync is running. An edit or a
+  reaction reported while it waits shows when it goes ahead, as the
+  store already has it, and a reaction poll that came due while it
+  waited goes out then, as after any sync (see Reactions).
   Smoke mode, which runs no commands, lets a waiting sync go ahead after
   one more chat list. What the account sent itself opens no window and
   waits for nothing. Decision: notices and the status are written

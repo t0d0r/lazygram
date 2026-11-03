@@ -235,3 +235,31 @@ func TestSnapshotLetsAWaitingSyncGoAhead(t *testing.T) {
 		t.Fatalf("the sync's messages show in smoke mode:\n%s", out)
 	}
 }
+
+// TestHeldSyncAndReactions: a reaction reported while a sync waits for the
+// chat list shows when it goes ahead, and a reaction poll that came due
+// while it waited goes out then, as after any sync.
+func TestHeldSyncAndReactions(t *testing.T) {
+	f := newReactingFake()
+	m := setupProvider(t, f)
+	enter(m, "/win #dev")
+	_ = body(m) // drawn: the poll knows what is on screen
+	f.chats = append(f.chats, domain.Chat{ID: "c5", Alias: "bob", Title: "Bob", Kind: domain.ChatUser})
+	f.msgs = append(f.msgs, mk("c5", "1", "bob", "hello", 5), mk("c1", "3", "ada", "release tagged", 6))
+	m.syncing = true
+	_, cmd := m.Update(m.syncCmd()())
+	if m.heldSync == nil {
+		t.Fatal("a new chat makes the sync wait")
+	}
+	pushed(m, reactedChange("c1", "3", true, rs(rx(upEmoji, 1))))
+	if tickReactions(m) || len(f.polls) != 0 {
+		t.Fatal("no poll while the sync waits")
+	}
+	m.Update(cmd())
+	if got := msgOf(m, "c1", "3").Reactions; len(got) != 1 || got[0].Count != 1 {
+		t.Fatalf("the reaction made while the sync waited: %+v", got)
+	}
+	if !m.react.running {
+		t.Fatal("the poll that came due while the sync waited goes out when it goes ahead")
+	}
+}

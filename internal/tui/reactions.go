@@ -231,6 +231,7 @@ func (m *Model) reacted(c domain.Change) {
 		r.unheld[key] = now.Reactions
 	case !slices.Equal(before.Reactions, now.Reactions):
 		m.identify([]domain.Message{now})
+		m.heldPatch(now) // a sync waiting for the chat list holds the copy without them
 	}
 	if c.Own || r.learned[key] {
 		if text := m.reactionNotice(c, before, now, held); text != "" {

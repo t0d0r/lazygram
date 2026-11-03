@@ -806,12 +806,16 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.startCheck()
 			}
 		}
-		if held := m.heldSync; held != nil { // a sync waited for these names (awaitNames)
+		held := m.heldSync
+		if held != nil { // a sync waited for these names (awaitNames)
 			m.heldSync = nil
 			m.synced(*held)
 		}
 		if msg.err != nil { // after the waiting sync, so its status does not hide the failure
 			m.fail("chats: " + errText(msg.err))
+		}
+		if held != nil {
+			return m, m.pollReactions() // one that came due while the sync waited
 		}
 	case syncedMsg:
 		if held, cmd := m.awaitNames(msg); held {
@@ -1333,10 +1337,10 @@ func (m *Model) awaitNames(msg syncedMsg) (bool, tea.Cmd) {
 	return true, m.chatsCmd()
 }
 
-// heldPatch puts the newest copy of a message, edited while a sync's
-// result waits for the chat list, into that result: the store has the
-// edit already, and the waiting copy would otherwise undo it on screen
-// when it goes ahead. (Deletions need nothing: arrived leaves out what
+// heldPatch puts the newest copy of a message, edited or reacted to
+// while a sync's result waits for the chat list, into that result: the
+// store has the change already, and the waiting copy would otherwise undo
+// it on screen when it goes ahead. (Deletions need nothing: arrived leaves out what
 // was deleted this session.)
 func (m *Model) heldPatch(now domain.Message) {
 	h := m.heldSync
