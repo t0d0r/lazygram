@@ -161,7 +161,7 @@
 - [x] ruleset on the tap's `main`: no deletion, no force push, no bypass (specs/release.md, Publishing)
 - [x] omacom/omarchy-pkgs#2022 moved to 0.4.23: validators rerun on their master `30fed32`, recipe built on both architectures (packaging/omarchy/README.md, Submit)
 - [x] v0.4.24 from the Release workflow (/feed, /settings, the notes in /help): assets and provenance verified, the installer URL installs it, PKGBUILD at 0.4.24 built and tested on both architectures, omacom/omarchy-pkgs#2022 moved to 0.4.24 with the validators rerun on their master `35687e5` (session/2026-11-03-release-0424.md)
-- [ ] Homebrew formula at 0.4.24: committed in the tap (`5853157`), not pushed yet; then `brew upgrade --build-from-source` and `brew test`
+- [x] Homebrew formula at 0.4.24 (tap `5853157`): built from source, `brew test` passed
 - [x] delete the GitHub releases v0.3.0 to v0.4.21 after v0.4.22 is verified; their tags stay (specs/release.md, Decisions)
 - [x] repository settings: Dependabot alerts and security updates, immutable releases, ruleset `release tags` (no deletion or move of `v*`), ruleset `master` requires a pull request and a passing `Linux` check on an up-to-date branch, no bypass (specs/ci.md, Repository settings)
 - [x] head branches deleted when their pull request is merged; the merged ones from #11 to #14 removed (specs/ci.md, Repository settings)
