@@ -12,9 +12,12 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 
 	"lazygram/internal/command"
+	"lazygram/internal/domain"
 )
 
 // menuOrder is the order of the settings menu's rows.
@@ -109,15 +112,22 @@ func TestSettingsOpensInWindow0FromAChatWindow(t *testing.T) {
 	if m.cur != 2 {
 		t.Fatalf("in a chat window: %d", m.cur)
 	}
+	// The rows under the content: the rule, the status line, the window
+	// bar, the input. The bar lists every window whichever is current (the
+	// current one stands out only in colour, see
+	// TestSettingsMarksWindow0AndTheSelectedRow); the status line names it.
+	if rows := strings.Split(ansi.Strip(m.View()), "\n"); !strings.Contains(rows[len(rows)-3], "[2:#dev]") {
+		t.Fatalf("the status line names #dev: %q", rows[len(rows)-3])
+	}
 	enter(m, "/settings")
 	if m.cur != 0 || !m.settingsOpen() || m.listCur != 0 {
 		t.Fatalf("/settings focuses window 0 and opens the menu there: cur=%d mode=%v src=%v", m.cur, m.mode, m.listSrc)
 	}
 	v := ansi.Strip(m.View())
 	rows := strings.Split(v, "\n")
-	bar, input := rows[len(rows)-2], rows[len(rows)-1]
-	if !strings.Contains(v, "[0:server]") || !strings.HasPrefix(strings.TrimSpace(bar), "[0:server]") {
-		t.Fatalf("the window bar and the status show window 0:\n%s", v)
+	status, input := rows[len(rows)-3], rows[len(rows)-1]
+	if !strings.Contains(status, "[0:server]") || strings.Contains(status, "[2:#dev]") {
+		t.Fatalf("the status line shows window 0: %q", status)
 	}
 	if !strings.HasPrefix(input, "settings > ") || m.prompt() != "settings > " {
 		t.Fatalf("the prompt: %q", input)
@@ -133,7 +143,15 @@ func TestSettingsOpensInWindow0FromAChatWindow(t *testing.T) {
 	if got := menuRows(m); !reflect.DeepEqual(got, want) {
 		t.Fatalf("the eight rows in order with their values:\n%q\nwant\n%q", got, want)
 	}
-	// The columns line up, whatever the values.
+	// The columns line up (whatever the values, see
+	// TestSettingsDescriptionsStayPut).
+	descColumn(t, m)
+}
+
+// descColumn is the column where the menu's descriptions start; it fails
+// unless every row's description starts there.
+func descColumn(t *testing.T, m *Model) int {
+	t.Helper()
 	var descAt []int
 	for _, l := range strings.Split(ansi.Strip(body(m)), "\n") {
 		for _, s := range settings {
@@ -142,12 +160,115 @@ func TestSettingsOpensInWindow0FromAChatWindow(t *testing.T) {
 			}
 		}
 	}
-	if len(descAt) != 8 || slices.Min(descAt) != slices.Max(descAt) || descAt[0] < 0 {
-		t.Fatalf("the descriptions start in one column: %v", descAt)
+	if len(descAt) != len(settings) || slices.Min(descAt) != slices.Max(descAt) || descAt[0] < 0 {
+		t.Fatalf("the descriptions start in one column: %v\n%s", descAt, ansi.Strip(body(m)))
 	}
-	// The selected row is highlighted, as in the other lists.
-	if lines := strings.Split(body(m), "\n"); !strings.Contains(lines[0], hiStyle.Render(ansi.Strip(lines[0]))) {
-		t.Fatalf("the first row is selected and highlighted: %q", lines[0])
+	return descAt[0]
+}
+
+// TestSettingsDescriptionsStayPut: the value column is as wide as the
+// longest value any row can take, so no value of any row moves the
+// descriptions.
+func TestSettingsDescriptionsStayPut(t *testing.T) {
+	defaultTheme(t)
+	m := setup(t, newFake())
+	enter(m, "/settings")
+	at := descColumn(t, m)
+	press(m, tea.KeyEsc)
+	for _, name := range menuOrder {
+		s := settingNamed(t, name)
+		openAt(t, m, name)
+		for range s.values() { // every value, round the whole cycle
+			press(m, tea.KeyRight)
+			if got := descColumn(t, m); got != at {
+				t.Fatalf("%s %s moves the descriptions from column %d to %d", name, s.value(m), at, got)
+			}
+		}
+		press(m, tea.KeyEsc)
+	}
+	// The longest values at once, set by their commands.
+	longest := ""
+	for _, n := range themeNames() {
+		if len(n) > len(longest) {
+			longest = n
+		}
+	}
+	enter(m, "/theme "+longest)
+	enter(m, "/clip osc52")
+	enter(m, "/settings")
+	if got := descColumn(t, m); got != at || menuValue(m, "theme") != longest || menuValue(m, "clip") != "osc52" {
+		t.Fatalf("theme %s and clip osc52: the descriptions at %d, not %d", menuValue(m, "theme"), got, at)
+	}
+}
+
+// trueColour gives one test the TrueColor profile: test output has no
+// colours otherwise, so a highlight reads as plain text.
+func trueColour(t *testing.T) {
+	old := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	applyTheme(themes["default"])
+	t.Cleanup(func() { lipgloss.SetColorProfile(old); applyTheme(themes["default"]) })
+}
+
+// reversed reports whether the SGR sequence that starts the first tag in
+// row turns on reverse video (parameter 7), as windowBar draws the current
+// window; the values of an extended colour (38, 48, 58) are skipped.
+func reversed(row, tag string) bool {
+	at := strings.Index(row, tag)
+	if at < 0 {
+		return false
+	}
+	start := strings.LastIndex(row[:at], "\x1b[")
+	if start < 0 {
+		return false
+	}
+	end := strings.IndexByte(row[start:], 'm')
+	if end < 0 || start+end > at {
+		return false
+	}
+	params := strings.Split(row[start+2:start+end], ";")
+	for i := 0; i < len(params); i++ {
+		switch params[i] {
+		case "38", "48", "58":
+			if i+1 < len(params) && params[i+1] == "2" {
+				i += 4
+			} else if i+1 < len(params) && params[i+1] == "5" {
+				i += 2
+			}
+		case "7":
+			return true
+		}
+	}
+	return false
+}
+
+// TestSettingsMarksWindow0AndTheSelectedRow: while the menu is open the
+// window bar marks 0:server as the current window, and the selected row,
+// only it, is highlighted as in the other lists. Both are colour only, so
+// the test draws in colour.
+func TestSettingsMarksWindow0AndTheSelectedRow(t *testing.T) {
+	trueColour(t)
+	m := setup(t, newFake())
+	enter(m, "/win 2") // #dev
+	rows := strings.Split(m.View(), "\n")
+	if bar := rows[len(rows)-2]; !reversed(bar, "[2:#dev]") || reversed(bar, "[0:server]") {
+		t.Fatalf("in #dev the bar marks #dev: %q", bar)
+	}
+	enter(m, "/settings")
+	press(m, tea.KeyDown)
+	rows = strings.Split(m.View(), "\n")
+	if bar := rows[len(rows)-2]; !reversed(bar, "[0:server]") || reversed(bar, "[2:#dev]") {
+		t.Fatalf("with the menu open the bar marks 0:server as current: %q", bar)
+	}
+	lines := strings.Split(body(m), "\n")
+	for i := range settings {
+		plain := ansi.Strip(lines[i]) == lines[i]
+		if i == m.listCur && plain || i != m.listCur && !plain {
+			t.Fatalf("only the selected row %d is highlighted; row %d plain=%v: %q", m.listCur, i, plain, lines[i])
+		}
+	}
+	if m.listCur != 1 {
+		t.Fatalf("Down selects the second row: %d", m.listCur)
 	}
 }
 
@@ -266,9 +387,13 @@ func TestSettingsChangeAsTheirCommandsDo(t *testing.T) {
 func TestSettingsMouseRowTurnsReportingOffAndOn(t *testing.T) {
 	m := setup(t, newFake())
 	openAt(t, m, "mouse")
+	m.hover = hoverKey(span{kind: spanWin, target: "1"}) // the pointer was over a tag
 	cmd := press(m, tea.KeyEnter)
 	if m.mouseOn || !makes(cmd, tea.DisableMouse) || !strings.Contains(m.status, "drag selects text") {
 		t.Fatalf("off: on=%v status %q", m.mouseOn, m.status)
+	}
+	if m.hover != "" {
+		t.Fatalf("off forgets the element under the pointer, as /mouse does: %q", m.hover)
 	}
 	cmd = press(m, tea.KeyRight)
 	if !m.mouseOn || !makes(cmd, tea.EnableMouseAllMotion) {
@@ -281,6 +406,66 @@ func TestSettingsMouseRowTurnsReportingOffAndOn(t *testing.T) {
 	again := New(Options{Store: m.opt.Store, Provider: newFake()})
 	if again.mouseOn || !makes(again.Init(), tea.DisableMouse) {
 		t.Fatal("kept, and applied at the next start")
+	}
+}
+
+// TestSettingsNamesRowRedrawsWindow0: the names row drops the rendered
+// lines as /names does, so window 0 shows the chats by their new names.
+// The name column is capped (15) both by nick and by name here, so the
+// rendered lines' cache key does not change with the setting and only the
+// reset brings the new names.
+func TestSettingsNamesRowRedrawsWindow0(t *testing.T) {
+	for _, how := range []string{"the menu", "/names"} {
+		f := newFake()
+		f.chats = append(f.chats, domain.Chat{ID: "c9", Alias: "averyverylongalias", Title: "A Very Long Title Here", Kind: domain.ChatUser})
+		m := setup(t, f)
+		m.Update(tea.WindowSizeMsg{Width: 100, Height: 60}) // room for the banner, the messages and the notices
+		byNick := m.nameWidth()
+		if v := ansi.Strip(body(m)); !strings.Contains(v, "hi there") || strings.Contains(v, "@Alice Smith") {
+			t.Fatalf("%s: window 0 by nick, its lines rendered:\n%s", how, v)
+		}
+		if how == "the menu" {
+			openAt(t, m, "names")
+			press(m, tea.KeyEnter)
+			press(m, tea.KeyEsc)
+		} else {
+			enter(m, "/names")
+		}
+		if !m.byName || m.nameWidth() != byNick || byNick != 15 {
+			t.Fatalf("%s: by name, the name column as wide as by nick (%d): %v %d", how, byNick, m.byName, m.nameWidth())
+		}
+		if v := ansi.Strip(body(m)); !strings.Contains(v, "@Alice Smith") {
+			t.Fatalf("%s: window 0 shows the chats by name:\n%s", how, v)
+		}
+	}
+}
+
+// TestSettingsFeedRowKeepsWindow0ScrollValid: the feed row keeps window
+// 0's scroll offset within its new number of lines as /feed does, before
+// anything is drawn.
+func TestSettingsFeedRowKeepsWindow0ScrollValid(t *testing.T) {
+	f := newFake()
+	for i := range 60 {
+		f.msgs = append(f.msgs, mk("c1", "x"+itoa(i), "ada", "busy line "+itoa(i), 10+i))
+	}
+	m := setup(t, f)
+	for range 3 {
+		press(m, tea.KeyPgUp)
+	}
+	m.View()
+	before := m.wins[0].scroll
+	enter(m, "/settings")
+	press(m, tea.KeyEnter) // feed, the first row: off
+	lines, _ := m.richLinesOf(m.wins[0])
+	limit := max(len(lines)-m.contentHeight(), 0)
+	if m.feed || !m.settingsOpen() {
+		t.Fatalf("the feed row turns the feed off: %v", m.feed)
+	}
+	if before <= limit {
+		t.Fatalf("window 0 is scrolled back (%d) further than it reaches with the feed off (%d)", before, limit)
+	}
+	if s := m.wins[0].scroll; s > limit || s < 0 {
+		t.Fatalf("off: scroll %d outside 0..%d", s, limit)
 	}
 }
 
@@ -403,8 +588,12 @@ func TestSettingsEscLeavesWindow0OnItsOwnView(t *testing.T) {
 	if !strings.Contains(v, "first dev line") || !strings.Contains(v, "-!- /help lists commands") || len(menuRows(m)) != 0 {
 		t.Fatalf("window 0's messages and notices:\n%s", v)
 	}
-	if !strings.Contains(v, "[0:server] ") {
-		t.Fatalf("the prompt is window 0's:\n%s", v)
+	rows := strings.Split(v, "\n")
+	if input := rows[len(rows)-1]; !strings.HasPrefix(input, "[server] ") || m.prompt() != "[server] " {
+		t.Fatalf("the prompt is window 0's: %q", input)
+	}
+	if status := rows[len(rows)-3]; !strings.Contains(status, "[0:server]") {
+		t.Fatalf("the status line names window 0: %q", status)
 	}
 }
 

@@ -41,6 +41,28 @@ func TestFeedIsOnByDefault(t *testing.T) {
 	}
 }
 
+// TestFeedUnreadableMeansOn: a stored value that does not read as on or
+// off starts the feed on, as nothing stored does.
+func TestFeedUnreadableMeansOn(t *testing.T) {
+	st := memStore(t)
+	if err := st.SetState(feedKey, "nonsense"); err != nil {
+		t.Fatal(err)
+	}
+	m := startWith(t, st, newFake())
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 60}) // room for the banner, the messages and the notices
+	if !m.feed {
+		t.Fatal("an unreadable stored value means on")
+	}
+	for _, n := range m.wins[0].notes {
+		if n.text == feedOffNotice {
+			t.Fatal("no feed notice while the feed is on")
+		}
+	}
+	if got := showsAny(ansi.Strip(body(m)), chatLines...); len(got) != len(chatLines) {
+		t.Fatalf("window 0 interleaves every chat: shows %q:\n%s", got, body(m))
+	}
+}
+
 func TestFeedOffShowsOnlyNoticesInWindow0(t *testing.T) {
 	f := newFake()
 	m := setup(t, f)
