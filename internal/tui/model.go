@@ -2357,10 +2357,10 @@ func (m *Model) redraw(w *win) {
 	m.setInfo("")
 }
 
-// help prints the notes on the mouse, themes and windows and then the
-// command reference into the server window, line by line with a small
-// delay, like a terminal on a slow line, and focuses that window so the
-// text is in view wherever /help was typed. The commands come last, so
+// help prints the notes on the mouse, themes, windows and reactions and
+// then the command reference into the server window, line by line with a
+// small delay, like a terminal on a slow line, and focuses that window so
+// the text is in view wherever /help was typed. The commands come last, so
 // they are what the window shows when printing ends. The keys are a
 // separate list (/keys), and the last help line says so.
 func (m *Model) help() tea.Cmd {
@@ -3275,7 +3275,7 @@ func (m *Model) rule(label string) string {
 
 // helpNotes is what /help prints before the command reference: how the
 // client is used beyond its commands (themes, the mouse, selection,
-// windows). One logical line each, wrapped when drawn.
+// windows, reactions). One logical line each, wrapped when drawn.
 const helpNotes = `Mouse, themes and windows
 Themes: /theme lists the colour schemes, /theme <name> switches (kept).
 Clickable text is bright and underlined; a running light plays over the one under the mouse pointer. /fx turns the light on or off (kept).

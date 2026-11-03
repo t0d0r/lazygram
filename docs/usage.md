@@ -101,7 +101,7 @@ in a group whose cached messages still lack their senders' usernames), and
 | `/vim [on\|off]`           | vi keys: Normal and Insert modes on the input, in the lists and the pager (off by default, kept, takes effect at once); no argument shows the setting; see [Vim mode](#vim-mode) |
 | `/settings [text]`         | a menu of every kept setting (feed, autojoin, read-receipts, names, theme, fx, mouse, clip, vim) with its value, opened in window 0 from any window; Enter or Right sets the selected one's next value, Left its previous, a click on a row its next; each change is kept and acts at once, as its command; typing (or the text) narrows the rows; Esc closes it; also `/set`, `/options` |
 | `/redraw`, `/clear`        | drop notices, help text and pictures from this window; messages stay |
-| `/refresh`, `/help`, `/quit` | sync now; print the notes on the mouse, themes and windows into the server window, then the command list with every short form last, so the commands are what you see when it ends (it ends by naming `/keys`); leave |
+| `/refresh`, `/help`, `/quit` | sync now; print the notes on the mouse, themes, windows and reactions into the server window, then the command list with every short form last, so the commands are what you see when it ends (it ends by naming `/keys`); leave |
 | `/keys`                    | print the keyboard shortcuts into the server window |
 
 Both lists are wrapped to the window's width as they are drawn and

@@ -547,7 +547,7 @@ last, as the table does in `/keys`.
 
 | command                       | action                                               |
 |-------------------------------|------------------------------------------------------|
-| `/help`, `/?`                 | focus the server window and print the notes on the mouse, themes and windows there, then the command reference; it ends by naming `/keys` |
+| `/help`, `/?`                 | focus the server window and print the notes on the mouse, themes, windows and reactions there, then the command reference; it ends by naming `/keys` |
 | `/keys`, `/shortcuts`         | focus the server window and print the key table there |
 | `/redraw`, `/clear`           | drop the window's notices, help text, pictures and banner; the messages stay; a slow print still queued for it is dropped |
 | `/quit`, `/q`                 | leave                                                |
