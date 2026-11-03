@@ -261,3 +261,36 @@ func TestMsgToATitleWithSpaces(t *testing.T) {
 		t.Fatalf("a name without text sends nothing, not its last word: %q %v", m.status, f.sent)
 	}
 }
+
+// /msg takes the longest leading name, so a title that begins another
+// does not cut it short, and compares it in either script, so the Latin
+// spelling of a title is not cut to its first word, which is another
+// chat's exact name in either script (@kamen is Камен).
+func TestMsgTakesTheLongestNameInEitherScript(t *testing.T) {
+	f := titleFake()
+	f.chats = append(f.chats,
+		domain.Chat{ID: "c31", Alias: "vanko", Title: "Иван", Kind: domain.ChatUser},
+		domain.Chat{ID: "c32", Alias: "ivan_p", Title: "Иван Петров", Kind: domain.ChatUser},
+		domain.Chat{ID: "c33", Alias: "kp77", Title: "Камен Петров", Kind: domain.ChatUser},
+	)
+	m := setup(t, f)
+	for _, byName := range []bool{false, true} {
+		m.byName = byName
+		for line, want := range map[string]string{
+			"/msg @Иван Петров здрасти": "c32:здрасти",
+			"/msg @Иван здрасти":        "c31:здрасти",
+			"/msg @ivan petrov hi":      "c32:hi",
+			"/msg @kamen petrov hi":     "c33:hi",
+			"/msg kamen petrov hi":      "c33:hi",
+			"/msg @Камен Петров hi":     "c33:hi",
+			"/msg @kamen hi":            "c11:hi",
+		} {
+			f.sent = nil
+			m.input = nil
+			runAll(m, enter(m, line))
+			if len(f.sent) != 1 || f.sent[0] != want || m.isErr {
+				t.Errorf("by name %v, %q: sent %v, want %q (%q)", byName, line, f.sent, want, m.status)
+			}
+		}
+	}
+}

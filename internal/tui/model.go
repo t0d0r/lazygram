@@ -2080,20 +2080,23 @@ func (m *Model) msg(arg string) (tea.Model, tea.Cmd) {
 // msgTarget splits the argument of /msg into the chat's name and the
 // text. A title may have spaces, so the name is the longest leading part,
 // ending at a space, that is a chat's name as /names shows it, its
-// @Title or #Title form or its title alone, ignoring case ("@Ivan Petrov
-// hi"); else the first word, as "@alice hi there" always was. An argument
-// that is all such a name has no text, rather than its last word as text.
+// @Title or #Title form or its title alone, ignoring case and in either
+// script as domain.ResolveChat compares names ("@Ivan Petrov hi", and
+// "@ivan petrov hi" for the title in Cyrillic rather than "@ivan", which
+// may be another chat's exact name); else the first word, as "@alice hi
+// there" always was. An argument that is all such a name has no text,
+// rather than its last word as text.
 func (m *Model) msgTarget(arg string) (target, text string) {
 	names := map[string]bool{}
 	for _, c := range m.chats {
 		if t := strings.TrimSpace(c.Title); t != "" {
-			names[strings.ToLower(m.display(c))] = true
-			names[strings.ToLower(c.Name()[:1]+t)] = true
-			names[strings.ToLower(t)] = true
+			names[domain.Translit(m.display(c))] = true
+			names[domain.Translit(c.Name()[:1]+t)] = true
+			names[domain.Translit(t)] = true
 		}
 	}
 	for i := len(arg); i > 0; i = strings.LastIndexByte(arg[:i], ' ') {
-		if names[strings.ToLower(arg[:i])] {
+		if names[domain.Translit(arg[:i])] {
 			return arg[:i], strings.TrimSpace(arg[i:])
 		}
 	}

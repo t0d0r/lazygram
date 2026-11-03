@@ -82,7 +82,7 @@ in a group whose cached messages still lack their senders' usernames), and
 | `/whois [name]`            | what is known about a chat; in a group or channel window, about one of its members (Tab offers only its `@nicks`) |
 | `/stats`                   | client statistics                             |
 | `/me <text>`               | send an action line (`* you waves`)           |
-| `/msg <@user|#chan> <text>` | send to a chat, opening its window if needed; the chat may be named by its title as `/names` shows it, spaces and all (`/msg @Ivan Petrov hi` sends `hi`) |
+| `/msg <@user|#chan> <text>` | send to a chat, opening its window if needed; the chat may be named by its title as `/names` shows it, spaces and all, in Cyrillic or Latin (`/msg @Ivan Petrov hi` sends `hi`) |
 | `/send <path> [caption]`   | send a local file (Tab completes the path); pictures go as photos |
 | `/edit [text]`, `/delete`  | change or remove your last message in this chat |
 | `/names`                   | show chats by nick (`@alias`) or by name (`@Title`); commands and Tab accept either |

@@ -330,7 +330,14 @@ either script, in both modes: `/win @alice`, `/win @Alice Smith` and
 `/win alice smi` find the same chat (`domain.ResolveChat`, whose tiers
 are under Search in either script). `/win` and `/whois` take their whole
 argument as the name, spaces and all; `/msg` takes the longest leading
-part of its argument that is a chat's name (see Commands).
+part of its argument that is a chat's name, compared in either script
+(see Commands). Decision: `/msg` compares the leading parts in either
+script because `domain.ResolveChat` compares names that way. Compared
+only as typed, the Latin spelling of a Cyrillic title with spaces
+(`/msg @kamen petrov hi`) fell back to its first word, which the exact
+tier in either script resolves to another chat (the one titled Kamen),
+and sent the rest of the name with the text to it; the Cyrillic
+spelling went to the chat titled Kamen Petrov.
 
 Tab offers a chat when the typed word begins its alias or its title as
 shown (without control characters), in either script, by nick and by
@@ -485,7 +492,7 @@ last, as the table does in `/keys`.
 | `/whois [name]`               | print what is known about a chat (default: this window's); in a group or channel window a name is one of its members first (see Members) |
 | `/stats`                      | print client statistics                              |
 | `/me <text>`                  | send `* text` to this window's chat (shown as `* you text`) |
-| `/msg <@user|#chan> <text>`   | send to that chat, opening and focusing its window if missing; the name may have spaces: it is the longest leading part of the argument, ending at a space, that is (ignoring case) a chat's name as `/names` shows it, its `@Title` / `#Title` or its title alone (`/msg @Ivan Petrov hi` sends `hi`, by nick and by name), else the first word, as before (`/msg @alice hi there` sends `hi there`); an argument that is all such a name has no text and gets the usage error, so it never sends its last word |
+| `/msg <@user|#chan> <text>`   | send to that chat, opening and focusing its window if missing; the name may have spaces: it is the longest leading part of the argument, ending at a space, that is (ignoring case, in either script) a chat's name as `/names` shows it, its `@Title` / `#Title` or its title alone (`/msg @Ivan Petrov hi` sends `hi`, by nick and by name, and so does `/msg @ivan petrov hi` when the title is in Cyrillic; with chats titled Ivan and Ivan Petrov, `/msg @Ivan Petrov hi` goes to Ivan Petrov), else the first word, as before (`/msg @alice hi there` sends `hi there`); an argument that is all such a name has no text and gets the usage error, so it never sends its last word |
 | `/send <path> [caption]`      | send a local file to this chat (pictures as photos), with an optional caption |
 | `/edit [text]`                | edit your last message in this chat; without text it is put in the prompt as `/edit <text>` |
 | `/delete`                     | delete your last message in this chat, for everyone  |
