@@ -9,7 +9,7 @@
 Telegram in your terminal, IRC style (BitchX / irssi): every chat in one
 scrollback, a window per chat, QR login, an encrypted local cache.
 
-![lazygram demo: server window](docs/screenshot.svg)
+![lazygram demo: QR login, then the server window, a chat with a picture, a bot button and search](docs/demo.gif)
 
 ## Install
 
