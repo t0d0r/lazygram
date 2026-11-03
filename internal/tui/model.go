@@ -213,7 +213,9 @@ type Model struct {
 	// startChecked: the first chat list from the service ran the start
 	// check (startCheck); autojoin: that check opens windows (/autojoin).
 	startChecked bool
-	chatsAsked   bool // a chat list request is on its way
+	chatsAsked   bool            // a chat list request is on its way
+	heldSync     *syncedMsg      // a sync's result waiting for the chat list to name its chats (awaitNames)
+	namesAsked   map[string]bool // chats not in the list that a chat list was asked for this session
 	autojoin     bool
 	feed         bool            // the server window shows the chats' messages (/feed); off: only its notices
 	sharedChats  map[string]bool // every chat ever marked SharedIDs, kept: where a chat-less deletion looks
@@ -798,28 +800,23 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.chatsAsked = false
 		if msg.err != nil {
 			m.fail("chats: " + errText(msg.err))
-			break
+		} else {
+			m.chats = msg.chats
+			m.learnShared()
+			if !m.startChecked { // the first chat list from the service this session; a cached one does not count
+				m.startChecked = true
+				m.startCheck()
+			}
 		}
-		m.chats = msg.chats
-		m.learnShared()
-		if !m.startChecked { // the first chat list from the service this session; a cached one does not count
-			m.startChecked = true
-			m.startCheck()
+		if held := m.heldSync; held != nil { // a sync waited for these names (awaitNames)
+			m.heldSync = nil
+			m.synced(*held)
 		}
 	case syncedMsg:
-		m.syncing = false
-		m.lastSync = msg.at
-		m.identify(msg.known)
-		if len(msg.fresh) > 0 {
-			m.arrived(msg.fresh)
+		if held, cmd := m.awaitNames(msg); held {
+			return m, cmd
 		}
-		m.react.learn(msg.page)
-		switch {
-		case msg.err != nil:
-			m.fail("sync: " + errText(msg.err))
-		case len(msg.fresh) == 0:
-			// Nothing to say: a status that pops up every poll only flickers.
-		}
+		m.synced(msg)
 		return m, m.pollReactions() // one that came due during the sync
 	case memberListMsg:
 		m.gotMemberList(msg)
@@ -1282,6 +1279,57 @@ func (m *Model) notGone(msgs []domain.Message) []domain.Message {
 		}
 	}
 	return out
+}
+
+// synced takes a sync's result: what it stored, what the service says of
+// known messages, and the error.
+func (m *Model) synced(msg syncedMsg) {
+	m.syncing = false
+	m.lastSync = msg.at
+	m.identify(msg.known)
+	if len(msg.fresh) > 0 {
+		m.arrived(msg.fresh)
+	}
+	m.react.learn(msg.page)
+	// With nothing fresh there is nothing to say: a status that pops up
+	// every poll only flickers.
+	if msg.err != nil {
+		m.fail("sync: " + errText(msg.err))
+	}
+}
+
+// awaitNames holds a sync's result back until the chat list answers when
+// it brings a message from someone else in a chat the list does not have,
+// so the windows it opens, their notices and the status name the chat,
+// not its id, and a deleted account opens no window. At start the first
+// sync can answer before the chat list, both being asked at once; a chat
+// that writes for the first time later is asked for once, so a chat the
+// service never lists costs one chat list, not one a poll. With no chat
+// list yet this session and none on its way (it failed), nothing waits.
+// While a result waits the sync counts as running, so no second one
+// starts.
+func (m *Model) awaitNames(msg syncedMsg) (bool, tea.Cmd) {
+	var unknown []string
+	for _, x := range msg.fresh {
+		if _, ok := m.chat(x.ChatID); !ok && x.Sender != "me" && !m.namesAsked[x.ChatID] {
+			unknown = append(unknown, x.ChatID)
+		}
+	}
+	if len(unknown) == 0 || (!m.chatsAsked && !m.startChecked) {
+		return false, nil
+	}
+	if m.namesAsked == nil {
+		m.namesAsked = map[string]bool{}
+	}
+	for _, id := range unknown {
+		m.namesAsked[id] = true
+	}
+	m.heldSync = &msg
+	if m.chatsAsked {
+		return true, nil
+	}
+	m.chatsAsked = true
+	return true, m.chatsCmd()
 }
 
 // arrived handles messages that just came in: windows open for their chats
