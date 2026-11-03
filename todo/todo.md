@@ -107,6 +107,8 @@
 - [x] start hints in window 0: /list and /win always, then two drawn at random from a pool of 21, each true where it is read (specs/ui.md, Windows; session/2026-11-03-start-hints.md)
 - [x] mouse drag selects text and copies it on release: OSC 52 in the frame plus a system tool, /clip modes kept, clicks act on release (specs/ui.md, docs/clipboard.md)
 - [x] double click selects a word, triple a row; Shift-click extends (specs/ui.md, Selection and clipboard)
+- [x] a released selection stays highlighted after the copy until the next press, a change of a row under it, a cursor moving on it, a resize or /mouse off (specs/ui.md, Selection and clipboard; session/2026-11-03-keep-selection.md)
+- [ ] fix: a drag that ends on the left half of a wide character copies that character but highlights one character less (markCells and cells disagree; specs/ui.md, Selection and clipboard)
 - [x] multi-line input area: each line of the input on its own row (no return mark), growing up to 8 rows or a third of the screen, Up/Down between rows and to the history at the edges, rows on the status background (specs/ui.md, Input area; session/2026-11-03-multiline-input.md)
 - [ ] input area follow-ups to decide: Ctrl-W across a line break, Ctrl-K at a line's end joining the next line, word instead of character wrapping, a marker for rows scrolled out of the area
 - [x] typing indicators: Telegram typing updates to domain.TypingState with expiry, status line with a running light (specs/ui.md, specs/providers.md); released in v0.4.18 (assets verified against SHA256SUMS); formula and the Arch recipe still at 0.4.14
