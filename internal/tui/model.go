@@ -132,9 +132,10 @@ type Model struct {
 	sel      *selection // the left button is down: a click, drag, word, row or extension until the release
 	lastSel  *selection // the last click, drag, word or row; a Shift-click extends it
 	kept     *selection // the last selection released, highlighted until the next press or until its rows change
-	keptRows []string   // the plain screen rows the kept selection covers, as the copy read them
+	keptRows []rowLook  // the screen rows the kept selection covers, as the copy read them
 	multi    clickRun   // the double or triple click in progress
 	screen   []string   // the rows of the last View, styled; the selection reads them
+	cursors  []string   // per row of the last View: the cursor drawn on it only in colour, or ""
 	clipMode string     // /clip: auto, osc52, tool or off (kept)
 	clipSeq  string     // OSC 52 sequence riding on the next frames until clipFlushMsg
 
@@ -2722,11 +2723,13 @@ func (m *Model) View() string {
 	}
 	// The input area is laid out first: its height is what the content
 	// gives up, so the rows below it stay where the clicks expect them.
-	input := m.inputArea(m.prompt())
+	prompt := m.prompt()
+	input := m.inputArea(prompt)
 	h := max(m.height-3-len(input), 1)
 	w := m.wins[m.cur]
 	var body []string
 	bodySpans := make([][]span, h) // one entry per content row
+	listY, listLook := -1, ""      // the content row the list cursor is on, and its chosen button
 	m.modeInfo = ""
 
 	switch m.mode {
@@ -2762,11 +2765,13 @@ func (m *Model) View() string {
 		if selectable && m.listCur < len(rows) {
 			plain := rows[m.listCur]
 			rows[m.listCur] = hiStyle.Render(plain)
+			listLook = "list"
 			if buttons {
 				actX0 = lipgloss.Width(plain) + 2
 				strip, spans := m.listButtons(actX0)
 				rows[m.listCur] += "  " + strip
 				actSpans = spans
+				listLook = "list, button " + strconv.Itoa(m.listAct)
 			}
 		}
 		body = topWindow(rows, h, m.listCur)
@@ -2776,6 +2781,9 @@ func (m *Model) View() string {
 				bodySpans[y] = []span{{0, m.width, spanRow, strconv.Itoa(i)}}
 				if i == m.listCur {
 					bodySpans[y] = append([]span{{0, actX0, spanRow, strconv.Itoa(i)}}, actSpans...)
+					if listLook != "" {
+						listY = y
+					}
 				}
 			}
 		}
@@ -2829,6 +2837,17 @@ func (m *Model) View() string {
 	m.clicks = append(append([][]span{}, bodySpans...), nil, nil, barSpans)
 	m.clicks = append(m.clicks, make([][]span, len(input))...)
 	m.screen = rows
+	// The cursors drawn only in colour: the list's row and its chosen
+	// button, the active window's tag, the input cursor's column. A kept
+	// selection over one would hide it, so keptSel compares these too.
+	m.cursors = make([]string, len(rows))
+	if listY >= 0 {
+		m.cursors[listY] = listLook
+	}
+	m.cursors[h+2] = "window " + strconv.Itoa(m.cur)
+	if in, cur, top, _ := m.inputLayout(prompt); cur >= top && h+3+cur-top < len(rows) {
+		m.cursors[h+3+cur-top] = "input " + strconv.Itoa(in[cur].col(m.pos()))
+	}
 	// The selection being made shows while the button is down; once it is
 	// released, the kept one, for as long as its rows read the same.
 	mark := m.sel
@@ -3017,7 +3036,7 @@ func (m *Model) rule(label string) string {
 const helpNotes = `Mouse, themes and windows
 Themes: /theme lists the colour schemes, /theme <name> switches (kept).
 Clickable text is bright and underlined; a running light plays over the one under the mouse pointer. /fx turns the light on or off (kept).
-Drag with the left button to select text; on release it is copied to the clipboard: through the terminal (OSC 52) and the system tool when there is one (pbcopy, wl-copy, xclip, xsel, clip); /clip picks (kept). The selection stays highlighted until the next click or until the text under it changes.
+Drag with the left button to select text; on release it is copied to the clipboard: through the terminal (OSC 52) and the system tool when there is one (pbcopy, wl-copy, xclip, xsel, clip); /clip picks (kept). The selection stays highlighted until the next click, or until the text under it changes or a cursor in it moves.
 Double click copies the word under the pointer, triple click the row; on a link or a name the first click acts and the next ones only select. Shift-click extends the selection where the terminal passes Shift on; most Linux terminals keep Shift-drag (Option on macOS) for their own selection, as does /mouse off.
 Mouse: click a chat name or nick in window 0 to open its window, a tag in the window bar to focus it, a row in /list or /win to open it, a row of /settings to set its next value, a link or a [photo] / [file] token to open it with the system; the wheel scrolls.
 Window 0 is the server window: every chat interleaved, plus notices (/feed off: the notices only); it stays at 0 and cannot be closed. /move N puts this window at N.

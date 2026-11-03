@@ -736,8 +736,8 @@ order (the first row from the anchor to its end, whole rows between,
 the last row up to and including the pointer's cell), over any screen
 row including the status rows and the rows of the input area. While the button is
 down the selected cells show in reverse video, and they stay so after
-the release until the next press or until the text under them changes
-(see below). On release the text is
+the release until the next press, or until the text under them changes
+or a cursor in them moves (see below). On release the text is
 put on the clipboard and the status says `copied N characters` (one
 row; `copied 1 character` for one) or `copied N lines`, naming the
 channels used; a press and release
@@ -841,14 +841,22 @@ highlight goes, and never comes back, when:
   aside), as it did when it was copied: as the last frame before the
   release showed it, which is what the copy read. Scrolling, a message
   that moves the lines, switching windows, opening `/list` or
-  `/settings`, a list cursor that moves, typing into an input row it
-  covers and a new status message on the rule it covers all do this.
-  The copy's own `copied ...` status is such a change too, so a
-  selection that covers the rule is gone at the first frame after the
-  release. The rows are compared when the screen is drawn; scrolling
-  back to the same text does not bring the highlight back. The mouse
-  wheel does not remove it by itself, only through the scroll it
-  causes.
+  `/settings`, typing into an input row it covers and a new status
+  message on the rule it covers all do this. The copy's own `copied
+  ...` status is such a change too, so a selection that covers the
+  rule is gone at the first frame after the release. The rows are
+  compared when the screen is drawn; scrolling back to the same text
+  does not bring the highlight back. The mouse wheel does not remove
+  it by itself, only through what it moves: the lines, or the cursor
+  of a list.
+- a cursor drawn only in colour moves into, out of or along a row it
+  covers, though the row reads the same: the cursor row of `/list`,
+  `/win` and `/settings` (Up, Down), the chosen button of `/list` and
+  `/win` (Left, Right), the input cursor (Left, Right, Home, End, Up,
+  Down between input rows), the active window's tag in the window bar
+  (switching windows). A cursor that moves on rows the selection does
+  not cover leaves it, so typing a reply below a kept message keeps
+  its highlight.
 - the terminal is resized, or mouse reporting is turned off (`/mouse`,
   or the `mouse` row of the settings menu), since the terminal's own
   selection takes over.
@@ -859,7 +867,10 @@ messages, the OSC 52 sequence and the multi-click timing are as
 described above. Decision: a terminal's selection stays after copying,
 so one sees what was copied; lazygram's selection is in screen cells
 and cannot follow the text, so it goes as soon as the text under it
-changes rather than mark text that was not copied.
+changes rather than mark text that was not copied. The cursors drawn
+only in colour count as part of their row because the highlight is
+plain reverse video over the cells and hides them: under it one could
+not see which setting or chat Enter acts on, or where typing goes.
 
 Two channels carry the text, and `/clip` chooses (the choice is kept):
 
@@ -1156,7 +1167,7 @@ match the plain comparison would find.
 | Alt-0 .. Alt-9       | window 0 .. 9; Esc followed by the digit does the same (the typed input survives) |
 | Up / Down            | with several input rows: the row above / below, keeping the column (see Input area); on the first / last row: walk the input history (commands and sent lines); in a list they move, in the pager they scroll |
 | PgUp / PgDn          | scroll a page (the wheel scrolls three lines)     |
-| mouse drag           | select text; copied to the clipboard on release, and it stays highlighted until the next press or until the text under it changes (see Mouse) |
+| mouse drag           | select text; copied to the clipboard on release, and it stays highlighted until the next press, or until the text under it changes or a cursor in it moves (see Mouse) |
 | double / triple click | select the word / the screen row under the pointer and copy it, kept highlighted as a drag's selection is; on clickable text the first click acts, the next ones only select (see Mouse) |
 | Shift-click          | extend the last selection to the clicked cell and copy it, kept highlighted as a drag's selection is (only where the terminal passes Shift through) |
 | Home / End           | oldest / newest                                   |

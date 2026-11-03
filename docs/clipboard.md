@@ -25,6 +25,9 @@ a terminal.
   changes: scrolling, a new message moving the lines, another window,
   `/list` or `/settings`, typing into the input row it covers, or the
   `copied` message itself when the selection covers the status line.
+  A cursor that moves inside it removes it too, since
+  the highlight would hide it: the cursor row of a list and its chosen
+  button, the input cursor, the active window's tag in the window bar.
   Scrolling back does not bring it back. Resizing the terminal and
   `/mouse` off remove it too.
 - A press and release on the same cell is a click, as before. A drag

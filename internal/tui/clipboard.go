@@ -23,8 +23,8 @@ import (
 // A double click selects a word, a triple click a row, and a Shift-click
 // extends the last selection (selection.go). After the release the
 // selection stays highlighted, like a terminal's, until the next press
-// or until a row under it reads differently: it is in screen cells and
-// cannot follow the text.
+// or until a row under it reads differently or a cursor on it moves: it
+// is in screen cells and cannot follow the text.
 
 // Clipboard modes for /clip. The choice is kept in the store.
 const (
@@ -170,28 +170,42 @@ func plainRows(rows []string) []string {
 	return out
 }
 
-// keep holds a released selection highlighted, with the plain rows of the
-// last View it covers: the rows its copy reads.
+// rowLook is what a kept selection checks of a screen row: its plain
+// text, and the cursor drawn on it only in colour (the list's, the input's,
+// the active window's tag), which the highlight would hide.
+type rowLook struct{ text, cursor string }
+
+// look is screen row y of the last View as a kept selection sees it.
+func (m *Model) look(y int) rowLook {
+	l := rowLook{text: m.plainRow(y)}
+	if y >= 0 && y < len(m.cursors) {
+		l.cursor = m.cursors[y]
+	}
+	return l
+}
+
+// keep holds a released selection highlighted, with the rows of the last
+// View it covers: the rows its copy reads.
 func (m *Model) keep(s selection) {
 	_, ay, _, by := s.ordered()
-	rows := make([]string, 0, by-ay+1)
+	rows := make([]rowLook, 0, by-ay+1)
 	for y := ay; y <= by; y++ {
-		rows = append(rows, m.plainRow(y))
+		rows = append(rows, m.look(y))
 	}
 	m.kept, m.keptRows = &s, rows
 }
 
 // keptSel is the kept selection while every row it covers reads as it did
-// when it was copied, styling aside; View asks once the new rows are in
-// m.screen. A row that changed drops it for good, so the same text
-// scrolled back does not bring it back.
+// when it was copied, styling aside, with its cursors where they were;
+// View asks once the new rows are in m.screen. A row that changed drops
+// it for good, so the same text scrolled back does not bring it back.
 func (m *Model) keptSel() *selection {
 	if m.kept == nil {
 		return nil
 	}
 	_, ay, _, _ := m.kept.ordered()
 	for i, r := range m.keptRows {
-		if m.plainRow(ay+i) != r {
+		if m.look(ay+i) != r {
 			m.dropKept()
 			return nil
 		}

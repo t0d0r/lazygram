@@ -480,6 +480,79 @@ func TestKeptSelectionGoesWithMouseOff(t *testing.T) {
 	}
 }
 
+// wantDropped checks that the next frame highlights nothing and that the
+// kept selection is gone for good.
+func wantDropped(t *testing.T, m *Model) {
+	t.Helper()
+	wantMarked(t, m.View())
+	if m.kept != nil {
+		t.Fatalf("still kept: %+v", m.kept)
+	}
+}
+
+// TestKeptSelectionGoesWhenACursorOnItMoves: a cursor drawn only in
+// colour (the settings menu's row, the chosen button of /list, the input
+// cursor, the active window's tag) would hide under the highlight, so one
+// that moves on a row the selection covers drops it though the row reads
+// the same; one that moves on other rows leaves it.
+func TestKeptSelectionGoesWhenACursorOnItMoves(t *testing.T) {
+	bar := func(m *Model) (int, int) { y := len(m.screen) - 2; return y, y } // one input row below it
+	cases := []struct {
+		name string
+		open func(m *Model) (y0, y1 int) // what to show; the rows to select, as of a View
+		move func(m *Model)
+		kept bool
+	}{
+		{"the settings cursor", func(m *Model) (int, int) { enter(m, "/settings"); return 1, 3 },
+			func(m *Model) { press(m, tea.KeyDown) }, false},
+		{"the settings cursor on other rows", func(m *Model) (int, int) { enter(m, "/settings"); return 5, 6 },
+			func(m *Model) { press(m, tea.KeyDown) }, true},
+		{"the chosen button", func(m *Model) (int, int) { enter(m, "/list"); return 0, 0 },
+			func(m *Model) { press(m, tea.KeyRight) }, false},
+		{"the input cursor", func(m *Model) (int, int) {
+			typ(m, "hello world")
+			m.View()
+			y := len(m.screen) - 1
+			return y, y
+		}, func(m *Model) { press(m, tea.KeyLeft) }, false},
+		{"the input cursor on another row", func(m *Model) (int, int) { typ(m, "hello world"); m.View(); return bar(m) },
+			func(m *Model) { press(m, tea.KeyLeft) }, true},
+		{"the active window's tag", func(m *Model) (int, int) { m.View(); return bar(m) },
+			func(m *Model) { press(m, tea.KeyCtrlN) }, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("TERM", "xterm-256color")
+			m := setup(t, newFake())
+			m.clipMode = clipOSC52
+			y0, y1 := c.open(m)
+			m.View()
+			drag(m, 0, y0, m.width-1, y1)
+			if !strings.HasPrefix(m.status, "copied") {
+				t.Fatalf("status: %q", m.status)
+			}
+			if len(marked(m.View())) == 0 {
+				t.Fatal("not kept after the release")
+			}
+			var before []string
+			for y := y0; y <= y1; y++ {
+				before = append(before, m.plainRow(y))
+			}
+			c.move(m)
+			if !c.kept {
+				wantDropped(t, m)
+			} else if len(marked(m.View())) == 0 {
+				t.Fatal("dropped by a cursor on other rows")
+			}
+			for i, b := range before {
+				if m.plainRow(y0+i) != b {
+					t.Fatalf("row %d changed: %q", y0+i, m.plainRow(y0+i))
+				}
+			}
+		})
+	}
+}
+
 func TestDragOnLinkSelectsInsteadOfOpening(t *testing.T) {
 	f := newFake()
 	f.msgs = append(f.msgs, mk("c1", "9", "alice", "see https://example.invalid/doc now", 4))
