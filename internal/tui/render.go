@@ -31,6 +31,7 @@ type note struct {
 	raw   bool // the banner: coloured lines, no stamp
 	plain bool // a /help or /keys line in the note colour, no stamp or marker; laid out by refRows
 	pre   bool // lines already styled (a picture): emitted as they are, indented
+	chat  bool // a chat's activity (a reaction) told in window 0: shown only with /feed on
 }
 
 // Banner colours figlet lines with the gradient; used for the start banner
@@ -257,11 +258,20 @@ func renderLines(msgs []domain.Message, notes []note, o lineOpts) []string {
 
 // renderRich is renderLines plus, for every line, the spans a click acts on.
 func renderRich(msgs []domain.Message, notes []note, o lineOpts) ([]string, [][]span) {
-	var out []string
+	lines, spans, _ := renderOwned(msgs, notes, o)
+	return lines, spans
+}
+
+// renderOwned is renderRich plus, for every line, the key of the message
+// drawn on it ("" for a notice or a day separator): what is on screen.
+func renderOwned(msgs []domain.Message, notes []note, o lineOpts) ([]string, [][]span, []string) {
+	var out, owners []string
 	var spans [][]span
+	owner := ""
 	add := func(line string, sp ...span) {
 		out = append(out, line)
 		spans = append(spans, sp)
+		owners = append(owners, owner)
 	}
 	lastDay := ""
 	day := func(t time.Time) {
@@ -323,30 +333,37 @@ func renderRich(msgs []domain.Message, notes []note, o lineOpts) ([]string, [][]
 		i++
 		t := m.Time.Local()
 		day(t)
+		owner = m.Key()
 		key := cacheKey(m, o)
 		if c, ok := o.cache.get(key); ok && key != "" {
 			for k := range c.lines {
 				add(c.lines[k], c.spans[k]...)
 			}
+			owner = ""
 			continue
 		}
 		mark := len(out)
 		anim := renderMessage(m, o, add)
+		owner = ""
 		if o.cache != nil && key != "" {
 			o.cache.put(key, cached{lines: append([]string(nil), out[mark:]...), spans: append([][]span(nil), spans[mark:]...), anim: anim})
 		}
 	}
-	return out, spans
+	return out, spans, owners
 }
 
-// cacheKey identifies a rendered message: its identity and content, the
-// rendering options, and the phase only when the message holds the hovered
-// element.
+// cacheKey identifies a rendered message: its identity and content (its
+// reactions included, so a count that changed is never served stale), the
+// rendering options, and the phase only when the message holds the
+// hovered element.
 func cacheKey(m domain.Message, o lineOpts) string {
 	h := fnv.New32a()
 	h.Write([]byte(m.Sender))
 	h.Write([]byte{0})
 	h.Write([]byte(m.Text))
+	for _, r := range m.Reactions {
+		_, _ = fmt.Fprintf(h, "\x00%s\x00%d\x00%t", r.Emoji, r.Count, r.Mine)
+	}
 	if o.phase >= 0 && o.hover != "" && hasElement(m, o.hover) {
 		return "" // the hovered message changes every tick: not cached
 	}
@@ -427,20 +444,36 @@ func renderMessage(m domain.Message, o lineOpts, add func(string, ...span)) bool
 	anim = anim || len(urls) > 0
 	for k, l := range body {
 		styled := styleText(l, o, urls)
+		line, base := indent, len(indent)
+		sp := []span(nil)
 		if k == 0 {
-			lead := prefix
-			base := prefixW
+			line, base, sp = prefix, prefixW, first
 			if token != "" {
-				lead += clickable(token, linkStyle.Bold(true), o.hovered(spanMedia, m.ChatID+"\x00"+m.ID))
+				line += clickable(token, linkStyle.Bold(true), o.hovered(spanMedia, m.ChatID+"\x00"+m.ID))
 				base += lipgloss.Width(token)
 				if l != "" {
-					lead += " "
+					line += " "
 					base++
 				}
 			}
-			add(lead+styled, append(first, linkSpans(l, base, urls)...)...)
-		} else {
-			add(indent+styled, linkSpans(l, len(indent), urls)...)
+		}
+		line, sp = line+styled, append(sp, linkSpans(l, base, urls)...)
+		if k < len(body)-1 || len(m.Reactions) == 0 {
+			add(line, sp...)
+			continue
+		}
+		// The reactions follow the last line of the text, before any
+		// buttons, and continue on rows of their own when they do not fit.
+		sep := "  "
+		if l == "" && token == "" { // no text: the prefix already ends in a space
+			sep = " "
+		}
+		for n, r := range withReactions(line, base+lipgloss.Width(l), o.width, sep, indent, m.Reactions) {
+			if n == 0 {
+				add(r, sp...)
+			} else {
+				add(r)
+			}
 		}
 	}
 	if len(m.Buttons) > 0 {

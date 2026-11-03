@@ -15,7 +15,7 @@ import (
 
 func TestSyncRevealsScriptOverTime(t *testing.T) {
 	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
-	p := newAt(func() time.Time { return clock })
+	p := NewAt(func() time.Time { return clock })
 	first, _ := p.Sync(context.Background(), time.Time{})
 	if len(first) == 0 || len(first) >= len(script) {
 		t.Fatalf("initial backlog should be partial, got %d of %d", len(first), len(script))
@@ -51,7 +51,7 @@ func TestChatsKnown(t *testing.T) {
 
 func TestRecent(t *testing.T) {
 	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
-	p := newAt(func() time.Time { return clock })
+	p := NewAt(func() time.Time { return clock })
 	got, err := p.Recent(context.Background(), "demo-1", 2)
 	if err != nil || len(got) != 2 || got[0].ChatID != "demo-1" || !got[0].Time.Before(got[1].Time) {
 		t.Fatalf("%v %v", got, err)
@@ -68,7 +68,7 @@ func TestRecent(t *testing.T) {
 
 func TestSendShowsUpOnNextSync(t *testing.T) {
 	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
-	p := newAt(func() time.Time { return clock })
+	p := NewAt(func() time.Time { return clock })
 	first, _ := p.Sync(context.Background(), time.Time{})
 	if err := p.Send(context.Background(), "demo-3", "hello"); err != nil {
 		t.Fatal(err)
@@ -84,7 +84,7 @@ func TestSendShowsUpOnNextSync(t *testing.T) {
 
 func TestPressAnswersAndEditsTheMessage(t *testing.T) {
 	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
-	p := newAt(func() time.Time { return clock })
+	p := NewAt(func() time.Time { return clock })
 	all, _ := p.Sync(context.Background(), time.Time{})
 	var bot domain.Message
 	for _, m := range all {
@@ -106,7 +106,7 @@ func TestPressAnswersAndEditsTheMessage(t *testing.T) {
 
 func TestFetchReturnsAPNG(t *testing.T) {
 	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
-	p := newAt(func() time.Time { return clock })
+	p := NewAt(func() time.Time { return clock })
 	all, _ := p.Sync(context.Background(), time.Time{})
 	var photo domain.Message
 	for _, m := range all {
@@ -131,7 +131,7 @@ func TestFetchReturnsAPNG(t *testing.T) {
 
 func TestEditAndDeleteOwnLines(t *testing.T) {
 	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
-	p := newAt(func() time.Time { return clock })
+	p := NewAt(func() time.Time { return clock })
 	all, _ := p.Sync(context.Background(), time.Time{})
 	var mine, theirs domain.Message
 	for _, m := range all {
@@ -160,7 +160,7 @@ func TestEditAndDeleteOwnLines(t *testing.T) {
 
 func TestSendFileShowsUpAndFetchesBack(t *testing.T) {
 	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
-	p := newAt(func() time.Time { return clock })
+	p := NewAt(func() time.Time { return clock })
 	first, _ := p.Sync(context.Background(), time.Time{})
 	if err := p.SendFile(context.Background(), "demo-3", "cat.png", []byte("PNGBYTES"), "look"); err != nil {
 		t.Fatal(err)
@@ -179,7 +179,7 @@ func TestSendFileShowsUpAndFetchesBack(t *testing.T) {
 }
 
 func TestGroupMembersHaveNicks(t *testing.T) {
-	p := newAt(func() time.Time { return time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC) })
+	p := NewAt(func() time.Time { return time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC) })
 	nicks := map[string]bool{}
 	for _, mb := range domain.Members(p.msgs, "demo-1") {
 		nicks[mb.Nick] = true
@@ -204,7 +204,7 @@ func TestMembersList(t *testing.T) {
 }
 
 func TestSomeLinesCarryReactions(t *testing.T) {
-	p := newAt(func() time.Time { return time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC) })
+	p := NewAt(func() time.Time { return time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC) })
 	all, _ := p.Sync(context.Background(), time.Time{})
 	var with, mine int
 	for _, m := range all {
@@ -227,7 +227,7 @@ func TestSomeLinesCarryReactions(t *testing.T) {
 
 func TestAReactionIsPushedAfterStart(t *testing.T) {
 	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
-	p := newAt(func() time.Time { return clock })
+	p := NewAt(func() time.Time { return clock })
 	var cs provider.ChangeSource = p
 	before, _ := p.Recent(context.Background(), "demo-3", 50)
 	select {
@@ -267,7 +267,7 @@ func TestAReactionIsPushedAfterStart(t *testing.T) {
 
 func TestPollFindsReactionsToOthersLines(t *testing.T) {
 	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
-	p := newAt(func() time.Time { return clock })
+	p := NewAt(func() time.Time { return clock })
 	var poller provider.ReactionPoller = p
 	tip, fix := "", ""
 	for _, m := range p.msgs {

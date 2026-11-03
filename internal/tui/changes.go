@@ -16,6 +16,7 @@ import (
 // one disappears, with its attachment, and nothing says it was there. A
 // change the feed dropped, or one made while lazygram was off, is healed
 // the next time the chat's history is fetched (Store.Refresh, Store.Prune).
+// Reactions come the same way, and from polls too (reactions.go).
 
 type (
 	changeMsg     struct{ c domain.Change } // one change from the service
@@ -49,8 +50,8 @@ func waitChange(ch <-chan domain.Change) tea.Cmd {
 }
 
 // applyChange puts one change into memory at once and into the cache: an
-// edit right here (one row), a deletion by a command, since one without a
-// chat touches every chat that shares ids.
+// edit or reactions right here (one row), a deletion by a command, since
+// one without a chat touches every chat that shares ids.
 func (m *Model) applyChange(c domain.Change) tea.Cmd {
 	st := m.opt.Store
 	switch c.Kind {
@@ -60,6 +61,9 @@ func (m *Model) applyChange(c domain.Change) tea.Cmd {
 			return nil // not cached: nothing shows it
 		}
 		m.identify([]domain.Message{now})
+		m.react.learn([]domain.Message{now})
+	case domain.Reacted:
+		m.reacted(c)
 	case domain.Deleted:
 		chats := []string{c.ChatID}
 		if c.ChatID == "" {

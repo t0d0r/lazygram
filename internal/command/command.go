@@ -154,6 +154,6 @@ const HelpText = `Commands
   /read-receipts [on|off]  report a chat read when you focus its window with unread messages; off by default, kept; no argument shows; also /receipts
   /mark-as-read          one receipt for this window's chat, now, whatever /read-receipts says
   /autojoin [on|off]     at start open a window for every chat with unread messages; on by default, kept
-  /feed [on|off]         window 0 shows every chat's messages as they arrive (on, the default) or only its notices (off); kept; no argument shows
+  /feed [on|off]         window 0 shows every chat's messages and the reactions someone adds as they arrive (on, the default) or only its notices (off); kept; no argument shows
   /settings [text]       a menu of every kept setting, in window 0: Enter or Right sets the next value, Left the previous, typing narrows; also /set, /options
 Keyboard shortcuts: type /keys.`

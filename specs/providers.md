@@ -120,7 +120,9 @@ account's own messages; 100 seconds after start `grace` reacts with a
 thumbs-up to ada's tip in `#dev`, which only a poll finds.
 `PollReactions` returns one change per asked-for line that is already
 there, with its reactions as they are now and who reacted while the demo
-ran. The feed holds 16 changes and never closes.
+ran. The feed holds 16 changes and never closes. `demo.New` anchors the
+demo at the current time; `demo.NewAt(now)` takes the clock it reads, so
+tests (the TUI's among them) move the script and the reactions along.
 
 ## telegram
 

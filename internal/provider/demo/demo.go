@@ -128,9 +128,11 @@ var script = []line{
 }
 
 // New returns a demo provider anchored at the current time.
-func New() *Provider { return newAt(time.Now) }
+func New() *Provider { return NewAt(time.Now) }
 
-func newAt(now func() time.Time) *Provider {
+// NewAt returns a demo provider anchored at now(), whose clock it reads
+// from then on: the script and the reactions move with it.
+func NewAt(now func() time.Time) *Provider {
 	start := now().Truncate(time.Second)
 	p := &Provider{chats: chats, now: now, files: map[string][]byte{}, start: start,
 		reactors: map[string][]domain.Reactor{}, changes: make(chan domain.Change, changeBuffer)}
