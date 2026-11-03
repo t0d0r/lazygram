@@ -100,9 +100,10 @@ func TestResolveChatInEitherScript(t *testing.T) {
 	}
 }
 
-// A Latin spelling is as decisive as the Cyrillic one: an exact alias or
-// title in either script resolves before a prefix, and a prefix before a
-// substring, so "ivan" is иван although иванка starts with it too.
+// A Latin spelling is as decisive as the Cyrillic one once no plain tier
+// matches: an exact alias or title in either script resolves before a
+// prefix, and a prefix before a substring, so "ivan" is иван although
+// иванка starts with it too.
 func TestResolveChatExactInEitherScript(t *testing.T) {
 	chats := []Chat{
 		{ID: "c1", Alias: "иван", Title: "Иван", Kind: ChatUser},
@@ -125,6 +126,42 @@ func TestResolveChatExactInEitherScript(t *testing.T) {
 	if _, err := ResolveChat(chats, "iva"); !errors.Is(err, ErrAmbiguous) {
 		t.Errorf("iva begins both: %v", err)
 	}
+	// The alias alone is exact when the title spells something else, as
+	// stuckoff's title alone is above.
+	chats = []Chat{
+		{ID: "c1", Alias: "иван", Title: "Ванката", Kind: ChatUser},
+		{ID: "c2", Alias: "иванка", Title: "Иванка", Kind: ChatUser},
+	}
+	if c, err := ResolveChat(chats, "ivan"); err != nil || c.ID != "c1" {
+		t.Errorf("ivan, the exact alias: got %q, %v", c.ID, err)
+	}
+}
+
+// The plain tiers come before those in either script: a query that begins
+// an alias or is inside one as typed finds that chat even when it is
+// another chat's exact name in either script. So a Latin alias kamenov
+// takes "kamen" from the chat titled Камен, which the Cyrillic spelling
+// still finds by its exact title.
+func TestResolveChatPlainTiersComeFirst(t *testing.T) {
+	for _, tc := range []struct {
+		chats []Chat
+		want  map[string]string
+	}{
+		{[]Chat{
+			{ID: "c1", Alias: "stuckoff", Title: "Камен", Kind: ChatUser},
+			{ID: "c2", Alias: "kamenov", Title: "Каменов", Kind: ChatUser},
+		}, map[string]string{"kamen": "c2", "@kamen": "c2", "камен": "c1", "@Камен": "c1"}},
+		{[]Chat{
+			{ID: "c1", Alias: "the-ivan-show", Title: "Show", Kind: ChatChannel},
+			{ID: "c2", Alias: "иван", Title: "Иван", Kind: ChatUser},
+		}, map[string]string{"ivan": "c1", "иван": "c2", "@ivan": "c2"}},
+	} {
+		for q, want := range tc.want {
+			if c, err := ResolveChat(tc.chats, q); err != nil || c.ID != want {
+				t.Errorf("%q: got %q, %v; want %s", q, c.ID, err, want)
+			}
+		}
+	}
 }
 
 // A unique prefix in either script resolves where the substring would be
@@ -141,6 +178,22 @@ func TestResolveChatPrefixInEitherScript(t *testing.T) {
 	}
 	if c, err := ResolveChat(chats, "#kalo"); err != nil || c.ID != "c2" {
 		t.Errorf("#kalo: the sigil still picks the kind: %q, %v", c.ID, err)
+	}
+	// Either half alone: the title of a chat whose alias is an unrelated
+	// username, and the alias of a chat whose title is unrelated.
+	for _, chats := range [][]Chat{
+		{
+			{ID: "c1", Alias: "stuckoff", Title: "Калоян GPS", Kind: ChatUser},
+			{ID: "c2", Alias: "sveti", Title: "Свети Калоян", Kind: ChatGroup},
+		},
+		{
+			{ID: "c1", Alias: "калоян-gps", Title: "GPS", Kind: ChatUser},
+			{ID: "c2", Alias: "свети-калоян", Title: "Church", Kind: ChatGroup},
+		},
+	} {
+		if c, err := ResolveChat(chats, "kalo"); err != nil || c.ID != "c1" {
+			t.Errorf("kalo begins %s %q only: got %q, %v", chats[0].Alias, chats[0].Title, c.ID, err)
+		}
 	}
 }
 

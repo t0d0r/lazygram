@@ -523,9 +523,10 @@ func fuzzChatList(list string) []Chat {
 // only when the query matches it by id, alias or title, as typed or in
 // either script, of the kind its sigil asks for; it finds the one chat
 // that matches, says ambiguous only when several do, lets a unique exact
-// id or alias win, then a unique exact title, and, when nothing matches
-// as typed, a unique exact alias or title in either script; and it does
-// not depend on the order of the chats.
+// id or alias win, then a unique exact title, then the one chat matched
+// as typed (the either-script tiers never override it), and, when nothing
+// matches as typed, a unique exact alias or title in either script; and
+// it does not depend on the order of the chats.
 func FuzzResolveChat(f *testing.F) {
 	list := "c1\talice\tAlice Smith\nc2\tdev\tDev Talk\nc3\tnews\tНовини\nc9\tivan\tИван Петров\nc5\tdevops\tOps\nc6\tанна\tАнна"
 	for _, q := range []string{"petrov", "@petrov", "#nov", "иван", "смит", "a", "dev", "#DEV", "c3", "\u0301", "@\u0301", "@", "#", "", "@Иван Петров", "ivan petrov", "novini"} {
@@ -534,8 +535,9 @@ func FuzzResolveChat(f *testing.F) {
 	for _, s := range fuzzSeeds {
 		f.Add(s+"\t"+s+"\t"+s+"\nx\t"+s, s)
 	}
-	f.Add("c1\tdevops\tOps\nc2\tb\tDev", "dev")         // an exact title before another alias's prefix
-	f.Add("c1\tиван\tИван\nc2\tиванка\tИванка", "ivan") // exact in either script before a prefix
+	f.Add("c1\tdevops\tOps\nc2\tb\tDev", "dev")            // an exact title before another alias's prefix
+	f.Add("c1\tиван\tИван\nc2\tиванка\tИванка", "ivan")    // exact in either script before a prefix
+	f.Add("a\tthe-ivan-show\tShow\nb\tиван\tИван", "ivan") // a plain substring before exact in either script
 	f.Fuzz(func(t *testing.T, list, query string) {
 		chats := fuzzChatList(list)
 		q := strings.ToLower(strings.TrimSpace(query))
@@ -604,6 +606,9 @@ func FuzzResolveChat(f *testing.F) {
 		}
 		if len(exact) == 0 && len(titled) == 1 && (err != nil || got != titled[0]) {
 			t.Fatalf("ResolveChat(%q) = %+v, %v; the exact title is %+v", query, got, err, titled[0])
+		}
+		if len(plain) == 1 && (err != nil || got != plain[0]) {
+			t.Fatalf("ResolveChat(%q) = %+v, %v; the one match as typed is %+v", query, got, err, plain[0])
 		}
 		if len(plain) == 0 && len(either) == 1 && (err != nil || got != either[0]) {
 			t.Fatalf("ResolveChat(%q) = %+v, %v; the exact match in either script is %+v", query, got, err, either[0])
