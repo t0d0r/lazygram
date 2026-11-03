@@ -22,14 +22,14 @@ programs (omarchy-speedtest, cliamp).
 | build | pure Go, no cgo of its own; builds PIE with external linking per the guidelines; `-tags release` as the upstream release tarballs |
 | tests | hermetic; `go test ./...` passes inside makepkg on both architectures |
 | runtime | `glibc` and `hicolor-icon-theme`; `xdg-utils`, `xdg-terminal-exec` and `wl-clipboard` optional; pictures use half-block characters, no terminal graphics protocol |
-| version | `-X main.version=0.4.24`; `lazygram -version` prints it; `update.Parse` accepts it |
+| version | `-X main.version=0.4.25`; `lazygram -version` prints it; `update.Parse` accepts it |
 | state | `~/.local/state/lazygram`, created by lazygram, owner-only; nothing in `/etc` |
 | license | BSD-2-Clause, installed to `/usr/share/licenses/lazygram/` |
 | Omarchy metadata | required (`.omarchy/package.json`); GitHub release watch so releases are proposed by the repository bot |
-| gap, fixed in code | `lazygram update` would try to replace `/usr/bin/lazygram`; now `update.Detect` reports `Package` for a binary under `/usr` outside `/usr/local`, the update refuses with an error before asking anything, and the exit hint names the package manager. Shipped in v0.4.15; the recipe packages v0.4.24, so the packaged binary refuses |
+| gap, fixed in code | `lazygram update` would try to replace `/usr/bin/lazygram`; now `update.Detect` reports `Package` for a binary under `/usr` outside `/usr/local`, the update refuses with an error before asking anything, and the exit hint names the package manager. Shipped in v0.4.15; the recipe packages v0.4.25, so the packaged binary refuses |
 | gap, fixed | no launcher entry or icon; added in the form of Omarchy's own TUI entries (`xdg-terminal-exec --app-id=org.omarchy.lazygram -e sh -c "lazygram \|\| { ...; read -r _; }"`, `Terminal=false`, `TryExec=xdg-terminal-exec`): the class `omarchy-launch-tui` would assign, and the window stays open on the not-linked hint instead of flashing shut |
 | gap, fixed | the entry and icon came from beside the recipe; since v0.4.20 the recipe installs them from the release tarball, so omarchy-pkgs gets only `PKGBUILD` and `.omarchy/` |
-| gap, fixed | the recipe named 0.4.14; it builds v0.4.24, which refuses to self-update and offers `wl-clipboard` as the Wayland clipboard fallback |
+| gap, fixed | the recipe named 0.4.14; it builds v0.4.25, which refuses to self-update and offers `wl-clipboard` as the Wayland clipboard fallback |
 | gap, open | no man page, no shell completions (optional) |
 | gap, fixed | the stray upstream release and tag `v0.4.11-1-gd0bdc3f` were deleted on 2026-11-02; the watch pattern matches whole tags, so such a tag would be ignored anyway |
 
@@ -107,6 +107,13 @@ installed, 488 s) and `lazygram-0.4.24-1-x86_64.pkg.tar.zst` (8.1 MiB,
 22.4 MiB installed, 830 s under emulation), `lazygram 0.4.24` and
 "0.4.24 is up to date".
 
+The v0.4.25 recipe (only `pkgver` and the checksum; go.mod and go.sum
+are as in 0.4.24) was built the same way on 2026-11-03 with the same
+results: `lazygram-0.4.25-1-aarch64.pkg.tar.xz` (5.3 MiB, 21.2 MiB
+installed, 556 s) and `lazygram-0.4.25-1-x86_64.pkg.tar.zst` (8.1 MiB,
+22.4 MiB installed, 1121 s under emulation), `lazygram 0.4.25` and
+"0.4.25 is up to date".
+
 omarchy-pkgs has validators of its own that run in its CI. To run them
 before opening the PR (from a checkout of that repository, on Arch, with
 `python`, `jq`, `curl`, `git`, `libarchive`):
@@ -121,21 +128,21 @@ tests/package-metadata.sh
 bin/build --package lazygram --dry-run  # the plan; without --dry-run the full build in its builder image
 ```
 
-Last run on 2026-11-03, for the 0.4.24 recipe, in an Arch Linux ARM
-container against omarchy-pkgs master `35687e5`: `validate` exit 0;
-`check` printed `{"status": "skipped", "current": "0.4.24", "reason":
+Last run on 2026-11-03, for the 0.4.25 recipe, in an Arch Linux ARM
+container against omarchy-pkgs master `e0ac3a7`: `validate` exit 0;
+`check` printed `{"status": "skipped", "current": "0.4.25", "reason":
 "already current"}`; `validate_package_metadata` printed `metadata
 valid`; `pinned-sources.sh` and `package-metadata.sh` PASS; `bin/build
 --package lazygram --dry-run` planned `lazygram` (its four `curl` 404
 lines are the channel databases it probes for a published version; none
 holds the package yet). `makepkg --printsrcinfo` refuses to run as root
-there, which is expected. The 0.4.23 recipe passed the same way against
-`30fed32`, the 0.4.22 recipe against `aabdeaa`, the 0.4.21 recipe
-against `1c774e2`. The first run, on 2026-10-31 for the 0.4.14
+there, which is expected. The 0.4.24 recipe passed the same way against
+`35687e5`, the 0.4.23 recipe against `30fed32`, the 0.4.22 recipe
+against `aabdeaa`, the 0.4.21 recipe against `1c774e2`. The first run, on 2026-10-31 for the 0.4.14
 recipe against `dd63dc3`, passed the same way.
 
 The watch pattern itself was checked here too: `v(?P<version>[0-9]+(?:\.[0-9]+)*)`
-matches `v0.4.24` whole and does not match `v0.4.11-1-gd0bdc3f`.
+matches `v0.4.25` whole and does not match `v0.4.11-1-gd0bdc3f`.
 
 ## Manual validation still to do on an Omarchy machine
 
@@ -159,16 +166,17 @@ matches `v0.4.24` whole and does not match `v0.4.11-1-gd0bdc3f`.
 Status: submitted on 2026-11-02 as omacom/omarchy-pkgs#2022 (branch
 `lazygram` of the fork t0d0r/omarchy-pkgs, first for 0.4.21 as `51a84c0`
 on master `1c774e2`), moved to 0.4.22 on 2026-11-03 with the commit
-`9df0efd`, to 0.4.23 the same day with `b0266f4` and to 0.4.24 with
-`848071e`, each time with the PR's title and text from PR.md; still only
+`9df0efd`, to 0.4.23 the same day with `b0266f4`, to 0.4.24 with
+`848071e` and to 0.4.25 with `6c969ba`, each time with the PR's title
+and text from PR.md; still only
 `pkgbuilds/lazygram/PKGBUILD` and `.omarchy/package.json`. It waits for
 a maintainer's `build-approved` label; the omarchy-pkgs repository had
 about 190 open "Add ..." PRs at the time, some of them weeks old, so the
 wait may be long. After it merges, new releases arrive through the
 watch.
 
-0. Done: the recipe builds v0.4.24, installs the entry and icon from the
-   tarball and lists `wl-clipboard`; PR.md and #2022 name 0.4.24. A
+0. Done: the recipe builds v0.4.25, installs the entry and icon from the
+   tarball and lists `wl-clipboard`; PR.md and #2022 name 0.4.25. A
    later release before the merge moves the PR the same way: copy the
    recipe, rerun the validators, commit on top (no force push), update
    the title and text from PR.md.
