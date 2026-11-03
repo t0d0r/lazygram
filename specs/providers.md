@@ -30,12 +30,40 @@ dialog list; an error when none is known). `MarkUnread(chatID, unread)`
 sets or clears the chat's unread mark (Telegram: messages.markDialogUnread
 with an inputDialogPeer); the demo keeps no marks.
 
-`provider.ChangeSource` is optional: a provider that hears of edits and
-deletions as they happen implements `Changes() <-chan domain.Change` (an
-edit with the message as it reads now, or deleted ids with their chat,
-or with no chat for chats marked `Chat.SharedIDs`); the feed may drop a
-change when the reader is behind, and closes when the service stops.
-The demo reports none.
+`provider.ChangeSource` is optional: a provider that hears of edits,
+deletions and reactions as they happen implements
+`Changes() <-chan domain.Change` (an edit with the message as it reads
+now, or deleted ids with their chat, or with no chat for chats marked
+`Chat.SharedIDs`, or a message's reactions as they are now); the feed may
+drop a change when the reader is behind, and closes when the service
+stops. The demo reports reactions to the account's own lines only.
+
+`provider.ReactionPoller` is optional: a provider whose reactions to
+other people's messages must be asked for implements
+`PollReactions(ctx, chatID, ids) ([]domain.Change, error)`: one call asks
+for the reactions of the given messages of one chat and returns one
+`domain.Reacted` change per message it learned about, which the caller
+applies exactly like the changes of the feed (one path for applying
+changes). A message the service leaves out of its answer has no
+reactions. `provider.ErrNotPollable` says the chat cannot be polled (the
+caller skips it for the session); a `*provider.WaitError` says the
+service asked for a pause of `Wait` (nothing is polled until it has
+passed). Which messages are polled and when is the TUI's rule
+(specs/ui.md, Reactions).
+
+Reactions (`Message.Reactions`) are a list of `{Emoji, Count, Mine}` in
+the service's order: `Emoji` is the emoji, or `*`
+(`domain.CustomReaction`) for all custom-emoji reactions of the message
+summed into one entry; `Count` is more than zero; `Mine` says the
+account sent it too. `Message.MineUnknown` (never stored) says the
+reactions came without the account's own: each then keeps the `Mine`
+flag already known for its emoji (`domain.CurrentReactions`). A
+`domain.Reacted` change carries the chat, the message id and its
+reactions in `Msg` (`ID`, `ChatID`, `Reactions`, `MineUnknown`), the
+recent reactions the service names in `Reactors` (`Who`, named like a
+message sender, `me` for the account; `ID`, their chat id; `Emoji`;
+`At`), and `Own` when the service pushed it unasked, which Telegram does
+only for the account's own messages.
 
 `MarkRead` is a read receipt: the chat was read up to and including
 `msgID`. The TUI calls it with read receipts on (on focus), and on an
@@ -78,6 +106,21 @@ who has no username; `#news` hides its subscribers. `@demobot` asks a question w
 `Deploy`, `Hold` and a `Runbook` link; `Press` answers and edits the
 question. `@linus` sends one photo; `Fetch` draws a small PNG in memory for it. Started with `lazygram demo`; nothing
 is kept on disk.
+
+Reactions: four past lines carry some from the start (a thumbs-up on
+ada's fix in `#dev`; a party popper and the account's own thumbs-up on
+grace's release candidate; the account's own heart on `@linus`'s photo;
+a `#news` headline with fire, heart, two custom emoji shown as `*` and
+one paid star). Two arrive while the demo runs, by its clock, applied
+when it is next asked something (`Sync`, `Recent`, `PollReactions`):
+25 seconds after start `linus` reacts with a thumbs-up to the account's
+own line "no problem, ordering for you" in `@linus`, pushed on the
+change feed (`Own`, reactor `linus`) as Telegram pushes reactions to the
+account's own messages; 100 seconds after start `grace` reacts with a
+thumbs-up to ada's tip in `#dev`, which only a poll finds.
+`PollReactions` returns one change per asked-for line that is already
+there, with its reactions as they are now and who reacted while the demo
+ran. The feed holds 16 changes and never closes.
 
 ## telegram
 
@@ -209,7 +252,8 @@ call, other errors surface), upload.saveFilePart /
 upload.saveBigFilePart and messages.sendMedia (/send: gotd's uploader in
 four threads and its message sender, run without the client lock;
 inputMediaUploadedPhoto for image names, inputMediaUploadedDocument with
-the base name and mime type otherwise; 64 MiB cap). Service messages are skipped;
+the base name and mime type otherwise; 64 MiB cap),
+messages.getMessagesReactions (reaction polls, see Reactions). Service messages are skipped;
 media-only messages show as `[media]`. Sender: user name, else post author,
 else `me` for own messages, else the peer's name in private chats, else
 `channel`. A message from a user (`from_id` a peerUser, not an own
@@ -222,7 +266,8 @@ dialog carries its own public username as `Chat.Username` (empty for
 people, whose username is their alias, and for chats without one), so
 its own signature in its posts is not taken for a member. Changes (`Changes`): the update stream, beside the typing updates, also
 carries updateEditMessage and updateEditChannelMessage (converted like a
-history message; the TUI keeps the cached sender), updateDeleteMessages
+history message, reactions included; the TUI keeps the cached sender),
+updateMessageReactions (see Reactions), updateDeleteMessages
 (ids in the account's shared id space, no chat) and
 updateDeleteChannelMessages (a supergroup's or channel's ids). A feed of
 256 changes; a change that does not fit is dropped, as the next history
@@ -252,10 +297,66 @@ those who left or were removed, and entries about chats, are not. A FLOOD_WAIT o
 longer waits surface as errors.
 
 Limits: messages come by polling only (the update stream serves typing
-reports, nothing else), no topics/forums, no edit/delete tracking, no
+reports, edits, deletions and reactions to the account's own messages,
+not new messages), no topics/forums, no
 reconnect, chats beyond the 100 most recent are not shown, the per-chat
 cursor is in memory only (a restart shows nothing until a chat gets a new
 message; `/last` fills in).
+
+### Reactions
+
+Every message carries its reactions (`message.reactions`, in history,
+edits and refetches), converted in the service's order: an emoji
+reaction (`reactionEmoji`) by its emoticon; every custom-emoji reaction
+(`reactionCustomEmoji`) summed into one `*` entry at the place of the
+first, because its emoji is a document that needs
+messages.getCustomEmojiDocuments (a follow-up); a paid reaction
+(`reactionPaid`, a Telegram Star) as the star emoji; `reactionEmpty` and
+zero counts are dropped. `Mine` is `chosen_order` set (for the summed
+custom entry: on any of them). A `min` object is the same for every user
+and lacks the account's own reactions: it is passed on with
+`MineUnknown`, and the cache keeps the `Mine` flags it already had for
+the same emoji (specs/storage.md). `top_reactors` (paid) are not used.
+
+Changes reach lazygram two ways:
+
+- updateMessageReactions (peer, message id, reactions; no pts, so a
+  missed one is never replayed) is pushed for the account's own messages
+  only (Telegram: "message authors will receive an updateMessageReactions
+  update when a user reacts to their message", when their reaction
+  notifications are on). The handler turns it into a `domain.Reacted`
+  change with `Own` set on the change feed, with the same non-blocking
+  emit as edits; `top_msg_id` and `saved_peer_id` (topics, saved
+  dialogs) are ignored. The users the update container carries are
+  learned first.
+- Nothing is pushed about other people's messages: Telegram asks apps to
+  short-poll the reactions of visible messages not sent by the user
+  every 15 to 30 seconds. `PollReactions(chatID, ids)` is one
+  messages.getMessagesReactions with the chat's input peer and the
+  numeric ids (others left out; deduplicated; the newest 100 at most; no
+  call when none is left). Its answer is Updates carrying an
+  updateMessageReactions per message that has reactions, converted like
+  the pushed one but without `Own`; as in TDLib, Telegram's own client
+  library, every asked-for message a plain `updates` answer leaves out is
+  reported with no reactions. A chat not among the known dialogs is an
+  error without any request (no dialog reload per poll).
+
+Recent reactions (`recent_reactions`, absent in broadcast channels,
+whose reactors are anonymous) become `Reactors`: a user by the name
+messages use (from the update or answer, else the names registry the
+typing reports use, else `user`), a channel by its title (else
+`channel`), the account itself (a self user, or `my` set: sent by the
+account, perhaps as one of its channels) as `me` without an id; the
+reaction's date as `At`; empty reactions are left out.
+
+Poll errors: CHANNEL_PRIVATE, CHANNEL_INVALID and MSG_ID_INVALID make
+the chat `provider.ErrNotPollable` and it is not asked again this
+session. A FLOOD_WAIT is not slept and retried like the other calls'
+(a poll is never worth holding the client lock for up to a minute):
+until it has passed no poll of any chat is sent, and every call returns
+a `*provider.WaitError` with the time left. Other errors are returned
+and change nothing. The call holds the client lock like the others; it
+is one small request.
 
 ### Typing
 

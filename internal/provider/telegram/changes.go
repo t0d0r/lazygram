@@ -17,7 +17,8 @@ import (
 // updateEditChannelMessage (a message's text, media or buttons changed),
 // updateDeleteMessages (private chats and basic groups, whose message ids
 // are shared across the account, so it names no chat) and
-// updateDeleteChannelMessages (a supergroup or channel).
+// updateDeleteChannelMessages (a supergroup or channel). Reactions to the
+// account's own messages come as updateMessageReactions (reactions.go).
 
 // changeBuffer is how many changes can wait for the TUI before new ones
 // are dropped; a dropped one is healed by the next fetch of the chat.
@@ -59,13 +60,16 @@ func (f *changeFeed) closeFeed() {
 	f.once.Do(func() { close(f.ch) })
 }
 
-// register hooks the four edit and deletion updates up to the feed.
-func (f *changeFeed) register(d tg.UpdateDispatcher) {
+// register hooks the edit, deletion, gap and reaction updates up to the
+// feed. The users an update container carries are learned first, so
+// someone reacting for the first time is still named.
+func (f *changeFeed) register(d tg.UpdateDispatcher, n *names) {
 	if f == nil {
 		return
 	}
 	handle := func(e tg.Entities, u tg.UpdateClass) {
-		if c, ok := changeEvent(u, e); ok {
+		n.learnUsers(e.Users)
+		if c, ok := changeEvent(u, e, n.get); ok {
 			f.emit(c)
 		}
 	}
@@ -89,6 +93,10 @@ func (f *changeFeed) register(d tg.UpdateDispatcher) {
 		handle(e, u)
 		return nil
 	})
+	d.OnMessageReactions(func(_ context.Context, e tg.Entities, u *tg.UpdateMessageReactions) error {
+		handle(e, u)
+		return nil
+	})
 }
 
 // gapHandler passes updates to the dispatcher and reports updatesTooLong,
@@ -109,8 +117,12 @@ func (h gapHandler) Handle(ctx context.Context, u tg.UpdatesClass) error {
 
 // changeEvent maps one update to a change; ok is false for anything else
 // and for an edit of something that is not a message (a service message).
-func changeEvent(u tg.UpdateClass, e tg.Entities) (domain.Change, bool) {
+// who names the users the update does not carry. Reactions pushed by the
+// service are about the account's own messages.
+func changeEvent(u tg.UpdateClass, e tg.Entities, who func(int64) string) (domain.Change, bool) {
 	switch u := u.(type) {
+	case *tg.UpdateMessageReactions:
+		return reactedEvent(u, e, who, true)
 	case *tg.UpdateEditMessage:
 		return editEvent(u.Message, e)
 	case *tg.UpdateEditChannelMessage:
@@ -126,22 +138,15 @@ func changeEvent(u tg.UpdateClass, e tg.Entities) (domain.Change, bool) {
 	return domain.Change{}, false
 }
 
-// editEvent converts an edited message. Only its text, media and buttons
-// are used: the TUI keeps who sent it from the copy it has.
+// editEvent converts an edited message. Only its text, media, buttons and
+// reactions are used: the TUI keeps who sent it from the copy it has.
 func editEvent(mc tg.MessageClass, e tg.Entities) (domain.Change, bool) {
 	m, ok := mc.(*tg.Message)
 	if !ok {
 		return domain.Change{}, false
 	}
-	var id int64
-	switch p := m.PeerID.(type) {
-	case *tg.PeerUser:
-		id = p.UserID
-	case *tg.PeerChat:
-		id = -p.ChatID
-	case *tg.PeerChannel:
-		id = channelBase - p.ChannelID
-	default:
+	id, ok := peerID(m.PeerID)
+	if !ok {
 		return domain.Change{}, false
 	}
 	users := make([]tg.UserClass, 0, len(e.Users))

@@ -419,3 +419,115 @@ func TestDeleteWithoutAChatRemembersEveryPair(t *testing.T) {
 		t.Fatal("not stored again, whichever shared chat it was in")
 	}
 }
+
+func TestReactionsPersist(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "cache.sqlite")
+	s := mustOpen(t, path, secret)
+	x := m("c", "1", 0, "liked")
+	x.Reactions = []domain.Reaction{{Emoji: "\U0001F44D", Count: 3, Mine: true}, {Emoji: domain.CustomReaction, Count: 1}}
+	x.MineUnknown = true
+	mustAdd(t, s, x, m("c", "2", 1, "nobody reacted"))
+	if err := s.Close(); err != nil {
+		t.Fatal(err)
+	}
+	got, err := mustOpen(t, path, secret).Messages("c", 0)
+	if err != nil || len(got) != 2 {
+		t.Fatalf("%+v %v", got, err)
+	}
+	if rs := got[0].Reactions; len(rs) != 2 || rs[0] != x.Reactions[0] || rs[1] != x.Reactions[1] || got[0].MineUnknown {
+		t.Fatalf("reactions come back, MineUnknown is never stored: %+v", got[0])
+	}
+	if got[1].Reactions != nil {
+		t.Fatalf("none stay none: %+v", got[1])
+	}
+}
+
+func TestRefreshTakesTheLaterCopysReactions(t *testing.T) {
+	s := mustOpen(t, Memory, secret)
+	thumbs := func(n int, mine bool) domain.Reaction {
+		return domain.Reaction{Emoji: "\U0001F44D", Count: n, Mine: mine}
+	}
+	x := m("c", "1", 0, "same text")
+	x.Reactions = []domain.Reaction{thumbs(1, true)}
+	mustAdd(t, s, x)
+	page := m("c", "1", 0, "same text")
+	page.Reactions = []domain.Reaction{thumbs(2, false), {Emoji: "*", Count: 1}}
+	page.MineUnknown = true // min: the account's own are not in it
+	got, err := s.Refresh([]domain.Message{page})
+	if err != nil || len(got) != 1 || len(got[0].Reactions) != 2 || got[0].Reactions[0] != thumbs(2, true) || got[0].MineUnknown {
+		t.Fatalf("the text is unchanged, the reactions are the page's with the known Mine: %+v %v", got, err)
+	}
+	if again, _ := s.Refresh([]domain.Message{page}); len(again) != 0 {
+		t.Fatalf("already up to date: %+v", again)
+	}
+	edit := domain.Message{ID: "1", ChatID: "c", Text: "edited live", Edited: time.Unix(2000, 0)}
+	edit.Reactions = got[0].Reactions
+	if _, _, err := s.Edit(edit); err != nil {
+		t.Fatal(err)
+	}
+	older := m("c", "1", 0, "same text") // fetched before the edit, but its reactions are newer
+	older.Edited = time.Unix(1500, 0)
+	older.Reactions = []domain.Reaction{thumbs(5, true)}
+	got, err = s.Refresh([]domain.Message{older})
+	if err != nil || len(got) != 1 || got[0].Text != "edited live" || !got[0].Edited.Equal(edit.Edited) ||
+		len(got[0].Reactions) != 1 || got[0].Reactions[0] != thumbs(5, true) {
+		t.Fatalf("the later edit keeps its text, the later copy brings its reactions: %+v %v", got, err)
+	}
+	if again, _ := s.Refresh([]domain.Message{older}); len(again) != 0 {
+		t.Fatalf("an older copy with the same reactions changes nothing: %+v", again)
+	}
+	all, _ := s.Messages("c", 0)
+	if all[0].Text != "edited live" || all[0].Reactions[0] != thumbs(5, true) {
+		t.Fatalf("stored: %+v", all[0])
+	}
+}
+
+func TestReactChangesOnlyTheReactions(t *testing.T) {
+	s := mustOpen(t, Memory, secret)
+	x := m("c", "1", 0, "keep me")
+	x.SenderID, x.Edited = "u1", time.Unix(1500, 0)
+	x.Reactions = []domain.Reaction{{Emoji: "a", Count: 1, Mine: true}}
+	mustAdd(t, s, x)
+	rep := domain.Message{ID: "1", ChatID: "c", MineUnknown: true,
+		Reactions: []domain.Reaction{{Emoji: "a", Count: 2}, {Emoji: "b", Count: 1}}}
+	before, now, ok, err := s.React(rep)
+	if err != nil || !ok || len(before.Reactions) != 1 || before.Reactions[0].Count != 1 {
+		t.Fatalf("before: %+v %v %v", before, ok, err)
+	}
+	if now.Text != "keep me" || now.SenderID != "u1" || !now.Edited.Equal(x.Edited) || now.Sender != "someone" ||
+		len(now.Reactions) != 2 || now.Reactions[0] != (domain.Reaction{Emoji: "a", Count: 2, Mine: true}) {
+		t.Fatalf("only the reactions change, Mine kept: %+v", now)
+	}
+	all, _ := s.Messages("c", 0)
+	if len(all[0].Reactions) != 2 || all[0].Text != "keep me" {
+		t.Fatalf("stored: %+v", all[0])
+	}
+	before, now, ok, _ = s.React(rep)
+	if !ok || len(before.Reactions) != 2 || len(now.Reactions) != 2 || before.Reactions[1] != now.Reactions[1] {
+		t.Fatalf("the same again: before and now alike: %+v %+v", before, now)
+	}
+	if _, _, ok, err := s.React(domain.Message{ID: "9", ChatID: "c"}); ok || err != nil {
+		t.Fatalf("not stored: %v %v", ok, err)
+	}
+	if _, now, _, _ := s.React(domain.Message{ID: "1", ChatID: "c"}); len(now.Reactions) != 0 {
+		t.Fatalf("all taken back: %+v", now)
+	}
+}
+
+func TestALateEditBringsItsReactions(t *testing.T) {
+	s := mustOpen(t, Memory, secret)
+	mustAdd(t, s, m("c", "1", 0, "v0"))
+	v2 := domain.Message{ID: "1", ChatID: "c", Text: "v2", Edited: time.Unix(2000, 0),
+		Reactions: []domain.Reaction{{Emoji: "a", Count: 1}}}
+	if got, _, _ := s.Edit(v2); got.Text != "v2" || len(got.Reactions) != 1 {
+		t.Fatalf("an edit carries its reactions: %+v", got)
+	}
+	v1 := domain.Message{ID: "1", ChatID: "c", Text: "v1", Edited: time.Unix(1500, 0),
+		Reactions: []domain.Reaction{{Emoji: "a", Count: 4}}}
+	if got, _, _ := s.Edit(v1); got.Text != "v2" || len(got.Reactions) != 1 || got.Reactions[0].Count != 4 {
+		t.Fatalf("an older edit reported later keeps the text, brings the reactions: %+v", got)
+	}
+	if all, _ := s.Messages("c", 0); all[0].Text != "v2" || all[0].Reactions[0].Count != 4 {
+		t.Fatalf("stored: %+v", all[0])
+	}
+}

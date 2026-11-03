@@ -24,7 +24,7 @@ func TestChangeEvents(t *testing.T) {
 		{&tg.UpdateDeleteMessages{Messages: []int{3, 4}}, domain.Change{Kind: domain.Deleted, IDs: []string{"3", "4"}}},
 		{&tg.UpdateDeleteChannelMessages{ChannelID: 9, Messages: []int{8}}, domain.Change{Kind: domain.Deleted, ChatID: "telegram:-1000000000009", IDs: []string{"8"}}},
 	} {
-		got, ok := changeEvent(c.u, e)
+		got, ok := changeEvent(c.u, e, nil)
 		if !ok || got.Kind != c.want.Kind || got.ChatID != c.want.ChatID || len(got.IDs) != len(c.want.IDs) {
 			t.Errorf("%T: %+v %v", c.u, got, ok)
 			continue
@@ -43,7 +43,7 @@ func TestChangeEvents(t *testing.T) {
 		&tg.UpdateDeleteMessages{},
 		&tg.UpdateUserTyping{UserID: 7},
 	} {
-		if _, ok := changeEvent(u, e); ok {
+		if _, ok := changeEvent(u, e, nil); ok {
 			t.Errorf("%T is no change", u)
 		}
 	}
@@ -81,7 +81,7 @@ func TestDialogsSayWhichChatsShareIDs(t *testing.T) {
 }
 
 func TestGapsAreReportedStale(t *testing.T) {
-	if c, ok := changeEvent(&tg.UpdateChannelTooLong{ChannelID: 9}, tg.Entities{}); !ok || c.Kind != domain.Stale || c.ChatID != "telegram:-1000000000009" {
+	if c, ok := changeEvent(&tg.UpdateChannelTooLong{ChannelID: 9}, tg.Entities{}, nil); !ok || c.Kind != domain.Stale || c.ChatID != "telegram:-1000000000009" {
 		t.Fatalf("channel too long: %+v %v", c, ok)
 	}
 	f := newChangeFeed()
@@ -103,7 +103,7 @@ func TestEditCarriesTheEditTimeAndAttachmentID(t *testing.T) {
 	m := &tg.Message{ID: 1, PeerID: &tg.PeerUser{UserID: 7}, Message: "x",
 		Media: &tg.MessageMediaPhoto{Photo: &tg.Photo{ID: 555}}}
 	m.SetEditDate(1700000000)
-	c, ok := changeEvent(&tg.UpdateEditMessage{Message: m}, tg.Entities{})
+	c, ok := changeEvent(&tg.UpdateEditMessage{Message: m}, tg.Entities{}, nil)
 	if !ok || c.Msg.Edited.Unix() != 1700000000 || c.Msg.Media == nil || c.Msg.Media.ID != "555" {
 		t.Fatalf("%+v", c.Msg)
 	}

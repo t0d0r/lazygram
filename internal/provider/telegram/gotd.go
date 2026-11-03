@@ -58,7 +58,8 @@ func NewClient(cfg config.Telegram) *MTProto {
 // once the connection has stopped, after Close or a failure.
 func (c *MTProto) Typing() <-chan domain.Typing { return c.typing.feed() }
 
-// Changes implements provider.ChangeSource: edits and deletions.
+// Changes implements provider.ChangeSource: edits, deletions and
+// reactions to the account's own messages.
 func (c *MTProto) Changes() <-chan domain.Change { return c.changes.feed() }
 
 // Connect establishes the connection and verifies the session is authorized.
@@ -93,11 +94,12 @@ func (c *MTProto) start() {
 }
 
 func (c *MTProto) run(ctx context.Context) error {
-	// The update stream is listened to for typing reports, edits and
-	// deletions; new messages still come through the polled history.
+	// The update stream is listened to for typing reports, edits,
+	// deletions and reactions to the account's own messages; new messages
+	// still come through the polled history.
 	d := tg.NewUpdateDispatcher()
 	c.typing.register(d, c.names, time.Now)
-	c.changes.register(d)
+	c.changes.register(d, c.names)
 	cl, err := newGotdClient(c.cfg, gotd.Options{UpdateHandler: gapHandler{next: d, changes: c.changes}})
 	if err != nil {
 		return err
@@ -265,6 +267,17 @@ func (c *MTProto) Members(ctx context.Context, chatID string) ([]domain.Particip
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.svc.Members(ctx, chatID)
+}
+
+// PollReactions implements Client: one small request, under the client
+// lock like the others.
+func (c *MTProto) PollReactions(ctx context.Context, chatID string, ids []string) ([]domain.Change, error) {
+	if err := c.wait(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.svc.PollReactions(ctx, chatID, ids)
 }
 
 // Recent implements Client.

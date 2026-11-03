@@ -33,6 +33,7 @@ type Client interface {
 	MarkRead(ctx context.Context, chatID, msgID string) error
 	MarkUnread(ctx context.Context, chatID string, unread bool) error
 	Members(ctx context.Context, chatID string) ([]domain.Participant, error)
+	PollReactions(ctx context.Context, chatID string, ids []string) ([]domain.Change, error)
 }
 
 // Provider adapts a Client to provider.Provider.
@@ -165,6 +166,15 @@ func (p *Provider) Members(ctx context.Context, chatID string) ([]domain.Partici
 		return nil, fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
 	}
 	return p.client.Members(ctx, chatID)
+}
+
+// PollReactions implements provider.ReactionPoller: the reactions of
+// messages on screen, which Telegram does not push.
+func (p *Provider) PollReactions(ctx context.Context, chatID string, ids []string) ([]domain.Change, error) {
+	if p.client == nil {
+		return nil, fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
+	}
+	return p.client.PollReactions(ctx, chatID, ids)
 }
 
 // Recent implements provider.Provider.

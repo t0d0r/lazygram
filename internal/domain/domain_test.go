@@ -212,3 +212,23 @@ func TestIsImageName(t *testing.T) {
 		}
 	}
 }
+
+func TestReactionsOfALaterCopy(t *testing.T) {
+	known := Message{Reactions: []Reaction{{Emoji: "a", Count: 2, Mine: true}, {Emoji: "b", Count: 1}}}
+	later := Message{Reactions: []Reaction{{Emoji: "b", Count: 2, Mine: true}, {Emoji: "c", Count: 1}}}
+	if got := CurrentReactions(known, later); len(got) != 2 || got[0] != later.Reactions[0] || got[1] != later.Reactions[1] {
+		t.Fatalf("the later copy's reactions, Mine included: %+v", got)
+	}
+	later.MineUnknown = true
+	later.Reactions = []Reaction{{Emoji: "a", Count: 3}, {Emoji: "c", Count: 1}}
+	got := CurrentReactions(known, later)
+	if len(got) != 2 || got[0] != (Reaction{Emoji: "a", Count: 3, Mine: true}) || got[1] != (Reaction{Emoji: "c", Count: 1}) {
+		t.Fatalf("min reactions keep the known Mine flags: %+v", got)
+	}
+	if later.Reactions[0].Mine {
+		t.Fatal("KeepMine leaves its input alone")
+	}
+	if got := KeepMine(known.Reactions, nil); len(got) != 0 {
+		t.Fatalf("no reactions stay none: %+v", got)
+	}
+}

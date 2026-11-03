@@ -44,6 +44,7 @@ type api interface {
 	ChannelsGetFullChannel(ctx context.Context, channel tg.InputChannelClass) (*tg.MessagesChatFull, error)
 	MessagesMarkDialogUnread(ctx context.Context, req *tg.MessagesMarkDialogUnreadRequest) (bool, error)
 	ChannelsGetParticipants(ctx context.Context, req *tg.ChannelsGetParticipantsRequest) (tg.ChannelsChannelParticipantsClass, error)
+	MessagesGetMessagesReactions(ctx context.Context, req *tg.MessagesGetMessagesReactionsRequest) (tg.UpdatesClass, error)
 }
 
 // service implements Client on top of api. It is read-only. Every History
@@ -61,10 +62,15 @@ type service struct {
 
 	known map[string]entity // chat id -> entity, filled by Dialogs
 	top   map[string]int    // chat id -> top message id already fetched
+
+	now        func() time.Time // the clock of the poll pause; tests replace it
+	pollUntil  time.Time        // no reaction poll before this (a FLOOD_WAIT)
+	unpollable map[string]bool  // chats Telegram refused a reaction poll this session
 }
 
 func newService(a api) *service {
-	return &service{api: a, known: map[string]entity{}, top: map[string]int{}, wait: sleepCtx}
+	return &service{api: a, known: map[string]entity{}, top: map[string]int{}, wait: sleepCtx,
+		now: time.Now, unpollable: map[string]bool{}}
 }
 
 // dialog is one row of getDialogs.
@@ -665,6 +671,9 @@ func convert(chatID string, chat entity, m *tg.Message, ents entities) domain.Me
 	if mk, ok := m.GetReplyMarkup(); ok {
 		out.Buttons = buttons(mk)
 	}
+	if r, ok := m.GetReactions(); ok {
+		out.Reactions, out.MineUnknown = reactions(r)
+	}
 	out.Media = media
 	return out
 }
@@ -767,6 +776,13 @@ func (f floodAPI) ChannelsGetParticipants(ctx context.Context, req *tg.ChannelsG
 
 func (f floodAPI) ChannelsDeleteMessages(ctx context.Context, req *tg.ChannelsDeleteMessagesRequest) (*tg.MessagesAffectedMessages, error) {
 	return retryFlood(ctx, f.sleep, func() (*tg.MessagesAffectedMessages, error) { return f.api.ChannelsDeleteMessages(ctx, req) })
+}
+
+// MessagesGetMessagesReactions is not retried: a reaction poll is never
+// worth sleeping for while holding the client, so its FLOOD_WAIT goes back
+// to PollReactions, which pauses the polls instead.
+func (f floodAPI) MessagesGetMessagesReactions(ctx context.Context, req *tg.MessagesGetMessagesReactionsRequest) (tg.UpdatesClass, error) {
+	return f.api.MessagesGetMessagesReactions(ctx, req)
 }
 
 func retryFlood[T any](ctx context.Context, sleep func(context.Context, time.Duration) error, call func() (T, error)) (T, error) {

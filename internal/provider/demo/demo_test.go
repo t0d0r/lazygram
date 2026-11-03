@@ -202,3 +202,116 @@ func TestMembersList(t *testing.T) {
 		t.Fatalf("the channel hides its subscribers: %v", err)
 	}
 }
+
+func TestSomeLinesCarryReactions(t *testing.T) {
+	p := newAt(func() time.Time { return time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC) })
+	all, _ := p.Sync(context.Background(), time.Time{})
+	var with, mine int
+	for _, m := range all {
+		if len(m.Reactions) > 0 {
+			with++
+		}
+		for _, r := range m.Reactions {
+			if r.Count <= 0 || r.Emoji == "" {
+				t.Fatalf("%+v", m)
+			}
+			if r.Mine {
+				mine++
+			}
+		}
+	}
+	if with < 3 || mine == 0 {
+		t.Fatalf("lines with reactions %d, of the account's own %d", with, mine)
+	}
+}
+
+func TestAReactionIsPushedAfterStart(t *testing.T) {
+	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	p := newAt(func() time.Time { return clock })
+	var cs provider.ChangeSource = p
+	before, _ := p.Recent(context.Background(), "demo-3", 50)
+	select {
+	case c := <-cs.Changes():
+		t.Fatalf("nothing yet: %+v", c)
+	default:
+	}
+	clock = clock.Add(30 * time.Second)
+	if _, err := p.Sync(context.Background(), clock); err != nil {
+		t.Fatal(err)
+	}
+	var c domain.Change
+	select {
+	case c = <-cs.Changes():
+	default:
+		t.Fatal("the reaction to the account's own line is pushed")
+	}
+	if c.Kind != domain.Reacted || c.ChatID != "demo-3" || !c.Own || len(c.Msg.Reactions) != 1 ||
+		c.Msg.Reactions[0] != (domain.Reaction{Emoji: thumbsUp, Count: 1}) ||
+		len(c.Reactors) != 1 || c.Reactors[0].Who != "linus" || c.Reactors[0].Emoji != thumbsUp {
+		t.Fatalf("%+v", c)
+	}
+	after, _ := p.Recent(context.Background(), "demo-3", 50)
+	for i, m := range after {
+		if m.ID == c.Msg.ID {
+			if m.Sender != "me" || len(m.Reactions) != 1 || len(before[i].Reactions) != 0 {
+				t.Fatalf("the line counts it now, a copy handed out before does not: %+v / %+v", m, before[i])
+			}
+		}
+	}
+	select {
+	case c := <-cs.Changes():
+		t.Fatalf("pushed once: %+v", c)
+	default:
+	}
+}
+
+func TestPollFindsReactionsToOthersLines(t *testing.T) {
+	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	p := newAt(func() time.Time { return clock })
+	var poller provider.ReactionPoller = p
+	tip, fix := "", ""
+	for _, m := range p.msgs {
+		switch m.Text {
+		case "tip: /win 2 switches windows, Tab completes names":
+			tip = m.ID
+		case "pushed a fix for the scrollback off-by-one":
+			fix = m.ID
+		}
+	}
+	if got, _ := poller.PollReactions(context.Background(), "demo-1", []string{tip}); len(got) != 0 {
+		t.Fatalf("a line not there yet is left out: %+v", got)
+	}
+	clock = clock.Add(2 * time.Minute)
+	got, err := poller.PollReactions(context.Background(), "demo-1", []string{fix, tip, "404"})
+	if err != nil || len(got) != 2 {
+		t.Fatalf("one change per asked line: %+v %v", got, err)
+	}
+	for _, c := range got {
+		if c.Kind != domain.Reacted || c.ChatID != "demo-1" || c.Own {
+			t.Fatalf("%+v", c)
+		}
+	}
+	if got[0].Msg.ID != fix || len(got[0].Msg.Reactions) != 1 || got[0].Msg.Reactions[0].Count != 2 || len(got[0].Reactors) != 0 {
+		t.Fatalf("as it was: %+v", got[0])
+	}
+	if c := got[1]; c.Msg.ID != tip || len(c.Msg.Reactions) != 1 || c.Msg.Reactions[0] != (domain.Reaction{Emoji: thumbsUp, Count: 1}) ||
+		len(c.Reactors) != 1 || c.Reactors[0].Who != "grace" {
+		t.Fatalf("grace's reaction, found by the poll: %+v", c)
+	}
+	for len(p.Changes()) > 0 {
+		if c := <-p.Changes(); c.Msg.ID == tip || !c.Own {
+			t.Fatalf("only reactions to the account's own lines are pushed, got %+v", c)
+		}
+	}
+}
+
+func TestWithReactionLeavesItsInputAlone(t *testing.T) {
+	rs := []domain.Reaction{{Emoji: "a", Count: 1}}
+	got := withReaction(rs, "a")
+	if got[0].Count != 2 || rs[0].Count != 1 {
+		t.Fatalf("counted on a copy: %+v %+v", got, rs)
+	}
+	if got := withReaction(rs, "b"); len(got) != 2 || got[1] != (domain.Reaction{Emoji: "b", Count: 1}) || len(rs) != 1 {
+		t.Fatalf("a new emoji goes last: %+v", got)
+	}
+}

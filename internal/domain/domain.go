@@ -57,17 +57,83 @@ const (
 	Edited  ChangeKind = iota // Msg is the message as it reads now
 	Deleted                   // IDs are gone from ChatID
 	Stale                     // ChatID, or every chat when "", may have missed changes: fetch again
+	Reacted                   // Msg.Reactions are the reactions message Msg.ID of ChatID has now
 )
 
-// Change is an edit or a deletion the service reports while lazygram
-// runs, made here or on another device, by the account or someone else.
+// Change is an edit, a deletion or new reactions the service reports
+// while lazygram runs, made here or on another device, by the account or
+// someone else.
 type Change struct {
 	Kind ChangeKind
 	// ChatID is the chat; for a deletion it may be "", meaning the one of
 	// the chats with SharedIDs that has the message.
 	ChatID string
 	IDs    []string // Deleted: the message ids
-	Msg    Message  // Edited: text, media and buttons as they are now
+	// Msg is, for Edited, the message as it is now: its text, media,
+	// buttons and reactions. For Reacted it carries the message's ID,
+	// ChatID and Reactions (with MineUnknown) only.
+	Msg Message
+	// Reactors are, for Reacted, the recent reactions the service names
+	// with who sent them, in its order; empty when it names nobody (a
+	// broadcast channel, whose reactors are anonymous).
+	Reactors []Reactor
+	// Own says, for Reacted, that the service pushed the change unasked,
+	// which Telegram does only for the account's own messages: a message
+	// lazygram does not hold is then one of the account's.
+	Own bool
+}
+
+// CustomReaction is the Emoji of all a message's custom-emoji reactions
+// together: their emoji is a document of its own, which lazygram does not
+// fetch, so they are counted as one.
+const CustomReaction = "*"
+
+// Reaction is one kind of reaction under a message and how many sent it.
+type Reaction struct {
+	Emoji string `json:"emoji"`          // the emoji, or CustomReaction
+	Count int    `json:"count"`          // more than zero
+	Mine  bool   `json:"mine,omitempty"` // the account sent it too
+}
+
+// Reactor is one recent reaction the service names: who sent which emoji
+// and when.
+type Reactor struct {
+	Who   string    // named like a message sender: a person, a channel's title, "me" for the account
+	ID    string    // their chat id, like Message.SenderID; empty for the account and when unknown
+	Emoji string    // as in Reaction.Emoji
+	At    time.Time // zero when unknown
+}
+
+// KeepMine returns now with the Mine flags of known, for reactions the
+// service sent without the account's own (Message.MineUnknown): each
+// emoji keeps whether the account had sent it.
+func KeepMine(known, now []Reaction) []Reaction {
+	if len(now) == 0 {
+		return now
+	}
+	mine := map[string]bool{}
+	for _, r := range known {
+		if r.Mine {
+			mine[r.Emoji] = true
+		}
+	}
+	out := make([]Reaction, len(now))
+	for i, r := range now {
+		r.Mine = mine[r.Emoji]
+		out[i] = r
+	}
+	return out
+}
+
+// CurrentReactions returns the reactions of a message known as known,
+// given later, a copy of it fetched or reported after: reactions carry no
+// edit time, so later's are current, with known's Mine flags when later's
+// are unknown.
+func CurrentReactions(known, later Message) []Reaction {
+	if later.MineUnknown {
+		return KeepMine(known.Reactions, later.Reactions)
+	}
+	return later.Reactions
 }
 
 // ButtonKind says what pressing a button does.
@@ -133,8 +199,17 @@ type Message struct {
 	Buttons    []Button  `json:"buttons,omitempty"` // numbered from 1 in this order
 	Media      *Media    `json:"media,omitempty"`
 	// Edited is when the message was last edited at the service; zero
-	// when never (or not known). Of two copies the later edit wins.
+	// when never (or not known). Of two copies the later edit wins, but
+	// for Reactions, which the later copy carries as they are now.
 	Edited time.Time `json:"edited,omitempty"`
+	// Reactions are the reactions under the message, in the service's
+	// order; none when nobody reacted.
+	Reactions []Reaction `json:"reactions,omitempty"`
+	// MineUnknown says Reactions came without the account's own
+	// (Telegram's min reactions, the same for every user), so each keeps
+	// the Mine flag already known for its emoji (CurrentReactions). It is
+	// never stored.
+	MineUnknown bool `json:"-"`
 }
 
 // PressAnswer is what a provider reports after a button was pressed.

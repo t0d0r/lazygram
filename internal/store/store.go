@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
@@ -279,10 +280,12 @@ func (s *Store) putLocked(q interface {
 
 // Refresh brings stored messages up to date with copies fetched again:
 // each message in msgs whose stored copy differs (edited text, media or
-// buttons, the sender's id, username or name) replaces it, and the
-// replacements are returned. Messages not stored are left to Add; a
-// stored row that does not open or decode is left alone, so one bad row
-// never fails the fetch around it.
+// buttons, the sender's id, username or name, the reactions) replaces it,
+// and the replacements are returned. A copy older than the stored edit
+// brings its reactions only: they have no edit time, and the copy fetched
+// later carries them as they are now. Messages not stored are left to
+// Add; a stored row that does not open or decode is left alone, so one
+// bad row never fails the fetch around it.
 func (s *Store) Refresh(msgs []domain.Message) ([]domain.Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -300,8 +303,14 @@ func (s *Store) Refresh(msgs []domain.Message) ([]domain.Message, error) {
 		if !ok {
 			continue
 		}
-		if old.Edited.After(m.Edited) { // a live edit newer than this page's copy
-			continue
+		m.Reactions, m.MineUnknown = domain.CurrentReactions(old, m), false
+		if old.Edited.After(m.Edited) { // a live edit newer than this page's copy: only the reactions are newer
+			if slices.Equal(old.Reactions, m.Reactions) {
+				continue
+			}
+			reactions := m.Reactions
+			m = old
+			m.Reactions = reactions
 		}
 		a, _ := json.Marshal(old)
 		b, _ := json.Marshal(m)
@@ -394,11 +403,12 @@ func (s *Store) Prune(chatID string, page []domain.Message, before time.Time) ([
 }
 
 // Edit applies an edit the service reported to the stored message: its
-// text, attachment, buttons and edit time become m's; who sent it, when
-// and its ids stay. An edit older than the stored copy's (updates can
-// arrive out of order) changes nothing. When the attachment was swapped
-// or removed, the vault's copy of the old one is dropped. It returns the
-// message as stored now, or ok false when it is not stored.
+// text, attachment, buttons, edit time and reactions become m's; who sent
+// it, when and its ids stay. An edit older than the stored copy's
+// (updates can arrive out of order) changes the reactions only, which the
+// copy reported later carries as they are now. When the attachment was
+// swapped or removed, the vault's copy of the old one is dropped. It
+// returns the message as stored now, or ok false when it is not stored.
 func (s *Store) Edit(m domain.Message) (domain.Message, bool, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -406,11 +416,19 @@ func (s *Store) Edit(m domain.Message) (domain.Message, bool, error) {
 	if err != nil || !ok {
 		return domain.Message{}, false, err
 	}
+	reactions := domain.CurrentReactions(old, m)
 	if old.Edited.After(m.Edited) { // an older edit arriving late
+		if slices.Equal(old.Reactions, reactions) {
+			return old, true, nil
+		}
+		old.Reactions = reactions
+		if err := s.putLocked(s.db, old); err != nil {
+			return domain.Message{}, false, err
+		}
 		return old, true, nil
 	}
 	swapped := mediaChanged(old.Media, m.Media)
-	old.Text, old.Media, old.Buttons, old.Edited = m.Text, m.Media, m.Buttons, m.Edited
+	old.Text, old.Media, old.Buttons, old.Edited, old.Reactions = m.Text, m.Media, m.Buttons, m.Edited, reactions
 	if err := s.putLocked(s.db, old); err != nil {
 		return domain.Message{}, false, err
 	}
@@ -418,6 +436,29 @@ func (s *Store) Edit(m domain.Message) (domain.Message, bool, error) {
 		s.deleteMediaLocked(m.ChatID, m.ID)
 	}
 	return old, true, nil
+}
+
+// React applies reactions the service reported (a Reacted change) to the
+// stored message: m's Reactions become its own, with the Mine flags
+// already known when m's are unknown; its text and everything else stay.
+// It returns the stored copy before and as stored now (the same when
+// nothing changed), or ok false when the message is not stored.
+func (s *Store) React(m domain.Message) (before, now domain.Message, ok bool, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	before, ok, err = s.storedLocked(s.db, m.ChatID, m.ID)
+	if err != nil || !ok {
+		return domain.Message{}, domain.Message{}, false, err
+	}
+	now = before
+	now.Reactions = domain.CurrentReactions(before, m)
+	if slices.Equal(before.Reactions, now.Reactions) {
+		return before, before, true, nil
+	}
+	if err := s.putLocked(s.db, now); err != nil {
+		return domain.Message{}, domain.Message{}, false, err
+	}
+	return before, now, true, nil
 }
 
 // mediaChanged reports whether an edit took the attachment away or put
