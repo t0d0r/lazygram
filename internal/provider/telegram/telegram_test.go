@@ -52,7 +52,12 @@ func TestInertWithoutClient(t *testing.T) {
 	if err := p.Delete(context.Background(), "x", "1"); !errors.Is(err, provider.ErrNotImplemented) {
 		t.Fatalf("delete: %v", err)
 	}
+	if _, err := p.PollReactions(context.Background(), "x", []string{"1"}); !errors.Is(err, provider.ErrNotImplemented) {
+		t.Fatalf("poll reactions: %v", err)
+	}
 	var _ provider.Provider = p
+	var _ provider.ReactionPoller = p
+	var _ provider.ChangeSource = p
 }
 
 func TestMTProtoMakesNoConnectionOnConstruction(t *testing.T) {

@@ -10,6 +10,8 @@ import "strings"
 // shown in their own windows, and /feed on brings back this session's
 // messages, those that arrived while it was off included, since the
 // setting is a filter applied when window 0 is rendered (richLinesOf).
+// The notices of the chats' activity (a reaction someone added) go with
+// the messages.
 
 // feedOffNotice is the start notice in window 0 when /feed is off.
 const feedOffNotice = "/feed is off: chat messages show only in their own windows (/feed on)"
@@ -37,6 +39,19 @@ func (m *Model) setFeed(arg string) {
 	default:
 		m.setErr("/feed takes on or off")
 	}
+}
+
+// withoutChatNotes leaves out the notices about the chats' activity (a
+// reaction someone added), which /feed off keeps out of window 0 with the
+// messages; the rest of its notices stay.
+func withoutChatNotes(notes []note) []note {
+	out := make([]note, 0, len(notes))
+	for _, n := range notes {
+		if !n.chat {
+			out = append(out, n)
+		}
+	}
+	return out
 }
 
 // feedChanged keeps the server window's scroll offset within its lines,

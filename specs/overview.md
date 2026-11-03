@@ -32,8 +32,10 @@ application registration, asked once and stored locally; without them
 lazygram exits and says how to link an account or start the demo. No
 environment variables are required. The live path has only been tested against fakes,
 never against the real service. Messages by polling, not push updates
-(the update stream serves typing indicators only, specs/providers.md); 100 most recent
-dialogs; no per-chat selection yet.
+(the update stream serves typing reports, edits, deletions and reactions
+to the account's own messages; reactions to others' messages on screen
+are polled, specs/providers.md); 100 most recent dialogs; no per-chat
+selection yet.
 
 ## Acceptance criteria
 

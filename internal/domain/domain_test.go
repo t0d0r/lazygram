@@ -212,3 +212,43 @@ func TestIsImageName(t *testing.T) {
 		}
 	}
 }
+
+func TestReactionsOfALaterCopy(t *testing.T) {
+	known := Message{Reactions: []Reaction{{Emoji: "a", Count: 2, Mine: true}, {Emoji: "b", Count: 1}}}
+	later := Message{Reactions: []Reaction{{Emoji: "b", Count: 2, Mine: true}, {Emoji: "c", Count: 1}}}
+	if got := CurrentReactions(known, later); len(got) != 2 || got[0] != later.Reactions[0] || got[1] != later.Reactions[1] {
+		t.Fatalf("the later copy's reactions, Mine included: %+v", got)
+	}
+	later.MineUnknown = true
+	later.Reactions = []Reaction{{Emoji: "a", Count: 3}, {Emoji: "c", Count: 1}}
+	got := CurrentReactions(known, later)
+	if len(got) != 2 || got[0] != (Reaction{Emoji: "a", Count: 3, Mine: true}) || got[1] != (Reaction{Emoji: "c", Count: 1}) {
+		t.Fatalf("min reactions keep the known Mine flags: %+v", got)
+	}
+	if later.Reactions[0].Mine {
+		t.Fatal("KeepMine leaves its input alone")
+	}
+	if got := KeepMine(known.Reactions, nil); len(got) != 0 {
+		t.Fatalf("no reactions stay none: %+v", got)
+	}
+	// How much is the account's travels with Mine: its Stars.
+	stars := []Reaction{{Emoji: "s", Count: 11, Mine: true, MineCount: 10}}
+	if got := KeepMine(stars, []Reaction{{Emoji: "s", Count: 14}}); got[0] != (Reaction{Emoji: "s", Count: 14, Mine: true, MineCount: 10}) {
+		t.Fatalf("min reactions keep the known count of the account's own: %+v", got)
+	}
+}
+
+func TestOwnIsTheAccountsShare(t *testing.T) {
+	for _, c := range []struct {
+		r    Reaction
+		want int
+	}{
+		{Reaction{Count: 3}, 0},
+		{Reaction{Count: 3, Mine: true}, 1}, // the count not known: one
+		{Reaction{Count: 11, Mine: true, MineCount: 10}, 10},
+	} {
+		if got := c.r.Own(); got != c.want {
+			t.Errorf("%+v: Own() = %d, want %d", c.r, got, c.want)
+		}
+	}
+}

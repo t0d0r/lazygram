@@ -123,7 +123,7 @@ func Names() []string {
 // the whole description: the window wraps it to its width when drawn, so
 // nothing here is wrapped by hand (specs/ui.md, /help).
 const HelpText = `Commands
-  /help, /?              the notes on the mouse, themes and windows, then this command list (F1 too); also /h
+  /help, /?              the notes on the mouse, themes, windows and reactions, then this command list (F1 too); also /h
   /keys                  the keyboard shortcuts; also /shortcuts, /bindings
   /quit, /q              leave lazygram; also /exit
   /refresh, /r           sync now; also /sync
@@ -157,7 +157,7 @@ const HelpText = `Commands
   /read-receipts [on|off]  report a chat read when you focus its window with unread messages; off by default, kept; no argument shows; also /receipts
   /mark-as-read          one receipt for this window's chat, now, whatever /read-receipts says
   /autojoin [on|off]     at start open a window for every chat with unread messages; on by default, kept
-  /feed [on|off]         window 0 shows every chat's messages as they arrive (on, the default) or only its notices (off); kept; no argument shows
+  /feed [on|off]         window 0 shows every chat's messages and the reactions someone adds as they arrive (on, the default) or only its notices (off); kept; no argument shows
   /vim [on|off]          vi keys: Normal and Insert modes on the input, in the lists and the pager (Esc enters Normal, i returns to typing; /keys lists the keys); off by default, kept; no argument shows
   /settings [text]       a menu of every kept setting, in window 0: Enter or Right sets the next value, Left the previous, typing narrows; also /set, /options
 Keyboard shortcuts: type /keys.`

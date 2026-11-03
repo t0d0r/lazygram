@@ -43,6 +43,21 @@ type fakeAPI struct {
 	listErr     error                                 // returned by both member list calls
 	listCalls   []string                              // "full:<chat id>" or "participants:<offset>"
 	marks       []string                              // markDialogUnread calls as "<peer type>:<unread>"
+
+	reactions tg.UpdatesClass // served by MessagesGetMessagesReactions
+	reactErr  error           // returned by it instead
+	polls     []string        // its calls as "<peer type>:<ids>"
+}
+
+func (f *fakeAPI) MessagesGetMessagesReactions(_ context.Context, r *tg.MessagesGetMessagesReactionsRequest) (tg.UpdatesClass, error) {
+	f.polls = append(f.polls, fmt.Sprintf("%T:%v", r.Peer, r.ID))
+	if f.reactErr != nil {
+		return nil, f.reactErr
+	}
+	if f.reactions == nil {
+		return &tg.Updates{}, nil
+	}
+	return f.reactions, nil
 }
 
 func (f *fakeAPI) MessagesMarkDialogUnread(_ context.Context, r *tg.MessagesMarkDialogUnreadRequest) (bool, error) {

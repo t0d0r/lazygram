@@ -97,11 +97,11 @@ in a group whose cached messages still lack their senders' usernames), and
 | `/read-receipts [on\|off]` | read receipts: off by default (kept); on tells Telegram a chat was read when you focus its window with unread messages (after Tab once the window has stayed 400 ms: a window Tab only passed through stays unread); no argument shows the setting |
 | `/mark-as-read`            | one read receipt for this window's chat, now, whatever `/read-receipts` says; clears its "marked as unread" flag too |
 | `/autojoin [on\|off]`      | at start, open a window for every chat with unread messages (on by default, kept); no argument shows the setting |
-| `/feed [on\|off]`          | window 0 shows every chat's messages as they arrive (on, the default) or only its notices (off); kept, takes effect at once; no argument shows the setting |
+| `/feed [on\|off]`          | window 0 shows every chat's messages as they arrive and the reactions people add (on, the default) or only its notices (off); kept, takes effect at once; no argument shows the setting |
 | `/vim [on\|off]`           | vi keys: Normal and Insert modes on the input, in the lists and the pager (off by default, kept, takes effect at once); no argument shows the setting; see [Vim mode](#vim-mode) |
 | `/settings [text]`         | a menu of every kept setting (feed, autojoin, read-receipts, names, theme, fx, mouse, clip, vim) with its value, opened in window 0 from any window; Enter or Right sets the selected one's next value, Left its previous, a click on a row its next; each change is kept and acts at once, as its command; typing (or the text) narrows the rows; Esc closes it; also `/set`, `/options` |
 | `/redraw`, `/clear`        | drop notices, help text and pictures from this window; messages stay |
-| `/refresh`, `/help`, `/quit` | sync now; print the notes on the mouse, themes and windows into the server window, then the command list with every short form last, so the commands are what you see when it ends (it ends by naming `/keys`); leave |
+| `/refresh`, `/help`, `/quit` | sync now; print the notes on the mouse, themes, windows and reactions into the server window, then the command list with every short form last, so the commands are what you see when it ends (it ends by naming `/keys`); leave |
 | `/keys`                    | print the keyboard shortcuts into the server window |
 
 Both lists are wrapped to the window's width as they are drawn and
@@ -144,6 +144,36 @@ wrote it, changes in lazygram as well: at once while lazygram runs, or
 the next time the chat's history is fetched (opening its window,
 `/last 50`) for what happened while it was off. A deleted message leaves
 the screen, the cache and the attachment vault.
+
+## Reactions
+
+A message with reactions ("likes") shows them after its text, in its
+chat's window and in window 0: two spaces, then each emoji with its
+count in square brackets, in Telegram's order, for example
+`<ada> fixed it  [E 3 F 1]` where E is the thumbs-up emoji and F the
+heart. A reaction you sent too is highlighted (reverse video). All
+custom-emoji reactions of a message are counted together as `*`, and a
+paid reaction (a Telegram Star) shows as the star emoji. The counts
+come after a picture's caption and before a bot's buttons, and wrap like
+the text in a narrow window.
+
+When someone adds a reaction while lazygram runs, window 0 says so with
+the chat's name: `-!- #dev: @grace reacted E to ada "first words of the
+message"`, or, where Telegram does not say who (channels), the counts:
+`-!- #news: E 13 F 4 on wire "first words..."`. Your own messages read
+`to your "..."`. Your own reactions (all the Stars you send, and every
+custom emoji of yours counted in `*`), removed reactions and what changed
+while lazygram was off are not announced; the counts just update. These
+notices are chat activity: `/feed off` hides them with the messages, and
+they never open a window or count as unread.
+
+Telegram tells lazygram at once only about reactions to your own
+messages. For everyone else's, lazygram asks Telegram every 20 seconds
+about the messages on the screen of the window you are looking at (in
+window 0, one chat at a time, taking turns), as Telegram asks clients
+to; so a reaction to a message in another window shows when you look at
+it, or the next time its history is fetched. Sending reactions is not
+supported yet.
 
 ## Members of groups and channels
 
