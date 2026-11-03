@@ -319,10 +319,16 @@ completion, and an activity indicator.
   `double tab time 300 ms: Tab twice within it jumps to the next unread
   window` with `unread` and `double tab time 300 ms: Tab twice is off; a
   window a Tab shows for less stays unread` with `off`. Any other
-  argument (`on`, `149`, `1001`, `+300`, `3e2`, `300s`, another word) is
-  the error `/doubletab takes off, last, unread or a time from 150 to
-  1000 ms` and changes nothing, the store included. Tab completes `off`,
-  `last` and `unread` after `/doubletab`; `/help` lists `/doubletab
+  argument (`on`, `149`, `1001` or any larger number, however many
+  digits, `+300`, `3e2`, `300s`, another word) is the error `/doubletab
+  takes off, last, unread or a time from 150 to 1000 ms` and changes
+  nothing, the store included, and a kept time outside 150 to 1000 means
+  400 as well. Decision: the range is checked on the number of
+  milliseconds as typed or kept (code: `tabGapOf`), before it becomes a
+  time, because a time counts 64-bit nanoseconds and a huge number of
+  milliseconds wraps round in it (2^58 + 300 becomes exactly 300 ms),
+  so it would pass as one within the range. Tab completes `off`, `last`
+  and `unread` after `/doubletab`; `/help` lists `/doubletab
   [off|last|unread|<ms>]` and says under `/win last` and `/unread` that
   Tab twice fast does the same with `/doubletab last` or `unread`;
   `/keys` says in the Tab entry that Tab twice fast does as `/doubletab`

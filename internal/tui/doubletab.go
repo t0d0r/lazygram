@@ -77,12 +77,23 @@ func parseTabGap(s string) (time.Duration, bool) {
 	if s == "" || strings.Trim(s, "0123456789") != "" {
 		return 0, false
 	}
-	n, err := strconv.Atoi(s)
-	d := time.Duration(n) * time.Millisecond
-	if err != nil || d < minTabGap || d > maxTabGap {
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
 		return 0, false
 	}
-	return d, true
+	return tabGapOf(n)
+}
+
+// tabGapOf is n milliseconds as the double Tab's time, when n is within
+// minTabGap..maxTabGap. The range is checked on n itself, before it
+// becomes a Duration: n * time.Millisecond can wrap int64 for a large n
+// (2^58 + 300 wraps to exactly 300 ms), which would let a number far out
+// of range through as one within it.
+func tabGapOf(n int64) (time.Duration, bool) {
+	if n < minTabGap.Milliseconds() || n > maxTabGap.Milliseconds() {
+		return 0, false
+	}
+	return time.Duration(n) * time.Millisecond, true
 }
 
 // nearTabGap is the listed time the doubletab-time row steps to from a
@@ -115,9 +126,9 @@ func (m *Model) loadDoubleTab() {
 		m.dblTab = doubleTab(max(slices.Index(doubleTabWords, word), 0)) // another word: off
 	}
 	m.tabGap = defaultTabGap
-	var ms int
+	var ms int64
 	if found, err := m.opt.Store.State(doubleTabTimeKey, &ms); found && err == nil {
-		if d := time.Duration(ms) * time.Millisecond; d >= minTabGap && d <= maxTabGap {
+		if d, ok := tabGapOf(ms); ok {
 			m.tabGap = d
 		}
 	}

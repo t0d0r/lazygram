@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"encoding/json"
 	"maps"
 	"reflect"
 	"strings"
@@ -308,7 +309,11 @@ func TestDoubleTabCommand(t *testing.T) {
 		}
 	}
 	shows("double tab off (400 ms): Tab walks the windows; /doubletab last or unread makes Tab twice fast jump")
-	for _, arg := range []string{"on", "ON", "149", "1001", "junk", "0", "-300", "+300", "3e2", "300s", "ms", "off last", "300 400", "lastt"} {
+	// 288230376151712044 is 2^58 + 300: as milliseconds it wraps int64 to
+	// exactly 300 ms, so it is out of range only when the range is checked
+	// on the number itself.
+	for _, arg := range []string{"on", "ON", "149", "1001", "junk", "0", "-300", "+300", "3e2", "300s", "ms", "off last", "300 400", "lastt",
+		"288230376151712044", "288230376151712044ms", "9223372036854775807", "99999999999999999999"} {
 		bad(arg, tabOff, 400*time.Millisecond)
 	}
 	if _, f1, _, f2 := stored(); f1 || f2 {
@@ -375,11 +380,14 @@ func TestDoubleTabCommand(t *testing.T) {
 
 // TestDoubleTabUnreadableOrOutOfRange: what the store holds that is not a
 // setting is the default: off, and 400 ms; on (the earlier on/off form)
-// is not a setting.
+// is not a setting, and a time far out of range is out of range even
+// when as milliseconds it would wrap int64 into the range (2^58 + 300
+// wraps to 300 ms).
 func TestDoubleTabUnreadableOrOutOfRange(t *testing.T) {
 	for _, c := range []struct {
 		mode, ms any
-	}{{"nonsense", "nonsense"}, {true, 2.5}, {"on", 149}, {"LAST", 1001}, {1, 0}, {nil, -400}, {"", nil}} {
+	}{{"nonsense", "nonsense"}, {true, 2.5}, {"on", 149}, {"LAST", 1001}, {1, 0}, {nil, -400}, {"", nil},
+		{"off", int64(288230376151712044)}, {nil, int64(-288230376151712044 + 600)}, {nil, json.Number("99999999999999999999")}} {
 		st := memStore(t)
 		if c.mode != nil {
 			if err := st.SetState(doubleTabKey, c.mode); err != nil {
