@@ -252,7 +252,7 @@ the maintainer side (build and test evidence, submission steps).
   manager, `-check` still reports, and the exit banner's hint points at
   the package manager. Decision: a file pacman owns is never replaced by
   lazygram, so `pacman -Qkk` stays clean and the next upgrade cannot
-  silently undo an update. The recipe builds v0.4.24, which refuses.
+  silently undo an update. The recipe builds v0.4.25, which refuses.
 - A new release needs: push the `vX.Y.Z` tag (the Release workflow
   publishes it, see Publishing), then the watch does the rest; a
   packaging change at the same version bumps `pkgrel`.
