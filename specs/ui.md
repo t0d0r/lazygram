@@ -1355,9 +1355,9 @@ because a chat client is mostly typing.
 | keys            | Normal mode on the input                                  |
 |-----------------|-----------------------------------------------------------|
 | `h` / `l`       | one character left / right, within the line; `l` stops on its last character |
-| `w`             | the start of the next word, across line breaks; with no word after, the last character |
+| `w`             | the start of the next word, across line breaks; with no word after, the end of the input: its last character, or its last line when that line is empty (an empty line is a stop, as in vi) |
 | `b`             | the start of this word, or of the one before it, across line breaks |
-| `e`             | the end of this word, or of the next one when on its end already, across line breaks |
+| `e`             | the end of this word, or of the next one when on its end already, across line breaks; with no word after, the end of the input, as `w` |
 | `0`             | the start of the line; right after Esc it is window 0 instead (Esc then a digit) |
 | `^`             | the line's first character that is not blank              |
 | `$`             | the line's last character                                 |
@@ -1396,7 +1396,8 @@ because a chat client is mostly typing.
   `S`, `C`) puts what it took into one kill buffer, in place of what it
   held; a delete that takes nothing leaves it. It is lazygram's own: in
   memory only, never the system clipboard, an OSC 52 sequence or a
-  file; it lasts until `/vim off` or the end of the session.
+  file; it lasts until the next `/vim on` or `/vim off` (either one
+  empties it, see The setting) or the end of the session.
 - Undo: every change made in Normal (the deletes, `r`, `p`, `P`, `u`)
   and every entry into Insert from Normal (`i a I A o O`, `cw`, `cc`,
   `S`, `C`, `:`, `/`, `?`) keeps the input as it was before it, one

@@ -112,6 +112,24 @@ func TestVimIsKeptAndStartsInInsert(t *testing.T) {
 	if m.vi.normal {
 		t.Fatal("each /vim on begins in Insert")
 	}
+	// On again while on, with something killed and something to undo:
+	// Insert, with nothing to put and nothing to undo.
+	normalAt(m, "hello", 0)
+	typ(m, "x")
+	if string(m.vi.kill) != "h" || m.vi.undo == nil {
+		t.Fatalf("x kills and can be undone: kill %q undo %v", string(m.vi.kill), m.vi.undo)
+	}
+	m.setVim("on")
+	if m.vi.normal || m.vi.kill != nil || m.vi.undo != nil {
+		t.Fatalf("/vim on again empties the kill buffer and the undo: normal=%v kill %q undo %v", m.vi.normal, string(m.vi.kill), m.vi.undo)
+	}
+	press(m, tea.KeyEsc)
+	for _, k := range "pu" {
+		typ(m, string(k))
+		if curText(m) != "|ello" || !m.vi.normal {
+			t.Fatalf("%c: nothing to put, nothing to undo: %q", k, curText(m))
+		}
+	}
 }
 
 func TestVimUnreadableMeansOff(t *testing.T) {
@@ -298,6 +316,9 @@ func TestVimNormalMotions(t *testing.T) {
 		{"ab\ncd", 0, "w", "ab\n|cd"},
 		{"ab\ncd", 3, "b", "|ab\ncd"},
 		{"ab\ncd", 1, "e", "ab\nc|d"},
+		{"abc\n", 0, "w", "abc\n|"}, // no word after, an empty last line: on it, as vi
+		{"abc\n", 2, "e", "abc\n|"},
+		{"abc\n", 4, "w", "abc\n|"},
 		{"привет мир", 0, "w", "привет |мир"},
 		{"привет мир", 0, "e", "приве|т мир"},
 		{"привет,мир", 0, "w", "привет|,мир"}, // Cyrillic letters are a word, the comma is not
