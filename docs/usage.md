@@ -200,6 +200,8 @@ text). In Normal a typed key is a command, never text, so a stray key
 cannot type or send anything; the status line shows `NORMAL`. Enter,
 Ctrl-X, Tab, the arrows, PgUp / PgDn, Alt-N, the mouse and a paste work
 as always in both modes, and Esc then a digit still switches windows.
+In Normal, Tab and Ctrl-W include the character under the cursor, as
+`a` then the key would: `hi @ali`, Esc, Tab completes `@alice`.
 
 | key (Normal)        | action                                             |
 |---------------------|----------------------------------------------------|

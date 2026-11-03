@@ -1328,13 +1328,23 @@ because a chat client is mostly typing.
   that the terminal delivers as one run are read one at a time, so `dw`
   typed quickly still deletes a word. The keys that keep their meaning
   (below) still change the input as in Insert: a paste goes in at the
-  cursor, line breaks and all, Tab completes, Backspace and Delete
-  delete.
+  cursor, line breaks and all, Tab completes (taking the character
+  under the cursor, below), Backspace and Delete delete.
 - These keep their meaning in Normal: Enter, Ctrl-X and Ctrl-X twice,
   Tab and Shift-Tab, the arrows, Backspace, Delete, Home and End, PgUp
   and PgDn, F1, Ctrl-A, Ctrl-K, Ctrl-W, Ctrl-L, Ctrl-R, Ctrl-N, Ctrl-P,
   Ctrl-C, Alt-N, Alt-Left and Alt-Right, the mouse and a paste. Sending,
   running a command and switching windows leave the mode as it was.
+- Tab with text in the input and Ctrl-W work in Normal as `a`, the key
+  and Esc do in vi: on the text before the cursor up to and including
+  the character under it, where Insert's cursor stood before Esc
+  stepped back onto that character. The cursor then steps back one
+  character within its line, as Esc does. So `hi @ali`, Esc, Tab
+  completes `@alice` as in Insert (not `@al`, leaving the `i` behind),
+  a second Tab lists the candidates as a second Tab in Insert does, and
+  `hello world`, Esc, Ctrl-W leaves `hello ` with the cursor on its
+  blank. On an empty line there is no character to take; Tab on an
+  empty prompt walks the windows as always.
 - With "Enter sends" on, the line break a single Ctrl-X adds goes in
   after the character under the cursor in Normal: where Insert's cursor
   stood before Esc stepped back onto that character. So `hello`, Esc,
@@ -1423,10 +1433,15 @@ Decision: in Normal Ctrl-X's line break goes after the character under
 the cursor, not before it, because Esc stepped back onto the last typed
 character: before it, the break would split that character off, and the
 double Ctrl-X, which removes only a break at the end, would leave the
-draft changed. Decision: the cursor stands on a character, Esc steps
-back, `$` and `l` stop on the last character, `^` and `I` skip leading
-blanks, `cw` keeps
-the blank after the word and a second `u` puts the change back: these
+draft changed. Decision: Tab and Ctrl-W take the character under the
+cursor for the same reason: on the text before it they completed or
+deleted a word without its last character and left that character
+behind (`hi @alice i`, `hello d`), so the same keys did one thing
+before Esc and another after it; vi's insert-mode completion and
+Ctrl-W, reached with `a`, take it too. Decision: the cursor stands on
+a character, Esc steps back, `$` and `l` stop on the last character,
+`^` and `I` skip leading blanks, `cw` keeps the blank after the word
+and a second `u` puts the change back: these
 follow vi, so a vi habit does here what it does in vi. Decision: `dd`,
 `cc` and `S` clear the whole input, a draft of several lines too, rather
 than vi's one line: the input is one message, and Ctrl-U clears it whole

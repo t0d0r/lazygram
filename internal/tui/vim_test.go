@@ -683,12 +683,13 @@ func keptStateOf(m *Model, cmd tea.Cmd) keptState {
 // TestVimNormalKeepsTheOtherKeys: the keys Normal mode does not take do
 // in Normal what they do with vim off, compared on two models from an
 // empty input and from "one two" with the cursor on the t, and Normal
-// stays.
+// stays. Tab and Ctrl-W take the character under the cursor first
+// (TestVimTabAndCtrlWAsAppend).
 func TestVimNormalKeepsTheOtherKeys(t *testing.T) {
 	for _, text := range []string{"", "one two"} {
 		for _, keys := range [][]tea.KeyType{
-			{tea.KeyTab}, {tea.KeyShiftTab}, {tea.KeyPgUp}, {tea.KeyPgUp, tea.KeyPgDown}, {tea.KeyHome}, {tea.KeyHome, tea.KeyEnd},
-			{tea.KeyCtrlA}, {tea.KeyCtrlW}, {tea.KeyLeft}, {tea.KeyRight}, {tea.KeyBackspace}, {tea.KeyDelete},
+			{tea.KeyShiftTab}, {tea.KeyPgUp}, {tea.KeyPgUp, tea.KeyPgDown}, {tea.KeyHome}, {tea.KeyHome, tea.KeyEnd},
+			{tea.KeyCtrlA}, {tea.KeyLeft}, {tea.KeyRight}, {tea.KeyBackspace}, {tea.KeyDelete},
 			{tea.KeyCtrlL}, {tea.KeyCtrlR}, {tea.KeyF1},
 		} {
 			off, on := chatOn(t, 100, 30), vimChat(t)
@@ -706,6 +707,61 @@ func TestVimNormalKeepsTheOtherKeys(t *testing.T) {
 			if !reflect.DeepEqual(a, b) || !on.vi.normal {
 				t.Errorf("%q, %v: with vim off %+v\nin Normal  %+v (normal=%v)", text, keys, a, b, on.vi.normal)
 			}
+		}
+	}
+}
+
+// TestVimTabAndCtrlWAsAppend: in Normal Tab and Ctrl-W work on the text up
+// to and including the character under the cursor, as a, the key and Esc
+// do in vi. Compared with vim off and its cursor after that character,
+// every press leaves the same text, notes, status and window, and
+// Normal's cursor one character back within its line; want is the input
+// in Normal at the end.
+func TestVimTabAndCtrlWAsAppend(t *testing.T) {
+	tab, ctrlW := tea.KeyTab, tea.KeyCtrlW
+	for _, c := range []struct {
+		text string
+		p    int // the character under Normal's cursor
+		keys []tea.KeyType
+		want string
+	}{
+		{"hi @ali", 6, []tea.KeyType{tab}, "hi @alice| "},
+		{"hi @ali", 6, []tea.KeyType{tab, tab}, "hi @alice| "}, // the second Tab lists every chat
+		{"hi @ali there", 6, []tea.KeyType{tab}, "hi @alice|  there"},
+		{"hi @ali there", 5, []tea.KeyType{tab}, "hi @alice| i there"},
+		{"hello world", 10, []tea.KeyType{ctrlW}, "hello| "},
+		{"hello world", 8, []tea.KeyType{ctrlW}, "hello| ld"},
+		{"hello world", 10, []tea.KeyType{ctrlW, ctrlW}, "|"},
+		{"hello", 0, []tea.KeyType{ctrlW}, "|ello"},
+		{"ab\ncd", 3, []tea.KeyType{ctrlW}, "|d"},
+		{"ab\n", 3, []tea.KeyType{ctrlW}, "|"}, // an empty line has no character to take
+		{"ab\n", 3, []tea.KeyType{tab}, "ab\n|"},
+		{"", 0, []tea.KeyType{ctrlW}, "|"},
+		{"", 0, []tea.KeyType{tab}, "|"}, // an empty prompt: Tab walks the windows
+	} {
+		off, on := chatOn(t, 100, 30), vimChat(t)
+		normalAt(on, c.text, c.p)
+		after := c.p // past the character under the cursor, within its line
+		if after < len(c.text) && c.text[after] != '\n' {
+			after++
+		}
+		off.input, off.curBack = []rune(c.text), len(c.text)-after
+		off.history, off.histIdx = slices.Clone(on.history), on.histIdx // /vim on is one more line
+		for _, m := range []*Model{off, on} {
+			m.status, m.isErr = "", false
+		}
+		for i, k := range c.keys {
+			a, b := keptStateOf(off, press(off, k)), keptStateOf(on, press(on, k))
+			if p := a.Pos; p > 0 && c.text != "" && string(off.input)[p-1] != '\n' {
+				a.Pos-- // the step back of Esc, within the line
+			}
+			if !reflect.DeepEqual(a, b) || !on.vi.normal {
+				t.Fatalf("%q on %d, key %d (%v): with vim off, stepped back %+v\nin Normal %+v (normal=%v)",
+					c.text, c.p, i, k, a, b, on.vi.normal)
+			}
+		}
+		if curText(on) != c.want {
+			t.Errorf("%q on %d, %v: %q, want %q", c.text, c.p, c.keys, curText(on), c.want)
 		}
 	}
 }

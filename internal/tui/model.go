@@ -1593,15 +1593,8 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.input, m.curBack = nil, 0
 	case tea.KeyCtrlK:
 		m.cut(m.pos(), m.lineEnd(m.pos()))
-	case tea.KeyCtrlW: // the word before the cursor, with the spaces after it
-		p, i := m.pos(), m.pos()
-		for i > 0 && m.input[i-1] == ' ' {
-			i--
-		}
-		for i > 0 && m.input[i-1] != ' ' {
-			i--
-		}
-		m.cut(i, p)
+	case tea.KeyCtrlW:
+		m.cutWord()
 	case tea.KeyPgUp:
 		w.scroll += page
 	case tea.KeyPgDown:
@@ -2388,6 +2381,19 @@ func (m *Model) pos() int { return len(m.input) - min(max(m.curBack, 0), len(m.i
 func (m *Model) insert(rs ...rune) {
 	p := m.pos()
 	m.input = append(m.input[:p], append(append([]rune(nil), rs...), m.input[p:]...)...)
+}
+
+// cutWord deletes the word before the cursor, with the spaces after it
+// (Ctrl-W).
+func (m *Model) cutWord() {
+	p, i := m.pos(), m.pos()
+	for i > 0 && m.input[i-1] == ' ' {
+		i--
+	}
+	for i > 0 && m.input[i-1] != ' ' {
+		i--
+	}
+	m.cut(i, p)
 }
 
 // cut removes the runes [from, to) of the input, keeping the cursor on the

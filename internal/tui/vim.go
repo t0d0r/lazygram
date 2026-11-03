@@ -201,9 +201,7 @@ func (m *Model) vimKey(k tea.KeyMsg, op rune) (bool, tea.Cmd) {
 		// back onto the character before it. A digit next still switches
 		// windows, the input kept as it is (no escSaved: nothing cleared).
 		m.vi.normal = true
-		if p := m.pos(); p > m.lineStart(p) {
-			m.vimMove(m.vimText().prev(p, m.lineStart(p)))
-		}
+		m.vimStepBack()
 		m.escPending, m.escSaved = true, nil
 		return true, nil
 	}
@@ -218,8 +216,9 @@ func (m *Model) vimKey(k tea.KeyMsg, op rune) (bool, tea.Cmd) {
 }
 
 // normalSpecial reads a key that is not one typed character in Normal
-// mode: Esc, the scrolling keys, and the Alt chords and runs that type
-// nothing here; a paste and every other key go on to the usual code.
+// mode: Esc, the scrolling keys, Tab and Ctrl-W on text, and the Alt
+// chords and runs that type nothing here; a paste and every other key go
+// on to the usual code.
 func (m *Model) normalSpecial(k tea.KeyMsg) (bool, tea.Cmd) {
 	w := m.wins[m.cur]
 	h := m.contentHeight()
@@ -227,6 +226,17 @@ func (m *Model) normalSpecial(k tea.KeyMsg) (bool, tea.Cmd) {
 	switch k.Type {
 	case tea.KeyEsc: // drops a two-key command waiting; a digit next switches windows
 		m.escPending, m.escSaved = true, nil
+	case tea.KeyTab, tea.KeyCtrlW:
+		if len(m.input) == 0 {
+			return false, nil // Tab on an empty prompt walks the windows
+		}
+		m.vimAppendKey(func() {
+			if k.Type == tea.KeyTab {
+				m.complete()
+			} else {
+				m.cutWord()
+			}
+		})
 	case tea.KeyCtrlE: // one line toward the newest
 		w.scroll = max(w.scroll-1, 0)
 	case tea.KeyCtrlY: // one line toward the oldest
@@ -461,12 +471,38 @@ func (m *Model) vimMove(p int) { m.curBack = len(m.input) - p }
 // fast second Ctrl-X finds it there and removes it. Elsewhere the break
 // goes in at the cursor, as with vim off.
 func (m *Model) vimBreakPoint() {
-	if !m.inNormal() {
-		return
+	if m.inNormal() {
+		m.vimPastChar()
 	}
+}
+
+// vimAppendKey runs key, the usual code of a key that works on the text
+// before the cursor (Tab completes its last word, Ctrl-W deletes it), as
+// a, that key and Esc do in vi. Normal's cursor stands on a character,
+// after Esc the last one typed, so that character is part of the text
+// the key works on: "hi @ali", Esc, Tab completes @ali as Insert does.
+// The cursor then steps back onto a character, and a second Tab, which
+// steps past it again, finds the text where the first left it.
+func (m *Model) vimAppendKey(key func()) {
+	m.vimPastChar()
+	key()
+	m.vimStepBack()
+}
+
+// vimPastChar puts the cursor after the character under it, within its
+// line, where a puts Insert's cursor; on an empty line it stays.
+func (m *Model) vimPastChar() {
 	t := m.vimText()
 	p := t.charAt(m.pos())
 	m.vimMove(t.next(p, m.lineEnd(p)))
+}
+
+// vimStepBack puts the cursor on the character before it, within its
+// line, as Esc does on leaving Insert; at a line's start it stays.
+func (m *Model) vimStepBack() {
+	if p := m.pos(); p > m.lineStart(p) {
+		m.vimMove(m.vimText().prev(p, m.lineStart(p)))
+	}
 }
 
 // vimSave keeps the input as it is now for u: the next change is the one
