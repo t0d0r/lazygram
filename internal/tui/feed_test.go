@@ -70,16 +70,19 @@ func TestFeedOffShowsOnlyNoticesInWindow0(t *testing.T) {
 	if got := showsAny(body(m), "first dev line", "second dev line"); len(got) != 2 {
 		t.Fatalf("#dev's window shows its messages: %q\n%s", got, body(m))
 	}
-	// A message that arrives while off: counted, its window opens, the
-	// status says where it went, it is live; window 0 does not show it.
+	// Messages that arrive while off, from a group, a person and a
+	// channel: counted, their windows open, the status says where they
+	// went, they are live; window 0 shows none of them.
 	m.switchTo(0)
 	alice, _ := m.winFor("c2")
 	m.closeWin(alice)
-	before := dev.unread
-	f.msgs = append(f.msgs, mk("c1", "3", "ada", "third dev line", 5), mk("c2", "8", "alice", "late hello", 6))
+	_, news := m.winFor("c3")
+	before, newsBefore := dev.unread, news.unread
+	f.msgs = append(f.msgs, mk("c1", "3", "ada", "third dev line", 5), mk("c2", "8", "alice", "late hello", 6),
+		mk("c3", "9", "wire", "late headline", 7))
 	m.Update(m.syncCmd()())
-	if dev.unread != before+1 || !strings.Contains(m.status, "2 new messages in") {
-		t.Fatalf("arrival while off: unread %d (was %d), status %q", dev.unread, before, m.status)
+	if dev.unread != before+1 || news.unread != newsBefore+1 || !strings.Contains(m.status, "3 new messages in") {
+		t.Fatalf("arrival while off: unread %d (was %d), #news %d (was %d), status %q", dev.unread, before, news.unread, newsBefore, m.status)
 	}
 	if _, w := m.winFor("c2"); w == nil {
 		t.Fatal("a window still opens for a chat that gets a message")
@@ -87,7 +90,7 @@ func TestFeedOffShowsOnlyNoticesInWindow0(t *testing.T) {
 	if !m.live[mk("c1", "3", "ada", "", 5).Key()] {
 		t.Fatal("the message is recorded as live")
 	}
-	if got := showsAny(body(m), "third dev line", "late hello"); len(got) != 0 {
+	if got := showsAny(body(m), "third dev line", "late hello", "late headline"); len(got) != 0 {
 		t.Fatalf("window 0 shows %q with /feed off", got)
 	}
 	// /search in window 0 still searches every chat.
@@ -101,7 +104,7 @@ func TestFeedOffShowsOnlyNoticesInWindow0(t *testing.T) {
 	if !m.feed || m.isErr || !strings.HasPrefix(m.status, "feed on: ") {
 		t.Fatalf("on: feed=%v %q", m.feed, m.status)
 	}
-	if got := showsAny(body(m), append(chatLines, "third dev line", "late hello")...); len(got) != len(chatLines)+2 {
+	if got := showsAny(body(m), append(chatLines, "third dev line", "late hello", "late headline")...); len(got) != len(chatLines)+3 {
 		t.Fatalf("window 0 shows the session's messages again: %q\n%s", got, body(m))
 	}
 }
