@@ -74,6 +74,9 @@ func TestTabCompletesTitlesByNick(t *testing.T) {
 		"/msg kam":  "/msg @stuckoff ",
 		"hi кам":    "hi @stuckoff ",
 		"/win #kam": "/win #kam", // a person, not a group
+		// The deleted account's title, Deleted Account, does not start the
+		// name being typed, which is the last word.
+		"hi Deleted a": "hi Deleted @alice ",
 	} {
 		if got := tabbed(m, typed); got != want {
 			t.Errorf("%q: got %q, want %q", typed, got, want)
@@ -218,6 +221,15 @@ func TestTitleWithSpacesCompletesAcrossWords(t *testing.T) {
 	} {
 		if got := tabbed(m, typed); got != want {
 			t.Errorf("%q: got %q, want %q", typed, got, want)
+		}
+	}
+	// /win takes its whole argument, so Enter finds the name filled in,
+	// spaces and all, not the chats its first word begins.
+	for typed, want := range map[string]string{"/win @Калоян С": "c14", "/win @Цветан И": "c15"} {
+		tabbed(m, typed)
+		press(m, tea.KeyEnter)
+		if m.wins[m.cur].chatID != want || m.isErr {
+			t.Errorf("%q, Tab, Enter: focused %q, %q; want %s", typed, m.wins[m.cur].chatID, m.status, want)
 		}
 	}
 	m.input = nil
