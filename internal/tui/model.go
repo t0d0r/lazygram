@@ -154,7 +154,7 @@ type Model struct {
 	animOn   bool         // the last View showed something animated
 	rcache   *renderCache // rendered messages, reused across ticks
 
-	now          func() time.Time     // the clock the typing state and double clicks run on; tests replace it
+	now          func() time.Time     // the clock the typing state, double clicks and double Tabs run on; tests replace it
 	typing       *domain.TypingState  // who is typing where, from the service's reports
 	typingCh     <-chan domain.Typing // the service's feed; nil when it has none or closed it
 	changeCh     <-chan domain.Change // edits and deletions from the service; nil without
@@ -169,6 +169,13 @@ type Model struct {
 	lastCtrlX  time.Time    // for the double Ctrl-X toggle
 	pending    *pendingSend // text waiting out the double Ctrl-X window before it is sent
 	pendingSeq int
+
+	lastWin *win                                 // the window current before this one (/win last, a double Tab); nil: none yet (lastwin.go)
+	tabAt   time.Time                            // when an empty-prompt Tab switched windows: a second one within tabGap is a double Tab
+	tabGo   tabHop                               // what that Tab left behind, for the second one
+	held    *tabHeld                             // the window an empty-prompt Tab showed, until it is left or its receipt goes
+	heldSeq int                                  // numbers the held receipts, so a late tabReadMsg finds only its own
+	after   func(time.Duration, tea.Msg) tea.Cmd // delivers a message after a pause (tickAfter: the Tab's held receipt); tests replace it
 
 	listCur     int     // selected row in the list view
 	listSrc     listSrc // what the list view shows
@@ -290,7 +297,7 @@ func New(opt Options) *Model {
 		listed: map[string][]domain.Participant{}, listAsked: map[string]bool{}, listHidden: map[string]bool{},
 		live: map[string]bool{}, reporting: map[string]bool{}, reportNext: map[string]pendingReport{}, gone: map[string]bool{},
 		wins: []*win{{}}, status: "type /help for commands", started: time.Now(), fx: true, rcache: &renderCache{},
-		now: time.Now, typing: domain.NewTypingState(domain.DefaultTypingTTL)}
+		now: time.Now, after: tickAfter, typing: domain.NewTypingState(domain.DefaultTypingTTL)}
 	if found, err := opt.Store.State(fxKey, &m.fx); !found || err != nil {
 		m.fx = true
 	}
@@ -981,6 +988,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.setInfo("reported " + m.nameOf(msg.chatID) + " unread")
 		}
 		return m, m.reported(msg.chatID)
+	case tabReadMsg:
+		return m, m.heldRead(msg)
 	case sendLaterMsg:
 		if p := m.pending; p != nil && p.seq == msg.seq {
 			m.pending = nil
@@ -1360,16 +1369,28 @@ func (m *Model) openWin(chatID string) (int, *win) {
 }
 
 // switchTo makes window i current and fetches its recent history once.
-func (m *Model) switchTo(i int) tea.Cmd {
+func (m *Model) switchTo(i int) tea.Cmd { return m.focus(i, false) }
+
+// focus is switchTo; held (an empty-prompt Tab) holds the read receipt
+// back until the window has stayed current for tabGap, and puts back what
+// it cleared when the window is left sooner (lastwin.go).
+func (m *Model) focus(i int, held bool) tea.Cmd {
 	i = min(max(i, 0), len(m.wins)-1)
+	var left tea.Cmd
 	if i != m.cur {
+		left = m.leaveHeld()
+		m.lastWin = m.wins[m.cur] // by identity: /move and closing other windows keep it
 		m.cur = i
+		m.tabAt = time.Time{} // a double Tab never spans another focus (tab arms it after its own)
 		m.saveLayout()
 	}
 	m.mode = modeWin
 	m.lastCtrlX = time.Time{} // a double Ctrl-X never spans two windows
 	w := m.wins[i]
 	receipt := m.readCmd(w) // a focus that clears unread messages is what a receipt reports
+	if held && w.unread > 0 {
+		receipt = m.hold(w, receipt)
+	}
 	w.clearUnread()
 	if w.chatID != "" {
 		m.visited[w.chatID] = true
@@ -1378,6 +1399,9 @@ func (m *Model) switchTo(i int) tea.Cmd {
 		m.setInfo("")
 	}
 	cmds := m.typingTimers() // the window shown decides whether the light runs
+	if left != nil {
+		cmds = append(cmds, left)
+	}
 	if receipt != nil {
 		cmds = append(cmds, receipt)
 	}
@@ -1460,6 +1484,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	if k.Type != tea.KeyTab {
 		m.comp = nil
+		m.tabAt = time.Time{} // any other key between two Tabs: no double Tab
 	}
 	m.listSaid = false // the settings menu's rule shows its keys again; a change says itself anew
 	if k.Type != tea.KeyUp && k.Type != tea.KeyDown {
@@ -1547,10 +1572,11 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.holdSend()
 	case tea.KeyTab:
 		// An empty prompt: Tab walks the windows, from the settings menu
-		// too, which is window 0's view (the switch closes it); in /list
-		// and /win it completes the filter.
+		// too, which is window 0's view (the switch closes it), and twice
+		// fast goes back to the last window; in /list and /win it
+		// completes the filter.
 		if (m.mode == modeWin || m.settingsOpen()) && len(m.input) == 0 {
-			return m, m.switchTo((m.cur + 1) % len(m.wins))
+			return m, m.tab()
 		}
 		m.complete()
 	case tea.KeyShiftTab:
@@ -2348,12 +2374,21 @@ func (m *Model) slowStep() {
 }
 
 // winCommand implements /win: no argument (or "list") opens the selectable
-// windows list, a number switches, a name opens or switches to that chat's
-// window.
+// windows list, "last" goes back to the last focused window, a number
+// switches, a name opens or switches to that chat's window. A chat named
+// list or last is reached with its sigil (/win @last).
 func (m *Model) winCommand(arg string) (tea.Model, tea.Cmd) {
 	if arg == "" || strings.EqualFold(arg, "list") {
 		m.mode, m.listSrc, m.listCur, m.listAct, m.input, m.curBack = modeList, listWindows, m.cur, 0, nil, 0
 		return m, nil
+	}
+	if strings.EqualFold(arg, "last") {
+		i := m.lastWindow()
+		if i < 0 {
+			m.setErr("no last window")
+			return m, nil
+		}
+		return m, m.switchTo(i)
 	}
 	if n, err := strconv.Atoi(arg); err == nil {
 		if n < 0 || n >= len(m.wins) {
@@ -2422,7 +2457,7 @@ type completion struct {
 // argWords are the fixed words a command takes as its first argument,
 // whatever its spelling (/win, /w, /j list; /clip, /clipboard tool).
 var argWords = map[command.Kind][]string{
-	command.Win:      {"list"},
+	command.Win:      {"list", "last"},
 	command.List:     {"--show-deleted"},
 	command.Receipts: {"on", "off"},
 	command.AutoJoin: {"on", "off"},
@@ -3205,7 +3240,7 @@ People are @name, groups and channels are #name.`
 // logical line each, laid out as in command.HelpText and wrapped when
 // drawn.
 const keyHelp = `Keys
-  Tab                    on an empty prompt: next window (Shift-Tab previous); otherwise complete like bash: a command, a @user / #chan or a theme (in a group or channel window its @nicks, in the text and after /whois); Tab again lists the possibilities
+  Tab                    on an empty prompt: next window (Shift-Tab previous), twice fast: back to the last window, as /win last; otherwise complete like bash: a command, a @user / #chan or a theme (in a group or channel window its @nicks, in the text and after /whois); Tab again lists the possibilities
   Ctrl-X                 send the typed text to this chat (after a short pause), as typed: a line starting with / goes out as a message, never as a command (Enter runs commands); Enter then adds a line to the message
   Ctrl-X twice (fast)    toggle "Enter sends" for this window; nothing is sent; Ctrl-X then adds a line instead, except to a line starting with / (no leading space), which it still sends as text
   Ctrl-N / Ctrl-P        next / previous window (Alt-Right / Alt-Left too)

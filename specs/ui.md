@@ -38,9 +38,9 @@ completion, and an activity indicator.
   `/theme`, `/autojoin`, `/read-receipts`, `/whois`, `/send`,
   `/open <link>`, Ctrl-L, `/about`, `/mark-as-read`, `/names`, `/last`,
   Up and Down, `/mouse`, PgUp and PgDn, `/move` and `/close`, `/feed
-  off`, `/settings`, `/vim on`), so the pair
-  differs between starts (`Options.Rand` draws them, `rand.IntN` unless
-  a test injects one). They are printed once per start, in window 0 only,
+  off`, `/settings`, `/win last` and the double Tab, `/vim on`), so
+  the pair differs between starts (`Options.Rand` draws them,
+  `rand.IntN` unless a test injects one). They are printed once per start, in window 0 only,
   as part of its start-up screen, so they roll in with it when window 0
   is the window shown at start; a chat list,
   `/refresh` or a poll never prints them again, and `/redraw` drops them
@@ -157,6 +157,69 @@ completion, and an activity indicator.
   unsigned posts need none), the first show fetches the last 100, so
   `Store.Refresh` learns those senders' usernames (see Members).
   Channels keep 10: their posts never carry a sender id.
+- The last focused window is the window that was current before the
+  current one, Alt-Tab style. Every focus change sets it: Tab, Shift-Tab,
+  Ctrl-N / Ctrl-P, Alt-N, Esc N, `/win N`, `/win @name`, `/win last`,
+  `/msg` opening or focusing a window, a click on a window tag, a chat
+  name or a nick, Enter or a click in `/list` and `/win`, and `/help`,
+  F1, `/keys` and `/settings`, which focus window 0; only the first Tab of
+  a double Tab does not (below). It is the window, not its number: `/move`
+  and closing other windows do not change which window it is. Closing it
+  leaves none, and so does closing the current window when that makes the
+  last one current. Window 0 counts like any other. It is kept for the
+  session only, never in the layout. `/win last` (any spelling of `/win`:
+  `/w last`, `/j last`) switches to it, so repeated it toggles between
+  two windows; with none it is the error `no last window` and nothing
+  switches. `last` is a fixed first word of `/win`, as `list` is, and Tab
+  completes both: a chat named last (or list) is reached with its sigil,
+  `/win @last`, `/win #last`.
+  On an empty prompt (in a window, or in the settings menu, where Tab
+  switches windows too) Tab twice fast does the same. The first Tab
+  switches to the next window at once, as a single Tab always did; a
+  second Tab within 400 ms of it (`tabGap`, the same as `clickGap` for a
+  double click; exactly 400 ms still counts), with no other key and no
+  other focus change between (a click on the window already shown, its
+  tag or its chat name, is no focus change), switches instead to the
+  window that was the last focused one before the first Tab. The double
+  Tab as a whole is "go to the last window": afterwards the last focused
+  window is the one where it began, so another double Tab goes back.
+  When the window the first Tab showed is the last window itself, the
+  second Tab stays there. With no
+  last window the second Tab is a plain Tab (the next window). A second
+  Tab never arms a third: a third fast Tab is a first Tab again (the next
+  window), and a fourth fast one is its second. Shift-Tab is unchanged and
+  never part of a double Tab; any key between two Tabs, Shift-Tab
+  included, makes them two plain Tabs. With text in the prompt Tab
+  completes as before, its own "a second Tab lists" included (see
+  Completion).
+  The window the first Tab passed through is left as it was: its unread
+  count comes back (so `Act` and the window bar mark it again) and no read
+  receipt is sent for it, even with `/read-receipts on` (see Read
+  receipts). A message deleted while it was shown (by the service, or by
+  the first fetch that the show started) does not come back in that
+  count, so the count still goes with the window's messages. The first
+  fetch of a window never shown before, its member list and a heal its
+  show started may still run: they are reads, they change nothing at the
+  service. The chats-visited count of the exit statistics keeps it. The
+  same holds for every window an empty-prompt Tab showed and that is left
+  within 400 ms of that Tab, whatever leaves it: a plain second Tab (no
+  last window), a third fast Tab, Shift-Tab, Ctrl-N, Alt-N, a click or a
+  command. It was only passed through: it gets its unread count back and
+  nothing is sent for that Tab, so whatever focuses it again reports it
+  as that focus does (Alt-N at once, another Tab 400 ms later). A window
+  left later than 400 ms after the Tab was read. Fast Tabs therefore no
+  longer walk two windows: walking needs a pause of more than 400 ms
+  between Tabs, or Ctrl-N / Ctrl-P. Decision: the first Tab acts at once,
+  so a single Tab stays as immediate as it always was, as a click does
+  (the first click of a double click acts at once too); waiting 400 ms for
+  a possible second Tab would slow every window switch. Decision: the hop
+  is undone and its receipt held back because a receipt tells the other
+  side that a message was read, and a window flashed for a fraction of a
+  second on the way to another was not read; its unread count comes back
+  for the same reason, whatever leaves it, so that a window is never
+  marked read here without being reported read once it is read. Only an
+  empty-prompt Tab holds its receipt back, and only for 400 ms; every
+  other way of focusing reports at once, as before.
 - The status line shows `[Act: 2,3]`: the windows with unread messages.
   When a sync brings messages from others the status message (on the
   rule) says where they went: `3 new messages in 2:#dev (2), 3:@alice`,
@@ -488,6 +551,7 @@ last, as the table does in `/keys`.
 | `/refresh`, `/r`              | sync now                                             |
 | `/list [text]`, `/ls`         | selectable chat list; `--show-deleted` includes deleted accounts |
 | `/win`, `/win list`           | selectable list of the open windows; Enter focuses   |
+| `/win last`                   | switch to the last focused window (the one current before this one); repeated, it toggles between two windows; `no last window` when there is none; Tab twice fast on an empty prompt does the same; a chat named last is `/win @last` (see Windows) |
 | `/win N`                      | switch to window N (0 is the server window)          |
 | `/move N`                     | move this window to position N                       |
 | `/win @user`, `/win #chan`    | open or switch to that chat's window                 |
@@ -1129,15 +1193,27 @@ own, whatever it shows; only an explicit request (`/mark-as-read`, the
 argument says so. `/read-receipts on` (kept in the state store under
 `read_receipts`; absent or unreadable means off) makes lazygram report a
 chat read at the moments it marks the chat read itself: when a window
-with unread messages is focused (`/win N`, `/win @name`, Alt-N, Ctrl-N,
-Tab, a click on the window bar or a list row). The report covers the
-newest message lazygram holds for the chat (`Provider.MarkRead` with that
-message id), so what lazygram has not shown stays unread at the service;
-with no message of the chat known yet nothing is sent. Nothing is sent
-for the server window, for a window without unread messages, for a
-message arriving in the window already shown, for opening or filtering a
-list, or for the pager. A failed report shows in the status line and the
-server window and is not retried; the local unread count is cleared
+with unread messages is focused (`/win N`, `/win @name`, `/win last`,
+Alt-N, Ctrl-N, a click on the window bar or a list row, and Tab, 400 ms
+later as below). The report covers the newest message lazygram holds
+for the chat (`Provider.MarkRead` with that message id), so what
+lazygram has not shown stays unread at the service; with no message of
+the chat known yet nothing is sent. A window focused by Tab on an empty
+prompt (either Tab of a double Tab included) is reported once it has
+stayed current for 400 ms (`tabGap`): the receipt, for the newest
+message held at the Tab, is sent when a delayed message comes 400 ms
+after the Tab and the window was neither left since nor closed (and,
+should the window be left later than 400 ms after the Tab before that
+message comes, as it is left). A window left within those 400 ms was
+only passed through: it gets its unread count back and nothing is sent
+for that Tab; whatever focuses it again reports it as that focus does,
+once. So the window a double Tab passes through is not reported (see
+Windows for the reason); every other way of focusing reports at once.
+Nothing is sent for the server window, for a window without unread
+messages, for a message arriving in the window already shown, for
+opening or filtering a list, or for the pager. A failed report shows in
+the status line and the server window and is not retried; the local
+unread count is cleared
 either way. `/mark-as-read` sends one report for the current window's
 chat on request, clears its unread count, and leaves the setting alone:
 it works with receipts off and never turns them on. It is an error in
@@ -1248,7 +1324,7 @@ match the plain comparison would find.
 
 | key                  | action                                            |
 |----------------------|---------------------------------------------------|
-| Tab / Shift-Tab      | empty prompt: next / previous window (from the settings menu too, which the switch closes); else complete like bash (a second Tab lists): commands, chats, themes, `out`, attachment ids and the chat's recent links after `/open`, paths after `/send`, a command's settings (`/autojoin off`, `/clip tool`); in a group or channel window its `@nicks` after `/whois` and in message text |
+| Tab / Shift-Tab      | empty prompt: next / previous window (from the settings menu too, which the switch closes), at once; Tab twice within 400 ms: the last focused window, as `/win last`, leaving the window the first Tab showed as it was (unread count, no read receipt; see Windows); Shift-Tab is never part of a double Tab; else complete like bash (a second Tab lists): commands, chats, themes, `out`, attachment ids and the chat's recent links after `/open`, paths after `/send`, a command's settings (`/autojoin off`, `/clip tool`); in a group or channel window its `@nicks` after `/whois` and in message text |
 | Ctrl-X twice         | toggle "Enter sends" for this window (Ctrl-X then adds a line break to plain text) |
 | Ctrl-N / Ctrl-P      | next / previous window (Alt-Right / Alt-Left too) |
 | Alt-0 .. Alt-9       | window 0 .. 9; Esc followed by the digit does the same (the typed input survives) |
@@ -1389,7 +1465,7 @@ because a chat client is mostly typing.
 | Ctrl-D / Ctrl-U | scroll half a page (half the content height) toward the newest / the oldest |
 | Ctrl-F / Ctrl-B | scroll a page, as PgDn / PgUp                             |
 | `gg` / `G`      | the oldest loaded line, as Home / the newest line (scroll 0), as End |
-| `gt` / `gT`     | the next / previous window, as Tab / Shift-Tab on an empty prompt, also with text typed (the input stays) |
+| `gt` / `gT`     | the next / previous window, as Ctrl-N / Ctrl-P, also with text typed (the input stays); never part of a double Tab, so the receipt goes at once |
 | `:`             | Insert with `/` in an empty input: a command line         |
 | `/`, `?`        | Insert with `/search ` in an empty input: a search, in the pager |
 
@@ -1543,7 +1619,8 @@ onto a character instead, see Vim mode).
 
 On an empty prompt in a window, and in the settings menu (the switch
 closes it), Tab switches to the next window and Shift-Tab to the
-previous one. In the settings menu's filter Tab completes the names of
+previous one; Tab twice within 400 ms goes to the last focused window
+(see Windows). In the settings menu's filter Tab completes the names of
 the settings (`re` -> `read-receipts`); a line starting with `/` there
 completes as a command line. With text typed, Tab completes the word
 before the cursor like bash and keeps what follows the cursor. A line that is one
@@ -1568,7 +1645,7 @@ server window (an `/open <link>` typed there still works).
 In a group or channel window the `/whois` argument and the words of
 message text complete that chat's `@nicks` instead (see Members).
 Otherwise a command's own first-argument words, whatever its spelling
-(`/win list`, `/list --show-deleted`, `/autojoin on|off`,
+(`/win list|last`, `/list --show-deleted`, `/autojoin on|off`,
 `/feed on|off`, `/read-receipts on|off`, `/vim on|off`,
 `/clip auto|osc52|tool|off`),
 and chat names

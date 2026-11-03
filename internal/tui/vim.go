@@ -335,7 +335,7 @@ func (m *Model) vimSecond(op, r rune) tea.Cmd {
 	p := t.charAt(m.pos())
 	le := m.lineEnd(p)
 	switch string([]rune{op, r}) {
-	case "gt": // the next window, as Tab on an empty prompt
+	case "gt": // the next window, as Ctrl-N (never part of a double Tab)
 		return m.switchTo((m.cur + 1) % len(m.wins))
 	case "gT":
 		return m.switchTo((m.cur + len(m.wins) - 1) % len(m.wins))

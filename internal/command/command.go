@@ -129,6 +129,7 @@ const HelpText = `Commands
   /refresh, /r           sync now; also /sync
   /list [text]           chat list: @people and #channels; also /ls, /chats
   /win, /win list        list of the open windows
+  /win last              back to the window focused before this one; again goes back (Tab twice fast does it too); a chat named last is /win @last
   /win N                 switch to window N (0 is the server window)
   /win @user | #chan     open or switch to that chat's window; /win is also /w, /window, /j, /join, /query
   /close [N]             close a window; also /wc, /part
