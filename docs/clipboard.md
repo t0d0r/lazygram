@@ -17,6 +17,21 @@ a terminal.
   `copied 42 characters via terminal and pbcopy` or `copied 3 lines ...`.
   One row is reported in characters, several rows in lines. Trailing
   blanks are dropped from each row; rows are joined with newlines.
+- The selection stays highlighted after the release, like a
+  terminal's, so you see what was copied (a word, a row and a
+  Shift-click's extension too). The next click removes it; the next
+  drag's selection takes its place. It is drawn on screen cells and
+  cannot follow the text, so it also goes as soon as the text under it
+  changes: scrolling, a new message moving the lines, another window,
+  `/list` or `/settings`, typing into the input row it covers, or the
+  `copied` message itself when the selection covers the status line
+  and the message changes it (in `/list`, `/win`, `/settings` and the
+  history pager that line shows the view's own text, so there the
+  selection stays). A cursor that moves inside it removes it too, since
+  the highlight would hide it: the cursor row of a list and its chosen
+  button, the input cursor, the active window's tag in the window bar.
+  Scrolling back does not bring it back. Resizing the terminal and
+  `/mouse` off remove it too.
 - A press and release on the same cell is a click, as before. A drag
   that starts on a link selects the link text instead of opening it.
 - Double click copies the word under the pointer, triple click the
@@ -60,7 +75,7 @@ encrypted state, like `/mouse`, `/fx` and the theme.
 | `auto`  | both channels below (the default)                               |
 | `osc52` | the terminal, by the OSC 52 escape sequence                     |
 | `tool`  | a system clipboard command: `pbcopy`, `wl-copy`, `xclip`, `xsel`, `clip` |
-| `off`   | dragging, double, triple and Shift clicks copy nothing; single clicks still work |
+| `off`   | dragging, double, triple and Shift clicks copy nothing (the selection still shows and stays); single clicks still work |
 
 OSC 52 is the escape sequence terminals accept to set the clipboard.
 lazygram writes it into its own frame, so it reaches the terminal in
@@ -117,9 +132,10 @@ The status shows `xclip failed: ...` or `gave up after 5s`: the tool is
 there but cannot reach the clipboard (no display, a stale `DISPLAY`,
 a sandboxed terminal). Switch to `/clip osc52` or fix the display.
 
-Dragging does nothing and clicks still work: `/clip` is `off`. Dragging
-selects with the terminal's own highlight instead: `/mouse` is off, or
-you are holding Shift or Option.
+Dragging highlights but copies nothing, the status says nothing, and
+clicks still work: `/clip` is `off`. Dragging selects with the
+terminal's own highlight instead: `/mouse` is off, or you are holding
+Shift or Option.
 
 Shift-click does not extend the selection but starts the terminal's own
 selection: the terminal keeps Shift for itself. Drag again from the
