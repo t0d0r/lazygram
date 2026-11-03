@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
+	"github.com/muesli/termenv"
 )
 
 func TestSelectionOrderAndCols(t *testing.T) {
@@ -490,6 +492,36 @@ func wantDropped(t *testing.T, m *Model) {
 	}
 }
 
+// TestKeptSelectionGoesWithMouseOffInTheMenu: the mouse row of the
+// settings menu turns reporting off as /mouse does, and drops the kept
+// highlight though the row under it stays as it was.
+func TestKeptSelectionGoesWithMouseOffInTheMenu(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	m := setup(t, newFake())
+	m.clipMode = clipOSC52
+	enter(m, "/settings")
+	for range 6 { // the cursor on the mouse row first: moving it later would drop the highlight
+		press(m, tea.KeyDown)
+	}
+	if s := m.settingRows()[m.listCur]; s.name != "mouse" {
+		t.Fatalf("cursor on %q", s.name)
+	}
+	m.View()
+	x, y := rowOf(t, m, "feed")
+	drag(m, x, y, x+3, y)
+	copied(t, m, "feed")
+	wantMarked(t, m.View(), "feed")
+	before := m.plainRow(y)
+	press(m, tea.KeyEnter)
+	if m.mouseOn {
+		t.Fatal("the mouse row turns reporting off")
+	}
+	wantDropped(t, m)
+	if m.plainRow(y) != before {
+		t.Fatalf("the row changed: %q", m.plainRow(y))
+	}
+}
+
 // TestKeptSelectionGoesWhenACursorOnItMoves: a cursor drawn only in
 // colour (the settings menu's row, the chosen button of /list, the input
 // cursor, the active window's tag) would hide under the highlight, so one
@@ -591,6 +623,108 @@ func TestKeptSelectionOverAnUnchangedRuleStays(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestKeptSelectionGoesWhenAMiddleRowChanges: every row a selection
+// covers is checked, whichever way it was dragged; here it is dragged
+// up from the status line, and the rule between changes.
+func TestKeptSelectionGoesWhenAMiddleRowChanges(t *testing.T) {
+	t.Setenv("TERM", "xterm-256color")
+	m := setup(t, newFake())
+	m.clipMode = clipOSC52
+	m.View()
+	rule := len(m.screen) - 4
+	above := m.plainRow(rule - 1)
+	drag(m, 5, rule+1, 2, rule-1)
+	if !strings.HasPrefix(m.status, "copied 3 lines via terminal") {
+		t.Fatalf("status: %q", m.status)
+	}
+	wantDropped(t, m)
+	if m.plainRow(rule-1) != above {
+		t.Fatalf("the first row changed: %q", m.plainRow(rule-1))
+	}
+}
+
+// TestHoverAndOtherButtonsKeepTheSelection: only a left-button press
+// drops the kept highlight; the pointer moving with no button held, and a
+// right or middle click, leave it.
+func TestHoverAndOtherButtonsKeepTheSelection(t *testing.T) {
+	m, x, y := keptDrag(t)
+	m.Update(tea.MouseMsg{X: x + 3, Y: y, Action: tea.MouseActionMotion, Button: tea.MouseButtonNone})
+	wantMarked(t, m.View(), "copy me")
+	for _, b := range []tea.MouseButton{tea.MouseButtonRight, tea.MouseButtonMiddle} {
+		m.Update(tea.MouseMsg{X: x + 9, Y: y, Action: tea.MouseActionPress, Button: b})
+		wantMarked(t, m.View(), "copy me")
+		m.Update(tea.MouseMsg{X: x + 9, Y: y, Action: tea.MouseActionRelease, Button: tea.MouseButtonNone})
+		wantMarked(t, m.View(), "copy me")
+	}
+}
+
+// TestTypingElsewhereKeepsTheSelection: a key that changes no row the
+// selection covers leaves it, the input cursor moving on its own row too.
+func TestTypingElsewhereKeepsTheSelection(t *testing.T) {
+	m, _, _ := keptDrag(t)
+	typ(m, "x")
+	wantMarked(t, m.View(), "copy me")
+}
+
+// TestKeptSelectionIgnoresStyling: rows are compared as plain text, so
+// the running light over a hovered nick on a covered row, which restyles
+// the row, leaves the highlight.
+func TestKeptSelectionIgnoresStyling(t *testing.T) {
+	old := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor) // test output has no colours otherwise
+	applyTheme(themes["default"])
+	t.Cleanup(func() { lipgloss.SetColorProfile(old); applyTheme(themes["default"]) })
+	m, _, y := keptDrag(t)
+	m.fx = true
+	styled, plain := m.screen[y], m.plainRow(y)
+	i := strings.Index(plain, "alice")
+	if i < 0 {
+		t.Fatalf("no nick on the row: %q", plain)
+	}
+	m.Update(tea.MouseMsg{X: ansi.StringWidth(plain[:i]) + 1, Y: y, Action: tea.MouseActionMotion, Button: tea.MouseButtonNone})
+	if m.hover == "" {
+		t.Fatal("the nick is not hovered")
+	}
+	frame := m.View()
+	if m.screen[y] == styled || m.plainRow(y) != plain {
+		t.Fatalf("the hover restyles the row and keeps its text: %q", m.plainRow(y))
+	}
+	if !slices.Contains(marked(frame), "copy me") || m.kept == nil {
+		t.Fatalf("highlighted: %q", marked(frame))
+	}
+}
+
+// TestKeptSelectionSurvivesAClipboardError: the highlight stays when the
+// clipboard tool fails, or when /clip tool finds none.
+func TestKeptSelectionSurvivesAClipboardError(t *testing.T) {
+	t.Run("the tool fails", func(t *testing.T) {
+		m, _, _ := keptDrag(t)
+		m.Update(clipDoneMsg{tool: "xclip", err: errors.New("exit status 1")})
+		if !m.isErr || !strings.HasPrefix(m.status, "xclip failed") {
+			t.Fatalf("status: %q", m.status)
+		}
+		wantMarked(t, m.View(), "copy me")
+	})
+	t.Run("no tool", func(t *testing.T) {
+		t.Setenv("TERM", "xterm-256color")
+		t.Setenv("PATH", t.TempDir()) // nothing to find, nothing is run
+		for _, v := range []string{"WAYLAND_DISPLAY", "DISPLAY", "WSL_DISTRO_NAME"} {
+			t.Setenv(v, "")
+		}
+		f := newFake()
+		f.msgs = append(f.msgs, mk("c1", "9", "alice", "copy me please", 4))
+		m := setup(t, f)
+		m.clipMode = clipTool
+		m.View()
+		x, y := rowOf(t, m, "copy me please")
+		drag(m, x, y, x+6, y)
+		if !strings.HasPrefix(m.status, "no clipboard tool found") {
+			t.Fatalf("status: %q", m.status)
+		}
+		wantMarked(t, m.View(), "copy me")
+	})
 }
 
 func TestDragOnLinkSelectsInsteadOfOpening(t *testing.T) {
