@@ -85,7 +85,7 @@
 - [x] point the recipe at the latest release: v0.4.20, entry and icon from the tarball, `wl-clipboard` optional, rebuilt and tested in Arch Linux and Arch Linux ARM containers (packaging/omarchy/README.md)
 - [x] v0.4.21 released (assets verified against SHA256SUMS, the stable installer URL installs it); Homebrew formula at 0.4.21; the recipe builds v0.4.21, built and tested in Arch Linux and Arch Linux ARM containers (packaging/omarchy/README.md)
 - [x] submit: fork omacom/omarchy-pkgs, copy packaging/omarchy/lazygram to pkgbuilds/lazygram, open the PR: omacom/omarchy-pkgs#2022 for 0.4.21, validators rerun on their master first (packaging/omarchy/README.md, packaging/omarchy/PR.md)
-- [ ] omacom/omarchy-pkgs#2022 (now 0.4.22): a maintainer's build-approved label, green builds on both architectures, merge; answer review comments
+- [ ] omacom/omarchy-pkgs#2022 (now 0.4.23): a maintainer's build-approved label, green builds on both architectures, merge; answer review comments
 - [ ] after the package is published: README install line "omarchy pkg add lazygram" first, verify both channels and architectures
 - [ ] man page and shell completions (optional; the recipe would install them)
 
@@ -154,7 +154,7 @@
 - [x] v0.4.22 from the Release workflow: assets and provenance verified, Homebrew formula at 0.4.22, PKGBUILD at 0.4.22 built and tested on both architectures, omacom/omarchy-pkgs#2022 moved to 0.4.22 (session/2026-11-03-release-0422.md)
 - [x] v0.4.23 from the Release workflow: assets and provenance verified, the installer URL installs it, PKGBUILD at 0.4.23 built and tested in Arch Linux ARM (session/2026-11-03-release-0423.md)
 - [ ] Homebrew formula at 0.4.23: committed in the tap, not pushed yet
-- [ ] omacom/omarchy-pkgs#2022: move to 0.4.23 (packaging/omarchy/README.md, Submit)
+- [x] omacom/omarchy-pkgs#2022 moved to 0.4.23: validators rerun on their master `30fed32`, recipe built on both architectures (packaging/omarchy/README.md, Submit)
 - [x] delete the GitHub releases v0.3.0 to v0.4.21 after v0.4.22 is verified; their tags stay (specs/release.md, Decisions)
 - [x] repository settings: Dependabot alerts and security updates, immutable releases, ruleset `release tags` (no deletion or move of `v*`), ruleset `master` requires a pull request and a passing `Linux` check on an up-to-date branch, no bypass (specs/ci.md, Repository settings)
 - [x] head branches deleted when their pull request is merged; the merged ones from #11 to #14 removed (specs/ci.md, Repository settings)

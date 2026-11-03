@@ -90,12 +90,14 @@ touches the recipe; omarchy-pkgs' builders have the room.
 
 The v0.4.23 recipe (only `pkgver` and the checksum changed; the release
 adds the clipperhouse width modules to go.sum) was built on 2026-11-03
-in Arch Linux ARM only, the same way: every check in the aarch64 column
-above gave the same result, with `lazygram-0.4.23-1-aarch64.pkg.tar.xz`
-(5.3 MiB, 21.2 MiB installed), `lazygram 0.4.23` and "0.4.23 is up to
-date". With about 1.2 GiB of the VM taken by other containers,
+on both architectures, the same way: every check in the table gave the
+same result, with `lazygram-0.4.23-1-aarch64.pkg.tar.xz` (5.3 MiB, 21.2
+MiB installed) and `lazygram-0.4.23-1-x86_64.pkg.tar.zst` (8.1 MiB,
+22.4 MiB installed), `lazygram 0.4.23` and "0.4.23 is up to date". With
+about 1.2 GiB of the VM taken by other containers, aarch64 with
 `GOMAXPROCS=2` was killed again on `gotd/td/tg`; `GOMAXPROCS=1` with
-`GOGC=50` and a 1500m `/tmp` built it in 349 s. x86_64 was not rebuilt.
+`GOGC=50` and a 1500m `/tmp` built it in 349 s, and x86_64 under
+emulation in 955 s.
 
 omarchy-pkgs has validators of its own that run in its CI. To run them
 before opening the PR (from a checkout of that repository, on Arch, with
@@ -111,20 +113,20 @@ tests/package-metadata.sh
 bin/build --package lazygram --dry-run  # the plan; without --dry-run the full build in its builder image
 ```
 
-Last run on 2026-11-02, for the 0.4.22 recipe, in an Arch Linux ARM
-container against omarchy-pkgs master `aabdeaa`: `validate` exit 0;
-`check` printed `{"status": "skipped", "current": "0.4.22", "reason":
+Last run on 2026-11-03, for the 0.4.23 recipe, in an Arch Linux ARM
+container against omarchy-pkgs master `30fed32`: `validate` exit 0;
+`check` printed `{"status": "skipped", "current": "0.4.23", "reason":
 "already current"}`; `validate_package_metadata` printed `metadata
 valid`; `pinned-sources.sh` and `package-metadata.sh` PASS; `bin/build
 --package lazygram --dry-run` planned `lazygram` (its four `curl` 404
 lines are the channel databases it probes for a published version; none
 holds the package yet). `makepkg --printsrcinfo` refuses to run as root
-there, which is expected. The 0.4.21 recipe passed the same way against
-`1c774e2`. The first run, on 2026-10-31 for the 0.4.14
+there, which is expected. The 0.4.22 recipe passed the same way against
+`aabdeaa`, the 0.4.21 recipe against `1c774e2`. The first run, on 2026-10-31 for the 0.4.14
 recipe against `dd63dc3`, passed the same way.
 
 The watch pattern itself was checked here too: `v(?P<version>[0-9]+(?:\.[0-9]+)*)`
-matches `v0.4.22` whole and does not match `v0.4.11-1-gd0bdc3f`.
+matches `v0.4.23` whole and does not match `v0.4.11-1-gd0bdc3f`.
 
 ## Manual validation still to do on an Omarchy machine
 
@@ -148,7 +150,8 @@ matches `v0.4.22` whole and does not match `v0.4.11-1-gd0bdc3f`.
 Status: submitted on 2026-11-02 as omacom/omarchy-pkgs#2022 (branch
 `lazygram` of the fork t0d0r/omarchy-pkgs, first for 0.4.21 as `51a84c0`
 on master `1c774e2`), moved to 0.4.22 on 2026-11-03 with the commit
-`9df0efd` and the PR's title and text; still only
+`9df0efd` and to 0.4.23 the same day with `b0266f4`, each time with the
+PR's title and text from PR.md; still only
 `pkgbuilds/lazygram/PKGBUILD` and `.omarchy/package.json`. It waits for
 a maintainer's `build-approved` label; the omarchy-pkgs repository had
 about 190 open "Add ..." PRs at the time, some of them weeks old, so the
@@ -156,9 +159,10 @@ wait may be long. After it merges, new releases arrive through the
 watch.
 
 0. Done: the recipe builds v0.4.23, installs the entry and icon from the
-   tarball and lists `wl-clipboard`. PR.md and #2022 still name 0.4.22;
-   moving the PR to 0.4.23 is the same as the move to 0.4.22 (copy the
-   recipe, rerun the validators, amend the title and text).
+   tarball and lists `wl-clipboard`; PR.md and #2022 name 0.4.23. A
+   later release before the merge moves the PR the same way: copy the
+   recipe, rerun the validators, commit on top (no force push), update
+   the title and text from PR.md.
 1. Keep this repository's `packaging/omarchy/lazygram/` as the source of
    truth; the PR copies it.
 2. Fork and branch:
