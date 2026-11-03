@@ -24,8 +24,10 @@ a terminal.
   cannot follow the text, so it also goes as soon as the text under it
   changes: scrolling, a new message moving the lines, another window,
   `/list` or `/settings`, typing into the input row it covers, or the
-  `copied` message itself when the selection covers the status line.
-  A cursor that moves inside it removes it too, since
+  `copied` message itself when the selection covers the status line
+  and the message changes it (in `/list`, `/win`, `/settings` and the
+  history pager that line shows the view's own text, so there the
+  selection stays). A cursor that moves inside it removes it too, since
   the highlight would hide it: the cursor row of a list and its chosen
   button, the input cursor, the active window's tag in the window bar.
   Scrolling back does not bring it back. Resizing the terminal and

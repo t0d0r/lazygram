@@ -843,12 +843,17 @@ highlight goes, and never comes back, when:
   that moves the lines, switching windows, opening `/list` or
   `/settings`, typing into an input row it covers and a new status
   message on the rule it covers all do this. The copy's own `copied
-  ...` status is such a change too, so a selection that covers the
-  rule is gone at the first frame after the release. The rows are
-  compared when the screen is drawn; scrolling back to the same text
-  does not bring the highlight back. The mouse wheel does not remove
-  it by itself, only through what it moves: the lines, or the cursor
-  of a list.
+  ...` status does it too when the rule shows the status and the new
+  one reads differently from what the rule showed: in a window the
+  first copy over the rule drops the selection at the first frame
+  after the release. In `/list`, `/win`, `/settings` (unless a setting
+  was just changed) and the history pager the rule shows the view's
+  own text instead, and a copy that reports the same as the one before
+  leaves the rule as it was, so there a selection over the rule stays.
+  The rows are compared when the screen is drawn; scrolling back to
+  the same text does not bring the highlight back. The mouse wheel
+  does not remove it by itself, only through what it moves: the lines,
+  or the cursor of a list.
 - a cursor drawn only in colour moves into, out of or along a row it
   covers, though the row reads the same: the cursor row of `/list`,
   `/win` and `/settings` (Up, Down), the chosen button of `/list` and

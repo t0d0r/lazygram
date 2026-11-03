@@ -406,9 +406,9 @@ func TestKeptSelectionGoesWhenTypedOver(t *testing.T) {
 	}
 }
 
-// TestKeptSelectionOverTheStatusGoes: the copy's own status message
-// changes the rule, so a selection over it is gone at the first frame
-// after the release.
+// TestKeptSelectionOverTheStatusGoes: in a window the copy's own status
+// message changes the rule, so a selection over it is gone at the first
+// frame after the release.
 func TestKeptSelectionOverTheStatusGoes(t *testing.T) {
 	t.Setenv("TERM", "xterm-256color")
 	m := setup(t, newFake())
@@ -548,6 +548,46 @@ func TestKeptSelectionGoesWhenACursorOnItMoves(t *testing.T) {
 				if m.plainRow(y0+i) != b {
 					t.Fatalf("row %d changed: %q", y0+i, m.plainRow(y0+i))
 				}
+			}
+		})
+	}
+}
+
+// TestKeptSelectionOverAnUnchangedRuleStays: the rule is a row like any
+// other. In /list it shows the list's own text, not the copy's status,
+// and a second copy that reports the same leaves it as it was, so in
+// both cases a selection over it stays.
+func TestKeptSelectionOverAnUnchangedRuleStays(t *testing.T) {
+	cases := []struct {
+		name   string
+		before func(m *Model) // what happens before the drag over the rule
+	}{
+		{"in /list", func(m *Model) { enter(m, "/list") }},
+		{"a repeated copy", func(m *Model) {
+			m.View()
+			rule := len(m.screen) - 4
+			drag(m, 2, rule-1, 5, rule) // its own status drops it
+			wantDropped(t, m)
+		}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			t.Setenv("TERM", "xterm-256color")
+			m := setup(t, newFake())
+			m.clipMode = clipOSC52
+			c.before(m)
+			m.View()
+			rule := len(m.screen) - 4
+			before := m.plainRow(rule)
+			drag(m, 2, rule-1, 5, rule)
+			if !strings.HasPrefix(m.status, "copied 2 lines via terminal") {
+				t.Fatalf("status: %q", m.status)
+			}
+			if got := marked(m.View()); len(got) == 0 || m.kept == nil {
+				t.Fatalf("not kept: %q %+v", got, m.kept)
+			}
+			if m.plainRow(rule) != before {
+				t.Fatalf("the rule changed: %q", m.plainRow(rule))
 			}
 		})
 	}
