@@ -97,6 +97,7 @@ in a group whose cached messages still lack their senders' usernames), and
 | `/mark-as-read`            | one read receipt for this window's chat, now, whatever `/read-receipts` says; clears its "marked as unread" flag too |
 | `/autojoin [on\|off]`      | at start, open a window for every chat with unread messages (on by default, kept); no argument shows the setting |
 | `/feed [on\|off]`          | window 0 shows every chat's messages as they arrive (on, the default) or only its notices (off); kept, takes effect at once; no argument shows the setting |
+| `/settings [text]`         | a menu of every kept setting (feed, autojoin, read-receipts, names, theme, fx, mouse, clip) with its value, opened in window 0 from any window; Enter or Right sets the selected one's next value, Left its previous, a click on a row its next; each change is kept and acts at once, as its command; typing (or the text) narrows the rows; Esc closes it; also `/set`, `/options` |
 | `/redraw`, `/clear`        | drop notices, help text and pictures from this window; messages stay |
 | `/refresh`, `/help`, `/quit` | sync now; print the notes on the mouse, themes and windows into the server window, then the command list with every short form last, so the commands are what you see when it ends (it ends by naming `/keys`); leave |
 | `/keys`                    | print the keyboard shortcuts into the server window |
@@ -175,12 +176,12 @@ the candidates separated by commas.
 | Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
 | Alt-0 .. Alt-9      | window 0 .. 9 (Esc then the digit works too)       |
 | Up / Down           | in a message of several rows: the row above / below, keeping the column; on the first / last row: input history (commands and sent lines; a recalled line is input again: Ctrl-X sends it, Enter runs it when it starts with `/`) |
-| Left / Right        | move the cursor in the input (in `/list` or `/win`: pick the row's action button); Ctrl-A / Ctrl-E start / end of the line; Delete removes under the cursor (as Backspace at the end), Ctrl-W the word before it, Ctrl-K to the end of the line |
+| Left / Right        | move the cursor in the input (in `/list` or `/win`: pick the row's action button; in `/settings`: the selected setting's previous / next value); Ctrl-A / Ctrl-E start / end of the line; Delete removes under the cursor (as Backspace at the end), Ctrl-W the word before it, Ctrl-K to the end of the line |
 | PgUp / PgDn         | scroll a page; Home / End oldest / newest          |
 | Ctrl-R              | sync now                                           |
 | Ctrl-L              | redraw this window (`/redraw`): notices and pictures go, messages stay |
 | F1                  | print the notes and the command list into the server window, as `/help` (`/keys` for this table) |
-| Esc                 | close the list or pager, else clear the input      |
+| Esc                 | close the list, the settings menu or the pager, else clear the input |
 | Ctrl-X              | send the typed text to this window's chat, as typed (a line starting with `/` is sent, not run; Enter runs commands) |
 | Ctrl-X twice        | toggle "Enter sends" for this window (Ctrl-X then adds a line, but still sends a line starting with `/` unless it has a leading space) |
 | Ctrl-C              | quit                                               |

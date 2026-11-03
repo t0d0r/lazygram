@@ -34,15 +34,16 @@ type mode int
 
 const (
 	modeWin   mode = iota // a window's scrollback
-	modeList              // selectable list: chats (/list) or windows (/win)
+	modeList              // selectable list: chats (/list), windows (/win) or settings (/settings)
 	modePager             // searchable local history of the current window's chat
 )
 
 type listSrc int
 
 const (
-	listChats   listSrc = iota // every chat
-	listWindows                // the open windows
+	listChats    listSrc = iota // every chat
+	listWindows                 // the open windows
+	listSettings                // every kept setting: the menu window 0 shows (settings.go)
 )
 
 const (
@@ -167,6 +168,7 @@ type Model struct {
 	listCur     int     // selected row in the list view
 	listSrc     listSrc // what the list view shows
 	listAct     int     // the row's chosen action button; 0 is the default (open or focus)
+	listSaid    bool    // the settings menu: the rule shows the last change's status, not the keys, until the next key
 	showDeleted bool    // /list --show-deleted
 
 	width, height int
@@ -1128,6 +1130,9 @@ func (m *Model) click(s span) (tea.Model, tea.Cmd) {
 		return m, m.switchTo(i)
 	case spanRow:
 		m.listCur, _ = strconv.Atoi(s.target)
+		if m.settingsOpen() { // the clicked setting's next value, as Enter
+			return m.stepSetting(1)
+		}
 		m.listAct = 0 // a click on the row itself is the default action
 		return m.enter()
 	case spanAct:
@@ -1429,6 +1434,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if k.Type != tea.KeyTab {
 		m.comp = nil
 	}
+	m.listSaid = false // the settings menu's rule shows its keys again; a change says itself anew
 	if k.Type != tea.KeyUp && k.Type != tea.KeyDown {
 		m.goalOn = false // any other key ends the moves between input rows
 	}
@@ -1507,12 +1513,15 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.holdSend()
 	case tea.KeyTab:
-		if m.mode == modeWin && len(m.input) == 0 { // an empty prompt: Tab walks the windows
+		// An empty prompt: Tab walks the windows, from the settings menu
+		// too, which is window 0's view (the switch closes it); in /list
+		// and /win it completes the filter.
+		if (m.mode == modeWin || m.settingsOpen()) && len(m.input) == 0 {
 			return m, m.switchTo((m.cur + 1) % len(m.wins))
 		}
 		m.complete()
 	case tea.KeyShiftTab:
-		if m.mode == modeWin && len(m.input) == 0 {
+		if (m.mode == modeWin || m.settingsOpen()) && len(m.input) == 0 {
 			return m, m.switchTo((m.cur + len(m.wins) - 1) % len(m.wins))
 		}
 	case tea.KeyBackspace, tea.KeyCtrlH:
@@ -1526,12 +1535,18 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.cut(m.pos(), m.pos()+1)
 		}
 	case tea.KeyLeft:
+		if m.settingsOpen() { // the selected setting's previous value
+			return m.stepSetting(-1)
+		}
 		if m.mode == modeList { // in a list the keys pick the row's action button
 			m.listAct = max(m.listAct-1, 0)
 			break
 		}
 		m.curBack = min(m.curBack+1, len(m.input))
 	case tea.KeyRight:
+		if m.settingsOpen() { // its next value, as Enter
+			return m.stepSetting(1)
+		}
 		if m.mode == modeList {
 			m.listAct = min(m.listAct+1, len(m.listActions())-1)
 			break
@@ -1724,6 +1739,9 @@ func (m *Model) historyStep(d int) {
 func (m *Model) enter() (tea.Model, tea.Cmd) {
 	line := strings.TrimSpace(string(m.input))
 	if m.mode == modeList && !strings.HasPrefix(line, "/") {
+		if m.listSrc == listSettings { // the next value; the menu stays open, the filter too
+			return m.stepSetting(1)
+		}
 		if m.listAct > 0 { // a chosen action button: the list stays open
 			return m.runListAction()
 		}
@@ -1764,13 +1782,22 @@ func (m *Model) enter() (tea.Model, tea.Cmd) {
 	}
 	m.input, m.curBack = nil, 0
 	m.remember(line)
+	// A command typed in the settings menu that leaves it open (/clip,
+	// /theme nord, a typo) has the rule show what it said, as a change
+	// made in the menu does.
+	inMenu := m.settingsOpen()
 	cmd, err := command.Parse(line)
 	if err != nil {
 		m.setErr(err.Error())
+		m.listSaid = inMenu
 		return m, nil
 	}
 	m.cmdsN++
-	return m.run(cmd)
+	model, run := m.run(cmd)
+	if inMenu && m.settingsOpen() && cmd.Kind != command.Settings {
+		m.listSaid = true
+	}
+	return model, run
 }
 
 func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
@@ -1839,24 +1866,9 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 	case command.About:
 		m.about()
 	case command.Nicks:
-		m.byName = !m.byName
-		_ = m.opt.Store.SetState(namesKey, m.byName)
-		m.rcache = &renderCache{}
-		if m.byName {
-			m.setInfo("chats shown by name (@Title); /names switches back to nicks")
-		} else {
-			m.setInfo("chats shown by nick (@alias)")
-		}
+		m.setNames(!m.byName)
 	case command.Mouse:
-		m.mouseOn = !m.mouseOn
-		_ = m.opt.Store.SetState(mouseKey, m.mouseOn)
-		if m.mouseOn {
-			m.setInfo("mouse on: click to act; hold Shift (or Option on macOS) while dragging to select text")
-			return m, tea.EnableMouseAllMotion
-		}
-		m.hover = ""
-		m.setInfo("mouse off: drag selects text; /mouse turns clicks back on")
-		return m, tea.DisableMouse
+		return m, m.setMouse(!m.mouseOn)
 	case command.Clip:
 		m.clip(c.Arg)
 	case command.Receipts:
@@ -1868,13 +1880,9 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 	case command.MarkRead:
 		return m.markAsRead()
 	case command.Fx:
-		m.fx = !m.fx
-		_ = m.opt.Store.SetState(fxKey, m.fx)
-		if m.fx {
-			m.setInfo("running lights on")
-		} else {
-			m.setInfo("running lights off")
-		}
+		m.setFx(!m.fx)
+	case command.Settings:
+		return m, m.openSettings(c.Arg)
 	case command.Move:
 		n, err := strconv.Atoi(c.Arg)
 		if err != nil {
@@ -2421,6 +2429,10 @@ func (m *Model) complete() {
 	case whoisArg || text:
 		cands, shown = memberCandidates(members, string(m.input[start:]), whoisArg)
 		sep = ", " // display names have spaces
+	case m.settingsOpen() && !strings.HasPrefix(string(m.input), "/"):
+		// The settings menu's filter: the names of the settings. A line
+		// starting with / is a command and completes as one.
+		cands = completeSetting(word)
 	case start == 0 && strings.HasPrefix(word, "/"):
 		for _, n := range command.Names() {
 			if strings.HasPrefix(n, word) {
@@ -2714,12 +2726,22 @@ func (m *Model) View() string {
 	switch m.mode {
 	case modeList:
 		var rows []string
-		selectable := true
-		if m.listSrc == listWindows {
+		selectable, buttons := true, true
+		switch m.listSrc {
+		case listWindows:
 			m.listCur = min(max(m.listCur, 0), len(m.wins)-1)
 			m.modeInfo = fmt.Sprintf("windows (%d): Up/Down, Left/Right pick focus/read/unread/close, Enter does it, Esc returns", len(m.wins))
 			rows = m.winLines()
-		} else {
+		case listSettings: // values change in place: no button strip
+			items := m.settingRows()
+			selectable, buttons = len(items) > 0, false
+			m.listCur = min(max(m.listCur, 0), max(len(items)-1, 0))
+			m.modeInfo = fmt.Sprintf("settings (%d): Up/Down, Enter or Right next value, Left previous, Esc closes, type to narrow", len(items))
+			if m.listSaid && m.status != "" { // what the last change said, until the next key
+				m.modeInfo = ""
+			}
+			rows = m.settingLines(items)
+		default:
 			items := m.listItems()
 			selectable = len(items) > 0
 			m.listCur = min(max(m.listCur, 0), max(len(items)-1, 0))
@@ -2733,10 +2755,13 @@ func (m *Model) View() string {
 		actX0 := m.width
 		if selectable && m.listCur < len(rows) {
 			plain := rows[m.listCur]
-			actX0 = lipgloss.Width(plain) + 2
-			strip, spans := m.listButtons(actX0)
-			rows[m.listCur] = hiStyle.Render(plain) + "  " + strip
-			actSpans = spans
+			rows[m.listCur] = hiStyle.Render(plain)
+			if buttons {
+				actX0 = lipgloss.Width(plain) + 2
+				strip, spans := m.listButtons(actX0)
+				rows[m.listCur] += "  " + strip
+				actSpans = spans
+			}
 		}
 		body = topWindow(rows, h, m.listCur)
 		start := topWindowStart(len(rows), h, m.listCur)
@@ -2996,12 +3021,12 @@ const keyHelp = `Keys
   Ctrl-X twice (fast)    toggle "Enter sends" for this window; nothing is sent; Ctrl-X then adds a line instead, except to a line starting with / (no leading space), which it still sends as text
   Ctrl-N / Ctrl-P        next / previous window (Alt-Right / Alt-Left too)
   Alt-0..9, Esc 0..9     window 0..9 (0 is the server window)
-  Left / Right           move the cursor; Ctrl-A / Ctrl-E start / end of the cursor's line; Backspace / Delete remove before / under the cursor; Ctrl-W the word before it, Ctrl-K to the end of the line, Ctrl-U all; in /list or /win: pick the row's action button (open or focus, read, unread, close), Enter does it
+  Left / Right           move the cursor; Ctrl-A / Ctrl-E start / end of the cursor's line; Backspace / Delete remove before / under the cursor; Ctrl-W the word before it, Ctrl-K to the end of the line, Ctrl-U all; in /list or /win: pick the row's action button (open or focus, read, unread, close), Enter does it; in /settings: the selected setting's previous / next value
   Up / Down              in a message of several rows: the row above / below, keeping the column; on the first / last row: walk the input history (commands and sent lines); a recalled line is input again: Ctrl-X sends it, Enter runs it when it starts with /
   PgUp / PgDn            scroll a page (the wheel scrolls too)
   Home / End             oldest / newest
   Ctrl-R                 sync now
   Ctrl-L                 redraw: drop notices and pictures (/redraw)
   F1                     the notes and the command list (/help); /keys prints this
-  Esc                    close the list or pager; clear the input
+  Esc                    close the list, the pager or the settings menu; clear the input
   Ctrl-C                 quit`
