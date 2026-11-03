@@ -8,8 +8,10 @@ list or pager holds, an error in the error colour, or the last notice,
 truncated with "..." when long) and the send hint (`ctrl-x: to send` or
 `enter: to send`) at its right end; the status line holds only the
 segments, so it never truncates. There is no header: the status line carries the
-window tag, and in the list and pager views it shows what the view holds
-in place of the status message. The window bar lists every window as
+window tag, and in the list and pager views the rule shows what the view
+holds in place of the status message, except right after a change in the
+settings menu, whose rule shows what the change said until the next key
+(see Settings menu). The window bar lists every window as
 `[N:name]`; the current window is highlighted and windows with unread
 messages stand out. The
 model is BitchX/irssi: virtual windows, a slash-command input line, Tab
