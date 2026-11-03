@@ -82,10 +82,10 @@ in a group whose cached messages still lack their senders' usernames), and
 | `/whois [name]`            | what is known about a chat; in a group or channel window, about one of its members (Tab offers only its `@nicks`) |
 | `/stats`                   | client statistics                             |
 | `/me <text>`               | send an action line (`* you waves`)           |
-| `/msg <@user|#chan> <text>` | send to a chat, opening its window if needed |
+| `/msg <@user|#chan> <text>` | send to a chat, opening its window if needed; the chat may be named by its title as `/names` shows it, spaces and all, in Cyrillic or Latin (`/msg @Ivan Petrov hi` sends `hi`) |
 | `/send <path> [caption]`   | send a local file (Tab completes the path); pictures go as photos |
 | `/edit [text]`, `/delete`  | change or remove your last message in this chat |
-| `/names`                   | show chats by nick (`@alias`) or by name (`@Title`) |
+| `/names`                   | show chats by nick (`@alias`) or by name (`@Title`); commands and Tab accept either |
 | `/press N`                 | press button N under the latest bot message; `/press <msg> N` for an older one |
 | `/open [msg]`              | fetch a `[photo]`/`[file]` into the encrypted vault; pictures are shown in the window (`/open out` for the system viewer); `/open <link>` opens an http(s) link in the browser, Tab offers the chat's ten most recent links |
 | `/theme [name]`            | colour themes: default, solarized, gruvbox, dracula, nord, monokai, tokyonight, vim, emacs; for light terminals: light, solarized-light, gruvbox-light |
@@ -172,7 +172,7 @@ the candidates separated by commas.
 
 | key                 | action                                             |
 |---------------------|----------------------------------------------------|
-| Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash: commands, chats, themes, `/open out`, attachment message ids and the chat's ten most recent links, `/win list`, a command's settings (`/autojoin off`, `/clip tool`), paths after `/send`; in a group or channel window, its `@nicks` after `/whois` and in message text (`@ad` -> `@ada`); names match in Cyrillic or Latin |
+| Tab                 | empty prompt: next window (Shift-Tab previous); else complete like bash: commands, chats, themes, `/open out`, attachment message ids and the chat's ten most recent links, `/win list`, a command's settings (`/autojoin off`, `/clip tool`), paths after `/send`; in a group or channel window, its `@nicks` after `/whois` and in message text (`@ad` -> `@ada`); names match in Cyrillic or Latin, chats by alias or by title (a title may have spaces), and a chat is filled in as `/names` shows it, so the name on the window bar can be typed back |
 | Ctrl-N / Ctrl-P     | next / previous window (Alt-Right / Alt-Left too)  |
 | Alt-0 .. Alt-9      | window 0 .. 9 (Esc then the digit works too)       |
 | Up / Down           | in a message of several rows: the row above / below, keeping the column; on the first / last row: input history (commands and sent lines; a recalled line is input again: Ctrl-X sends it, Enter runs it when it starts with `/`) |

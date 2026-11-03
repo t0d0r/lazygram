@@ -101,6 +101,20 @@ func (mt Matcher) Match(hay string) bool {
 	return bytes.Contains(*mt.buf, mt.latin)
 }
 
+// MatchExact reports whether s is the query, case-insensitively, as typed
+// or with both transliterated to Latin ("kamen" is Kamen in Cyrillic).
+func (mt Matcher) MatchExact(s string) bool {
+	*mt.buf = appendTranslit((*mt.buf)[:0], s)
+	return bytes.Equal(*mt.buf, mt.latin)
+}
+
+// MatchPrefix reports whether s starts with the query, case-insensitively,
+// as typed or with both transliterated to Latin.
+func (mt Matcher) MatchPrefix(s string) bool {
+	*mt.buf = appendTranslit((*mt.buf)[:0], s)
+	return bytes.HasPrefix(*mt.buf, mt.latin)
+}
+
 // MatchText reports whether needle occurs in hay, case-insensitively, in
 // either script. An empty needle matches everything. Prefer a Matcher
 // when one query meets many texts.

@@ -1328,8 +1328,12 @@ func (m *Model) display(c domain.Chat) string {
 	if !m.byName || strings.TrimSpace(c.Title) == "" {
 		return c.Name()
 	}
-	return c.Name()[:1] + sanitize(strings.TrimSpace(c.Title), false)
+	return c.Name()[:1] + shownTitle(c)
 }
+
+// shownTitle is the chat's title as /names shows it: trimmed, without
+// control characters.
+func shownTitle(c domain.Chat) string { return sanitize(strings.TrimSpace(c.Title), false) }
 
 func (m *Model) winFor(chatID string) (int, *win) {
 	for i, w := range m.wins {
@@ -2050,8 +2054,7 @@ func (m *Model) press(arg string) (tea.Model, tea.Cmd) {
 // msg implements /msg: send text to a chat named by @user or #chan,
 // opening and focusing its window when it has none.
 func (m *Model) msg(arg string) (tea.Model, tea.Cmd) {
-	target, text, _ := strings.Cut(strings.TrimSpace(arg), " ")
-	text = strings.TrimSpace(text)
+	target, text := m.msgTarget(strings.TrimSpace(arg))
 	if target == "" || text == "" {
 		m.setErr("usage: /msg <@user|#chan> <text>")
 		return m, nil
@@ -2072,6 +2075,33 @@ func (m *Model) msg(arg string) (tea.Model, tea.Cmd) {
 	m.setInfo("sending to " + c.Name() + "...")
 	cmds = append(cmds, m.sendCmd(c.ID, text))
 	return m, tea.Batch(cmds...)
+}
+
+// msgTarget splits the argument of /msg into the chat's name and the
+// text. A title may have spaces, so the name is the longest leading part,
+// ending at a space, that is a chat's name as /names shows it, its
+// @Title or #Title form or its title alone, ignoring case and in either
+// script as domain.ResolveChat compares names ("@Ivan Petrov hi", and
+// "@ivan petrov hi" for the title in Cyrillic rather than "@ivan", which
+// may be another chat's exact name); else the first word, as "@alice hi
+// there" always was. An argument that is all such a name has no text,
+// rather than its last word as text.
+func (m *Model) msgTarget(arg string) (target, text string) {
+	names := map[string]bool{}
+	for _, c := range m.chats {
+		if t := strings.TrimSpace(c.Title); t != "" {
+			names[domain.Translit(m.display(c))] = true
+			names[domain.Translit(c.Name()[:1]+t)] = true
+			names[domain.Translit(t)] = true
+		}
+	}
+	for i := len(arg); i > 0; i = strings.LastIndexByte(arg[:i], ' ') {
+		if names[domain.Translit(arg[:i])] {
+			return arg[:i], strings.TrimSpace(arg[i:])
+		}
+	}
+	target, text, _ = strings.Cut(arg, " ")
+	return target, strings.TrimSpace(text)
 }
 
 // sendFile implements /send <path> [caption]: the file is read here and
@@ -2509,7 +2539,7 @@ func (m *Model) complete() {
 			return
 		}
 	default:
-		names := true // a line without a command is message text
+		names, from := true, 0 // a line without a command is message text, all of it
 		if len(fields) > 0 && strings.HasPrefix(fields[0], "/") {
 			c, err := command.Parse(fields[0])
 			first := len(fields) == 1
@@ -2520,25 +2550,34 @@ func (m *Model) complete() {
 					}
 				}
 			}
-			where := chatArgs[c.Kind]
+			where, at := chatArgs[c.Kind], argStart(m.input)
+			// A title may have spaces: the first argument is one chat name
+			// when all of it begins one ("/msg @Ivan P").
+			if where == "first" && !first && m.beginsChat(string(m.input[at:])) {
+				start, first = at, true
+			}
 			names = err == nil && (where == "text" || where == "first" && first)
+			from = at
 		}
-		bare := strings.TrimLeft(word, "@#")
-		seen := map[string]bool{}
-		for _, c := range m.chats {
-			if !names {
-				break
+		listed := map[string]string{} // how the second Tab lists each name
+		if names {
+			// In text the name being typed may span words, as a title does.
+			start = nameStart(m.input, from, start, m.beginsChat)
+			for _, cc := range m.chatCompletions(string(m.input[start:])) {
+				if _, dup := listed[cc.fill]; !dup {
+					listed[cc.fill] = cc.shown
+					cands = append(cands, cc.fill)
+					if cc.titled {
+						sep = ", " // titles have spaces
+					}
+				}
 			}
-			if c.Deleted {
-				continue
+		}
+		shown = func(s string) string {
+			if l, ok := listed[s]; ok {
+				return l
 			}
-			n := c.Name() // matched in either script: "iv" finds @иван-петров
-			ok := domain.PrefixMatch(n, word) ||
-				(word == bare && bare != "" && domain.PrefixMatch(c.Alias, bare))
-			if ok && !seen[n] {
-				seen[n] = true
-				cands = append(cands, n)
-			}
+			return s
 		}
 		sort.Strings(cands)
 	}
@@ -2566,6 +2605,88 @@ func (m *Model) complete() {
 		return
 	}
 	m.comp = &completion{word: prefix}
+}
+
+// argStart is where the first argument of the command line in input
+// begins: past the command and the spaces after it.
+func argStart(input []rune) int {
+	i := 0
+	for i < len(input) && input[i] == ' ' {
+		i++
+	}
+	for i < len(input) && input[i] != ' ' {
+		i++
+	}
+	for i < len(input) && input[i] == ' ' {
+		i++
+	}
+	return i
+}
+
+// chatCompletion is a chat Tab offers: fill is what is filled in, shown
+// how the second Tab lists it, and titled whether shown has a title.
+type chatCompletion struct {
+	chatID string
+	fill   string
+	shown  string
+	titled bool
+}
+
+// chatBegins reports whether typed begins the chat's alias and whether it
+// begins its title as shown, in either script ("kam" begins Kamen written
+// in Cyrillic). A
+// typed @ or # must be the chat's own sigil; without one the alias or the
+// title alone is matched.
+func chatBegins(c domain.Chat, typed string) (alias, title bool) {
+	if typed != "" && (typed[0] == '@' || typed[0] == '#') {
+		if typed[0] != c.Name()[0] {
+			return false, false
+		}
+		typed = typed[1:]
+	}
+	t := shownTitle(c)
+	return domain.PrefixMatch(c.Alias, typed), t != "" && domain.PrefixMatch(t, typed)
+}
+
+// beginsChat reports whether typed begins the alias or title of a chat
+// that is not deleted.
+func (m *Model) beginsChat(typed string) bool {
+	for _, c := range m.chats {
+		if a, t := chatBegins(c, typed); !c.Deleted && (a || t) {
+			return true
+		}
+	}
+	return false
+}
+
+// chatCompletions are the chats Tab offers for typed: those not deleted
+// whose alias or title begins with it (chatBegins), in both /names modes.
+// Each is filled in as /names shows it, unless that name would not
+// resolve to the chat (two chats show it, or the shown title lost control
+// characters): then as its @alias or #alias, so whatever Tab fills in
+// finds the chat it was offered for. One filled in by its alias that
+// matched by its title alone is listed with the title after it,
+// "@stuckoff (Kamen)", as members are.
+func (m *Model) chatCompletions(typed string) []chatCompletion {
+	var out []chatCompletion
+	for _, c := range m.chats {
+		byAlias, byTitle := chatBegins(c, typed)
+		if c.Deleted || !byAlias && !byTitle {
+			continue
+		}
+		cc := chatCompletion{chatID: c.ID, fill: m.display(c)}
+		if cc.fill != c.Name() {
+			if r, err := domain.ResolveChat(m.chats, cc.fill); err != nil || r.ID != c.ID {
+				cc.fill = c.Name()
+			}
+		}
+		cc.shown, cc.titled = cc.fill, cc.fill != c.Name()
+		if !cc.titled && byTitle && !byAlias {
+			cc.shown, cc.titled = cc.fill+" ("+shownTitle(c)+")", true
+		}
+		out = append(out, cc)
+	}
+	return out
 }
 
 // extends reports whether the candidates' common prefix says more than
