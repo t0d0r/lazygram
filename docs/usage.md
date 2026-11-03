@@ -98,7 +98,8 @@ in a group whose cached messages still lack their senders' usernames), and
 | `/mark-as-read`            | one read receipt for this window's chat, now, whatever `/read-receipts` says; clears its "marked as unread" flag too |
 | `/autojoin [on\|off]`      | at start, open a window for every chat with unread messages (on by default, kept); no argument shows the setting |
 | `/feed [on\|off]`          | window 0 shows every chat's messages as they arrive (on, the default) or only its notices (off); kept, takes effect at once; no argument shows the setting |
-| `/settings [text]`         | a menu of every kept setting (feed, autojoin, read-receipts, names, theme, fx, mouse, clip) with its value, opened in window 0 from any window; Enter or Right sets the selected one's next value, Left its previous, a click on a row its next; each change is kept and acts at once, as its command; typing (or the text) narrows the rows; Esc closes it; also `/set`, `/options` |
+| `/vim [on\|off]`           | vi keys: Normal and Insert modes on the input, in the lists and the pager (off by default, kept, takes effect at once); no argument shows the setting; see [Vim mode](#vim-mode) |
+| `/settings [text]`         | a menu of every kept setting (feed, autojoin, read-receipts, names, theme, fx, mouse, clip, vim) with its value, opened in window 0 from any window; Enter or Right sets the selected one's next value, Left its previous, a click on a row its next; each change is kept and acts at once, as its command; typing (or the text) narrows the rows; Esc closes it; also `/set`, `/options` |
 | `/redraw`, `/clear`        | drop notices, help text and pictures from this window; messages stay |
 | `/refresh`, `/help`, `/quit` | sync now; print the notes on the mouse, themes and windows into the server window, then the command list with every short form last, so the commands are what you see when it ends (it ends by naming `/keys`); leave |
 | `/keys`                    | print the keyboard shortcuts into the server window |
@@ -182,11 +183,55 @@ the candidates separated by commas.
 | Ctrl-R              | sync now                                           |
 | Ctrl-L              | redraw this window (`/redraw`): notices and pictures go, messages stay |
 | F1                  | print the notes and the command list into the server window, as `/help` (`/keys` for this table) |
-| Esc                 | close the list, the settings menu or the pager, else clear the input |
+| Esc                 | close the list, the settings menu or the pager, else clear the input (with `/vim on`: Normal mode, see below) |
 | Ctrl-X              | send the typed text to this window's chat, as typed (a line starting with `/` is sent, not run; Enter runs commands) |
 | Ctrl-X twice        | toggle "Enter sends" for this window (Ctrl-X then adds a line, but still sends a line starting with `/` unless it has a leading space) |
 | Ctrl-C              | quit                                               |
 | mouse               | click chat names, nicks, window tags, list rows, links and `[photo]` tokens (a running light shows what is under the pointer); wheel scrolls; drag selects text and copies it on release; double click copies the word under the pointer, triple click the row (on clickable text the first click acts, the next ones only select); Shift-click extends the selection where the terminal passes Shift through; the selection stays highlighted until the next click, or until the text under it changes or a cursor in it moves (see [clipboard.md](clipboard.md)) |
+
+## Vim mode
+
+`/vim on` gives vi's Normal and Insert modes to the input line, the
+lists and the `/search` pager, much like WeeChat's vimode script; it is
+off by default, and with it off every key is as described above. It is
+kept across restarts and is also the `vim` row of `/settings`. Every
+start and every `/vim on` begins in Insert, so typing works at once:
+Insert is the usual keys, except that Esc enters Normal (keeping the
+text). In Normal a typed key is a command, never text, so a stray key
+cannot type or send anything; the status line shows `NORMAL`. Enter,
+Ctrl-X, Tab, the arrows, PgUp / PgDn, Alt-N, the mouse and a paste work
+as always in both modes, and Esc then a digit still switches windows.
+In Normal, Tab and Ctrl-W include the character under the cursor, as
+`a` then the key would: `hi @ali`, Esc, Tab completes `@alice`.
+
+| key (Normal)        | action                                             |
+|---------------------|----------------------------------------------------|
+| `i` `a` `I` `A`     | type at the cursor, after it, at the line's first non-blank, at its end |
+| `o` / `O`           | a new line below / above, and type there          |
+| `h` `l` `w` `b` `e` | left, right, next word, word start, word end      |
+| `0` `^` `$`         | line start (right after Esc: window 0), first non-blank, line end |
+| `j` / `k`           | as Down / Up: the row below / above, then the input history |
+| `x` `X` `D`         | delete the character under / before the cursor, to the line end |
+| `dd` `dw`           | delete the whole input, to the next word          |
+| `cw` `cc` `S` `C`   | change the word, the whole input (both), to the line end |
+| `r` and a character | replace the character under the cursor            |
+| `u`                 | undo the last change (again: redo it)              |
+| `p` / `P`           | put back the last deleted text after / before the cursor (lazygram's own buffer, never the clipboard) |
+| Ctrl-E / Ctrl-Y     | scroll a line down / up (in Insert Ctrl-E and Ctrl-U keep their usual meaning) |
+| Ctrl-D / Ctrl-U     | scroll half a page down / up                      |
+| Ctrl-F / Ctrl-B     | scroll a page down / up                           |
+| `gg` / `G`          | the oldest / newest line                          |
+| `gt` / `gT`         | next / previous window                            |
+| `:`                 | start a command line (`/`)                         |
+| `/` `?`             | start a search (`/search `)                        |
+
+`/list`, `/win`, `/settings` and the `/search` pager open in Normal
+too: `j` / `k` move (the pager scrolls), `h` / `l` pick the row's button
+or the setting's value (as Left / Right), `gg` / `G` go to the first /
+last row, Ctrl-D / Ctrl-U move half a page, Enter acts as always, and
+`q` or Esc closes. `/` or `i` starts typing into the filter (the search
+in the pager), Esc stops typing, and a second Esc closes; `:` starts a
+command line there too.
 
 ## Updating
 

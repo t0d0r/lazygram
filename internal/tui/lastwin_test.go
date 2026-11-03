@@ -681,3 +681,28 @@ func TestTabHoldsItsReceiptOnARealTimer(t *testing.T) {
 		t.Fatalf("tickAfter delivered %v after %v", got, time.Since(start))
 	}
 }
+
+// TestWinLastDoubleTabInVimNormal: with vim on, a double Tab on an empty
+// prompt goes back to the last window in Normal as in Insert, and gt is
+// a window switch like Ctrl-N: a Tab right after it is a first Tab.
+func TestWinLastDoubleTabInVimNormal(t *testing.T) {
+	m, _, _ := fromDev(t, newFake())
+	enter(m, "/vim on")
+	press(m, tea.KeyEsc)
+	if !m.inNormal() || len(m.input) != 0 || m.cur != 2 {
+		t.Fatalf("Normal on an empty prompt in #dev: normal=%v input %q cur %d", m.inNormal(), string(m.input), m.cur)
+	}
+	press(m, tea.KeyTab)
+	press(m, tea.KeyTab)
+	if m.cur != 1 || m.lastWindow() != 2 || !m.inNormal() {
+		t.Fatalf("Tab Tab in Normal: window %d, last %d, normal=%v; want #news (1), last #dev (2)", m.cur, m.lastWindow(), m.inNormal())
+	}
+	typ(m, "gt")
+	if m.cur != 2 || m.lastWindow() != 1 {
+		t.Fatalf("gt from #news: window %d, last %d; want #dev (2), last #news (1)", m.cur, m.lastWindow())
+	}
+	press(m, tea.KeyTab)
+	if m.cur != 3 {
+		t.Fatalf("a Tab right after gt is a first Tab: window %d, want @alice (3)", m.cur)
+	}
+}

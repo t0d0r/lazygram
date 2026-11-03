@@ -162,8 +162,10 @@ type Model struct {
 	typingAnim   bool                 // a typingAnimMsg is scheduled
 	typingStep   int                  // the running light's clock
 
+	vi vimState // vim mode: Normal and Insert on the input, the lists and the pager (vim.go)
+
 	escPending bool         // an Esc was just pressed: a digit now switches windows
-	escSaved   []rune       // the input as it was before that Esc cleared it
+	escSaved   []rune       // the input as it was before that Esc cleared it; nil when it cleared nothing
 	lastCtrlX  time.Time    // for the double Ctrl-X toggle
 	pending    *pendingSend // text waiting out the double Ctrl-X window before it is sent
 	pendingSeq int
@@ -312,6 +314,9 @@ func New(opt Options) *Model {
 	}
 	if found, err := opt.Store.State(feedKey, &m.feed); !found || err != nil {
 		m.feed = true
+	}
+	if found, err := opt.Store.State(vimKey, &m.vi.on); !found || err != nil {
+		m.vi.on = false // absent or unreadable: off; on starts in Insert
 	}
 	var shared []string
 	_, _ = opt.Store.State(sharedKey, &shared)
@@ -1466,6 +1471,17 @@ func (m *Model) refresh() tea.Cmd {
 }
 
 func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// Vim mode (vim.go) looks first: Normal mode (the input's, a list's)
+	// reads a run of typed characters one at a time and j and k as Down and
+	// Up, and keeps its cursor on a character once the key is done.
+	var vop rune
+	if m.vi.on {
+		if (m.inNormal() || m.listNormal()) && k.Type == tea.KeyRunes && len(k.Runes) > 1 && !k.Paste && !k.Alt {
+			return m.vimEach(k)
+		}
+		k, vop = m.vimBegin(k)
+		defer m.vimSettle()
+	}
 	if k.Type != tea.KeyTab {
 		m.comp = nil
 		m.tabAt = time.Time{} // any other key between two Tabs: no double Tab
@@ -1485,7 +1501,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.quitting = true
 		return m, tea.Quit
 	case digit && (k.Alt || escPending):
-		if escPending {
+		if escPending && m.escSaved != nil {
 			m.input, m.curBack = m.escSaved, 0 // the Esc was a prefix, not a clear
 		}
 		n := int(k.Runes[0] - '0') // 0 is the server window
@@ -1498,6 +1514,11 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.switchTo((m.cur + 1) % len(m.wins))
 	case k.Alt && k.Type == tea.KeyLeft, k.Type == tea.KeyCtrlP:
 		return m, m.switchTo((m.cur + len(m.wins) - 1) % len(m.wins))
+	}
+	if m.vi.on {
+		if done, cmd := m.vimKey(k, vop); done { // Esc in Insert, the keys of Normal mode
+			return m, cmd
+		}
 	}
 	switch k.Type {
 	case tea.KeyEsc:
@@ -1543,6 +1564,7 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 			// with "/" is the exception: Enter would run it as a command,
 			// so Ctrl-X sends it as text. With a leading space Enter sends
 			// it as text too, so that form keeps the line break.
+			m.vimBreakPoint() // in vim's Normal mode: after the character under the cursor (vim.go)
 			m.insert('\n')
 			m.setInfo("line added; Enter sends the message")
 			return m, nil
@@ -1597,15 +1619,8 @@ func (m *Model) key(k tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.input, m.curBack = nil, 0
 	case tea.KeyCtrlK:
 		m.cut(m.pos(), m.lineEnd(m.pos()))
-	case tea.KeyCtrlW: // the word before the cursor, with the spaces after it
-		p, i := m.pos(), m.pos()
-		for i > 0 && m.input[i-1] == ' ' {
-			i--
-		}
-		for i > 0 && m.input[i-1] != ' ' {
-			i--
-		}
-		m.cut(i, p)
+	case tea.KeyCtrlW:
+		m.cutWord()
 	case tea.KeyPgUp:
 		w.scroll += page
 	case tea.KeyPgDown:
@@ -1819,6 +1834,9 @@ func (m *Model) enter() (tea.Model, tea.Cmd) {
 	}
 	m.input, m.curBack = nil, 0
 	m.remember(line)
+	// Vim mode: a command line leaves a list's Insert mode, so the list it
+	// opens, or the one it leaves open, is in Normal, as every list opens.
+	m.vi.listIns = false
 	// A command typed in the settings menu that leaves it open (/clip,
 	// /theme nord, a typo) has the rule show what it said, as a change
 	// made in the menu does.
@@ -1914,6 +1932,8 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.setAutojoin(c.Arg)
 	case command.Feed:
 		m.setFeed(c.Arg)
+	case command.Vim:
+		m.setVim(c.Arg)
 	case command.MarkRead:
 		return m.markAsRead()
 	case command.Fx:
@@ -2398,6 +2418,19 @@ func (m *Model) insert(rs ...rune) {
 	m.input = append(m.input[:p], append(append([]rune(nil), rs...), m.input[p:]...)...)
 }
 
+// cutWord deletes the word before the cursor, with the spaces after it
+// (Ctrl-W).
+func (m *Model) cutWord() {
+	p, i := m.pos(), m.pos()
+	for i > 0 && m.input[i-1] == ' ' {
+		i--
+	}
+	for i > 0 && m.input[i-1] != ' ' {
+		i--
+	}
+	m.cut(i, p)
+}
+
 // cut removes the runes [from, to) of the input, keeping the cursor on the
 // same text.
 func (m *Model) cut(from, to int) {
@@ -2429,6 +2462,7 @@ var argWords = map[command.Kind][]string{
 	command.Receipts: {"on", "off"},
 	command.AutoJoin: {"on", "off"},
 	command.Feed:     {"on", "off"},
+	command.Vim:      {"on", "off"},
 	command.Clip:     {"auto", "osc52", "tool", "off"},
 }
 
@@ -2901,7 +2935,7 @@ func (m *Model) View() string {
 			items := m.settingRows()
 			selectable, buttons = len(items) > 0, false
 			m.listCur = min(max(m.listCur, 0), max(len(items)-1, 0))
-			m.modeInfo = fmt.Sprintf("settings (%d): Up/Down, Enter or Right next value, Left previous, Esc closes, type to narrow", len(items))
+			m.modeInfo = fmt.Sprintf("settings (%d): Up/Down, Enter or Right next value, Left previous, Esc closes, %s narrow", len(items), m.vimTypeTo())
 			if m.listSaid && m.status != "" { // what the last change said, until the next key
 				m.modeInfo = ""
 			}
@@ -2910,7 +2944,7 @@ func (m *Model) View() string {
 			items := m.listItems()
 			selectable = len(items) > 0
 			m.listCur = min(max(m.listCur, 0), max(len(items)-1, 0))
-			m.modeInfo = fmt.Sprintf("chats (%d): Up/Down, Left/Right pick open/read/unread, Enter does it, Esc returns, type to narrow", len(items))
+			m.modeInfo = fmt.Sprintf("chats (%d): Up/Down, Left/Right pick open/read/unread, Enter does it, Esc returns, %s narrow", len(items), m.vimTypeTo())
 			rows = m.listLines(items)
 		}
 		// The selected row is highlighted and carries the action buttons;
@@ -2950,8 +2984,8 @@ func (m *Model) View() string {
 			showChat: w.chatID == "", fullDate: true, highlight: q, phase: m.phaseOpt(), hover: m.hover, cache: m.rcache})
 		body, w.scroll = window(lines, h, w.scroll)
 		bodySpans, _ = window(sp, h, w.scroll)
-		m.modeInfo = fmt.Sprintf("history of %s: %d of %d messages; type to search, Esc returns",
-			m.winName(m.cur), len(hits), len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})))
+		m.modeInfo = fmt.Sprintf("history of %s: %d of %d messages; %s search, Esc returns",
+			m.winName(m.cur), len(hits), len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})), m.vimTypeTo())
 	default:
 		lines, sp := m.richLines()
 		m.lastLines = len(lines)
@@ -3112,6 +3146,9 @@ func (m *Model) statusLine() string {
 		seg(time.Now().Format("15:04"), 5, false) + gap +
 		seg(m.opt.Provider.Name(), 0, false) + gap +
 		seg(fmt.Sprintf("[%d:%s]", m.cur, m.winName(m.cur)), 3, true) + gap
+	if tag := m.vimTag(); tag != "" { // NORMAL, while the input, a list or the pager is in vim's Normal mode
+		head += seg(tag, 4, true) + gap
+	}
 	if act := m.activity(); act != "" {
 		head += actStyle.Render(act) + gap
 	}
@@ -3216,4 +3253,6 @@ const keyHelp = `Keys
   Ctrl-L                 redraw: drop notices and pictures (/redraw)
   F1                     the notes and the command list (/help); /keys prints this
   Esc                    close the list, the pager or the settings menu; clear the input
+  vim: Normal mode       /vim on: Esc enters it, i a I A o O leave it; typed keys are commands, never text: h l w b e 0 ^ $ move (Esc 0 is still window 0), j k as Down / Up, x X D dd dw cw cc S C r edit, u undoes, p P put back; Ctrl-E Y D U F B and gg G scroll; gt gT switch windows; : / ? a command, a search
+  vim: lists, pager      /vim on: they open in Normal: j k move, h l as Left / Right, gg G ends, Ctrl-D / Ctrl-U half a page, q closes; / or i to type, Esc stops
   Ctrl-C                 quit`
