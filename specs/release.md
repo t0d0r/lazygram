@@ -56,7 +56,13 @@ Releases are built and published by GitHub Actions, the Release workflow
 5. Homebrew: in `t0d0r/homebrew-tap`, update `Formula/lazygram.rb` with the
    tag's source tarball URL and its sha256 (`curl -L .../archive/refs/tags/
    vX.Y.Z.tar.gz | shasum -a 256`), then `brew install --build-from-source
-   t0d0r/tap/lazygram` and `brew test lazygram`.
+   t0d0r/tap/lazygram` and `brew test lazygram`. The tap's `main` has a
+   ruleset (`main`, no bypass actors): no deletion and no force push, so
+   the formula commit is an ordinary push on top. Its workflows push
+   only that way too (`brew pr-pull` bottles) or open pull requests
+   (`brew bump`). Decision: a pull request is not required there, so a
+   formula bump stays one push; the ruleset still keeps a stolen token
+   or a mistake from rewriting the formula's history.
 6. Check that `https://github.com/t0d0r/lazygram/releases/latest/download/install.sh`
    answers 200 and installs the new version into a scratch prefix
    (`LAZYGRAM_PREFIX=<dir> sh`); nothing in the script is bumped.
