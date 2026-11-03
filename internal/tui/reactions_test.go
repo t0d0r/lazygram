@@ -475,6 +475,35 @@ func TestReactionsSayNothingUnlessSomeoneAddsOne(t *testing.T) {
 	quiet("after an edit", 6)
 }
 
+// TestAnUnchangedCopyTeachesItsReactions: a sync or a fetch that brings a
+// cached message back as the cache has it still tells lazygram its
+// reactions, so the next one someone adds to it is told.
+func TestAnUnchangedCopyTeachesItsReactions(t *testing.T) {
+	st := memStore(t)
+	f := newFake()
+	older := mk("c2", "0", "alice", "older hello", -30)
+	older.Reactions = rs(rx(heartEmoji, 2))
+	f.recent["c2"] = []domain.Message{older, f.msgs[1]}
+	// Cached in an earlier session, as the service still has them.
+	if _, err := st.Add([]domain.Message{f.msgs[0], older, f.msgs[1]}); err != nil {
+		t.Fatal(err)
+	}
+	m := startWith(t, st, f) // the sync brings ada's line back the same
+	polled(m, reactedChange("c1", "1", false, rs(rx(upEmoji, 1)), by("grace", "u-grace", upEmoji)))
+	runAll(m, enter(m, "/win @alice")) // and the fetch alice's older line
+	if got := msgOf(m, "c2", "0").Reactions; !slices.Equal(got, older.Reactions) {
+		t.Fatalf("the fetch shows %v", got)
+	}
+	polled(m, reactedChange("c2", "0", false, rs(rx(heartEmoji, 3)), by("bob", "u-bob", heartEmoji)))
+	want := []string{
+		`#dev: @grace reacted ` + upEmoji + ` to ada "first dev line"`,
+		`@alice: @bob reacted ` + heartEmoji + ` to alice "older hello"`,
+	}
+	if got := chatNotices(m); !slices.Equal(got, want) {
+		t.Fatalf("notices %q, want %q", got, want)
+	}
+}
+
 // TestReactionNoticesFollowTheFeed: with /feed off window 0 does not show
 // them, as it shows no chat messages; the counts still change, and /feed
 // on shows the notices again.

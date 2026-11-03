@@ -222,14 +222,16 @@ type (
 	}
 	syncedMsg struct {
 		fresh, known []domain.Message // known: cached messages that learned their sender
+		page         []domain.Message // all the service sent, changed or not: their reactions are known now
 		err          error
 		at           time.Time
 	}
 	recentMsg struct {
 		chatID       string
 		fresh, known []domain.Message
-		gone         []string // ids deleted at the service
-		quiet        bool     // a heal: no notice unless something came
+		page         []domain.Message // as in syncedMsg
+		gone         []string         // ids deleted at the service
+		quiet        bool             // a heal: no notice unless something came
 		err          error
 	}
 	memberListMsg struct {
@@ -525,7 +527,7 @@ func (m *Model) syncCmd() tea.Cmd {
 		if err == nil {
 			err = errors.Join(addErr, idErr)
 		}
-		return syncedMsg{fresh: fresh, known: known, err: err, at: time.Now()}
+		return syncedMsg{fresh: fresh, known: known, page: msgs, err: err, at: time.Now()}
 	}
 }
 
@@ -553,7 +555,7 @@ func (m *Model) fetchRecent(chatID string, n int, quiet bool) tea.Cmd {
 		fresh, err := st.Add(msgs)
 		known, refErr := st.Refresh(msgs)
 		gone, pruneErr := st.Prune(chatID, msgs, asked)
-		return recentMsg{chatID: chatID, quiet: quiet, fresh: fresh, known: known, gone: gone, err: errors.Join(err, refErr, pruneErr)}
+		return recentMsg{chatID: chatID, quiet: quiet, fresh: fresh, known: known, page: msgs, gone: gone, err: errors.Join(err, refErr, pruneErr)}
 	}
 }
 
@@ -799,7 +801,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if len(msg.fresh) > 0 {
 			m.arrived(msg.fresh)
 		}
-		m.react.learn(msg.fresh, msg.known)
+		m.react.learn(msg.page)
 		switch {
 		case msg.err != nil:
 			m.fail("sync: " + errText(msg.err))
@@ -824,7 +826,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// as for a sync: a stored message is never fresh again.
 		empty := w.chatID != "" && len(domain.Filter(m.msgs, domain.Query{ChatID: w.chatID})) == 0
 		m.identify(msg.known)
-		m.react.learn(msg.fresh, msg.known)
+		m.react.learn(msg.page)
 		m.dropMsgs(msg.chatID, msg.gone)
 		fresh := msg.fresh
 		if msg.quiet && w.loaded {

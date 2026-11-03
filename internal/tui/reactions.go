@@ -67,13 +67,12 @@ func newReactState() reactState {
 		unheld: map[string][]domain.Reaction{}}
 }
 
-// learn records messages whose reactions the service just sent (a sync, a
-// fetch, an edit): a poll's later word on them is compared with these.
-func (r *reactState) learn(lists ...[]domain.Message) {
-	for _, l := range lists {
-		for _, x := range l {
-			r.learned[x.Key()] = true
-		}
+// learn records messages whose reactions the service just sent (all a
+// sync or a fetch brought, new, changed or the same as cached; an edit):
+// a poll's later word on them is compared with these.
+func (r *reactState) learn(msgs []domain.Message) {
+	for _, x := range msgs {
+		r.learned[x.Key()] = true
 	}
 }
 

@@ -757,10 +757,13 @@ Never told: the first time lazygram learns a message's reactions this
 session, a removal or a lowered count, a change identical to what is
 known, and the account's own reaction. A message's reactions are
 learned from the service when a sync or a fetch brings it (a new
-message, or a cached copy that changed; the cached history loaded at
-start does not count), from an edit the service reports, and from any
-reported change. A sync, a window's first fetch, `/last`, a heal and a
-new message with reactions update the counts and say nothing. A poll's
+message, a cached copy that changed, and a cached copy that came back
+the same, since the service has just said what its reactions are; the
+cached history loaded at start does not count), from an edit the
+service reports, and from any reported change. A sync, a window's
+first fetch, `/last`, a heal and a new message with reactions update
+the counts and say nothing; a reaction a poll then finds added to any
+message they brought is told. A poll's
 first report on a message not learned this session (one cached in an
 earlier session and on screen, not fetched since) is applied silently;
 a push is compared with the cache whatever was learned. The notices are
