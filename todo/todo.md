@@ -154,5 +154,6 @@
 - [x] v0.4.22 from the Release workflow: assets and provenance verified, Homebrew formula at 0.4.22, PKGBUILD at 0.4.22 built and tested on both architectures, omacom/omarchy-pkgs#2022 moved to 0.4.22 (session/2026-11-03-release-0422.md)
 - [x] delete the GitHub releases v0.3.0 to v0.4.21 after v0.4.22 is verified; their tags stay (specs/release.md, Decisions)
 - [x] repository settings: Dependabot alerts and security updates, immutable releases, ruleset `release tags` (no deletion or move of `v*`), ruleset `master` requires a pull request and a passing `Linux` check on an up-to-date branch, no bypass (specs/ci.md, Repository settings)
+- [x] head branches deleted when their pull request is merged; the merged ones from #11 to #14 removed (specs/ci.md, Repository settings)
 - [ ] OpenSSF Best Practices badge: CONTRIBUTING.md, CHANGELOG.md with the release notes taken from it, then the registration at bestpractices.dev by the owner
 - [ ] Code-Review: approvals need a second GitHub identity (a second maintainer, or a machine account that opens the pull requests)

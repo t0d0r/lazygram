@@ -112,6 +112,11 @@ Kept on GitHub, not in the tree; changed only by the owner.
   stay mutable and can be deleted.
 - Private vulnerability reporting (SECURITY.md), Dependabot alerts and
   Dependabot security updates: enabled.
+- Head branches are deleted automatically when their pull request is
+  merged, so the branch list shows only open work. A deleted branch can
+  be restored from its pull request page, and its commits stay
+  reachable through the pull request ref (`refs/pull/N/head`), also
+  after a squash merge.
 
 Decision: the rules apply to everyone, so a compromised token or a
 mistake cannot rewrite `master` or a release tag. The cost is that
