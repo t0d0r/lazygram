@@ -176,6 +176,51 @@ completion, and an activity indicator.
   Chat windows are numbered from 1 in opening order, renumbered on
   `/close`, and `/move N` puts the current window at position N (1..last),
   shifting the others; the layout is saved.
+- `/close` closes the current window, `/close N` window N, and `/close
+  SPEC` every window SPEC names (code: `internal/tui/close.go`). SPEC is
+  one or more items separated by a comma, by spaces, or by a comma with
+  spaces around it; an empty item (`2,,3`, a comma at either end) is
+  malformed. An item is a window number `N` or a range `A-B` with `A <=
+  B`, whole numbers in ASCII digits with no sign and no spaces inside a
+  range: `/close 1,2,3`, `/close 1-4`, `/close 2,3-5`, `/close 2, 3-5`,
+  `/close 2 3 5`. Every number is the window's number before the command,
+  as the window bar shows it: `/close 2,3` closes the windows that were 2
+  and 3, not 2 and then the one renumbered to 2. A window named more than
+  once (`1,1`, `1-3,2`) closes once. The whole SPEC is checked before
+  anything closes, and the first check that fails is the error, with
+  nothing closed and nothing changed (the windows, the current and the
+  last window, the notices, unread counts, the stored layout): first a
+  malformed item or a reversed range (`5-3`) anywhere is `/close takes
+  window numbers: N, a list or ranges (as 2,3-5)`; then window 0
+  anywhere (a range from 0 included) is `cannot close that window (0 is
+  the server window)`; then a number past the last window is `no window
+  N`, the first such number as written (`3-9` with 7 chat windows: `no
+  window 9`), so a range that runs past the last window closes nothing.
+  `/close` alone in window 0 is the server window's error too. Each
+  closed window is noted in window 0 as `window closed: <name>`, in
+  window order, and the status names what closed: `closed <name>` for one
+  window, `closed N windows: 2:#dev, 3:@alice, 5:#qa` for several, the
+  list cut after four as `+N more` (as the new messages status is). The
+  windows after a closed one move down by one for each closed window
+  before them. When the current window stays open it stays current
+  (its number down by the closed windows before it); when it closes, the
+  nearest window before it that stays open becomes current, window 0 when
+  none does. Closing focuses nothing: no read receipt is sent and no
+  unread count changes, the new current window's included, as a single
+  close always did. The last focused window goes when it closes (below).
+  The layout is saved once, after all of them close. Texts that changed
+  with lists: a malformed argument was `/close takes a window number` and
+  is now the list's error, so `-1` and `+2` (which the number parser
+  took, `+2` as window 2) are malformed now; a number past the last
+  window was the server window's error and is now `no window N`.
+  Decision: the numbers are the ones shown before the command, as the
+  window bar shows them, so a list means what was read on screen, and
+  the order of the items never changes which windows close. Decision:
+  all or nothing, so a typo closes nothing; the form is checked first,
+  so a typo is named as one before any number is looked up. Decision: a
+  range past the last window is an error rather than cut short at the
+  last window, by the same rule: the argument was not what the screen
+  shows.
 - Switching to a window clears its unread count. The first time a chat
   window is shown, the last 10 messages of the chat are fetched from the
   service (`-!- fetching the last 10 messages`, then
@@ -698,7 +743,7 @@ and read like the commands under them.
 | `/move N`                     | move this window to position N                       |
 | `/win @user`, `/win #chan`    | open or switch to that chat's window                 |
 | `/unread`                     | focus the next window with unread messages after the current one, in window order and wrapping round (never window 0; the current window last); a focus like `/win N`; `no unread window` when there is none, and nothing changes; with `/doubletab unread`, Tab twice fast on an empty prompt does the same from the window the first Tab left (see Windows) |
-| `/close [N]`                  | close window N or the current one                    |
+| `/close [N,M-K]`              | close the current window, or the windows given: a number, a list or ranges, as `/close 2,3-5`, numbered as the window bar shows them before the command; all or nothing: a malformed item, window 0 or a number past the last window is an error and nothing closes (see Windows) |
 | `/last [N]`                   | fetch the last N messages (default 10, max 100)      |
 | `/search [text]`              | pager over the current window's local history        |
 | `/whois [name]`               | print what is known about a chat (default: this window's); in a group or channel window a name is one of its members first (see Members) |

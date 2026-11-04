@@ -17,7 +17,7 @@ const (
 	Refresh        // sync now
 	List           // print the chats; Arg filters
 	Win            // switch or open a window: Arg is a number or a chat name; empty lists windows
-	Close          // close window Arg (number), or the current one
+	Close          // close the windows Arg names (N, a list or ranges, as 2,3-5), or the current one
 	Last           // fetch the last N messages for the current window's chat
 	Search         // open the local history pager; Arg is the search text
 	Stats          // print client statistics into the current window
@@ -137,7 +137,7 @@ const HelpText = `Commands
   /win N                 switch to window N (0 is the server window)
   /win @user | #chan     open or switch to that chat's window; /win is also /w, /window, /j, /join, /query
   /unread                the next window with unread messages after this one, in window order, wrapping round (with /doubletab unread, Tab twice fast does it too); none: an error
-  /close [N]             close a window; also /wc, /part
+  /close [N,M-K]         close this window, or the windows given: N, a list or ranges (as 2,3-5), numbered as shown before the command; one bad number closes none; also /wc, /part
   /move N                move this window to position N; also /mv
   /last [N]              fetch the last N messages here (default 10); also /history, /hist
   /search [text]         page through this chat's local history; also /find, /log

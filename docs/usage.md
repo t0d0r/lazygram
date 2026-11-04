@@ -78,7 +78,7 @@ still lack their senders' usernames), and `/last N` fetches more.
 | `/win @user`, `/win #chan` | open or switch to that chat's window          |
 | `/unread`                  | the next window with unread messages after this one, in window order, wrapping round (the windows `[Act: ...]` lists); `no unread window` when there is none (with `/doubletab unread`, Tab twice fast on an empty prompt does the same) |
 | `/win`, `/win list`        | selectable list of the open windows; Left/Right pick `[read]`, `[unread]` or `[close]` for the row, Enter applies it (`[read]` and `[unread]` tell Telegram once, as in `/list`) |
-| `/close [N]`               | close a window                                |
+| `/close [N,M-K]`           | close this window, or the windows given by number: `/close 3`, a list `/close 2,3-5` (or `2, 3-5`, `2 3 5`), a range `/close 1-4`; the numbers are those the window bar shows before the command; if any is wrong (not a number, 0, past the last window) nothing closes |
 | `/last [N]`                | fetch the last N messages of this chat        |
 | `/search [text]`           | page through this chat's local history        |
 | `/whois [name]`            | what is known about a chat; in a group or channel window, about one of its members (Tab offers only its `@nicks`) |

@@ -1539,21 +1539,6 @@ func (m *Model) winName(i int) string {
 	return m.nameOf(m.wins[i].chatID)
 }
 
-func (m *Model) closeWin(i int) {
-	if i <= 0 || i >= len(m.wins) {
-		m.setErr("cannot close that window (0 is the server window)")
-		return
-	}
-	name := m.winName(i)
-	m.wins = append(m.wins[:i], m.wins[i+1:]...)
-	if m.cur >= i {
-		m.cur = max(m.cur-1, 0)
-	}
-	m.note(m.wins[0], "window closed: "+name)
-	m.setInfo("closed " + name)
-	m.saveLayout()
-}
-
 // moveWin puts the current window at position n; the server window stays
 // at 0 and the others shift.
 func (m *Model) moveWin(n int) {
@@ -1997,16 +1982,7 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 	case command.Win:
 		return m.winCommand(c.Arg)
 	case command.Close:
-		i := m.cur
-		if c.Arg != "" {
-			n, err := strconv.Atoi(c.Arg)
-			if err != nil {
-				m.setErr("/close takes a window number")
-				break
-			}
-			i = n
-		}
-		m.closeWin(i)
+		m.closeCommand(c.Arg) // close.go
 	case command.Msg:
 		return m.msg(c.Arg)
 	case command.SendFile:
