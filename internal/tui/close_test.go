@@ -127,6 +127,15 @@ func TestCloseSpec(t *testing.T) {
 		{"6-9", "no window 9"},
 		{"9-12", "no window 9"},
 		{"99999999999999999999999", "no window 99999999999999999999999"},
+		// Ends too large for an int are still ordered as written.
+		{"99999999999999999999-10000000000000000000", closeFormErr},
+		{"99999999999999999999-10000000000000000000,0", closeFormErr},
+		{"99999999999999999999-9999999999999999999", closeFormErr},
+		{"99999999999999999999-8", closeFormErr},
+		{"10000000000000000000-99999999999999999999", "no window 10000000000000000000"},
+		{"10000000000000000000-010000000000000000000", "no window 10000000000000000000"},
+		{"8-99999999999999999999", "no window 8"},
+		{"0-99999999999999999999", closeServerErr},
 		// The checks go in order: the form anywhere, then 0, then past the end.
 		{"9,0,x", closeFormErr},
 		{"9,0", closeServerErr},
@@ -183,6 +192,7 @@ func TestCloseIsAllOrNothing(t *testing.T) {
 		{"1,5-3", closeFormErr},
 		{"-1", closeFormErr},
 		{"+2", closeFormErr},
+		{"99999999999999999999-10000000000000000000", closeFormErr},
 		{"0", closeServerErr},
 		{"0-3", closeServerErr},
 		{"1-3,0", closeServerErr},

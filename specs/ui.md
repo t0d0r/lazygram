@@ -191,7 +191,9 @@ completion, and an activity indicator.
   nothing closed and nothing changed (the windows, the current and the
   last window, the notices, unread counts, the stored layout): first a
   malformed item or a reversed range (`5-3`) anywhere is `/close takes
-  window numbers: N, a list or ranges (as 2,3-5)`; then window 0
+  window numbers: N, a list or ranges (as 2,3-5)`, the ends compared as
+  whole numbers of any length (`99999999999999999999-10000000000000000000`
+  is reversed, though both ends are too large for an int); then window 0
   anywhere (a range from 0 included) is `cannot close that window (0 is
   the server window)`; then a number past the last window is `no window
   N`, the first such number as written (`3-9` with 7 chat windows: `no
@@ -220,7 +222,10 @@ completion, and an activity indicator.
   so a typo is named as one before any number is looked up. Decision: a
   range past the last window is an error rather than cut short at the
   last window, by the same rule: the argument was not what the screen
-  shows.
+  shows. Decision: a number too large for an int is past every window
+  but keeps its value for the order of a range, so a reversed range is
+  named as the typo it is whatever the size of its numbers, and the error
+  never depends on the machine's int size.
 - Switching to a window clears its unread count. The first time a chat
   window is shown, the last 10 messages of the chat are fetched from the
   service (`-!- fetching the last 10 messages`, then

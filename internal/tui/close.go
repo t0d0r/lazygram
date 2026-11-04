@@ -54,6 +54,17 @@ type windowNumber struct {
 	text string
 }
 
+// atMost tells whether x <= y as whole numbers of any size, so a range
+// whose ends are both too large for an int is still ordered as written:
+// with no leading zeros, the shorter text is the smaller number, and texts
+// of one length compare digit by digit.
+func (x windowNumber) atMost(y windowNumber) bool {
+	if len(x.text) != len(y.text) {
+		return len(x.text) < len(y.text)
+	}
+	return x.text <= y.text
+}
+
 func readWindowNumber(s string) (windowNumber, bool) {
 	if s == "" || strings.Trim(s, "0123456789") != "" {
 		return windowNumber{}, false
@@ -90,7 +101,7 @@ func closeSpec(spec string, last int) ([]int, error) {
 			if isRange {
 				var okB bool
 				hi, okB = readWindowNumber(b)
-				ok = ok && okB && lo.n <= hi.n
+				ok = ok && okB && lo.atMost(hi)
 			}
 			if !ok {
 				return nil, errors.New(closeFormErr)
