@@ -182,7 +182,7 @@
 - [x] v0.4.26 from the Release workflow (vim mode, /win last and the double Tab, reactions, chat names in the start notices, the README demo GIF): assets and provenance verified, a tampered file refused, the installer URL installs it; PKGBUILD at 0.4.26 built and tested on both architectures, omacom/omarchy-pkgs#2022 moved to 0.4.26 with the validators rerun on their master `be513f7` (session/2026-11-04-release-0426.md)
 - [x] Homebrew formula at 0.4.26 (tap `9d4dc1f`): built from source, `brew test` passed
 - [x] v0.4.27 from the Release workflow (/unread, the /doubletab setting, /settings as the only name of the menu): assets and provenance verified, a tampered file refused, the installer URL installs it; PKGBUILD at 0.4.27 built and tested on both architectures, omacom/omarchy-pkgs#2022 moved to 0.4.27 with the validators rerun on their master `8896655` (session/2026-11-04-release-0427.md)
-- [~] Homebrew formula at 0.4.27 (tap `f7ad46a`, the v0.4.27 source tarball's sha256 checked on two downloads): to push, then build from source and `brew test`
+- [x] Homebrew formula at 0.4.27 (tap `f7ad46a`, the v0.4.27 source tarball's sha256 checked on two downloads): built from source, `brew test` passed
 - [x] delete the GitHub releases v0.3.0 to v0.4.21 after v0.4.22 is verified; their tags stay (specs/release.md, Decisions)
 - [x] repository settings: Dependabot alerts and security updates, immutable releases, ruleset `release tags` (no deletion or move of `v*`), ruleset `master` requires a pull request and a passing `Linux` check on an up-to-date branch, no bypass (specs/ci.md, Repository settings)
 - [x] head branches deleted when their pull request is merged; the merged ones from #11 to #14 removed (specs/ci.md, Repository settings)
