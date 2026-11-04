@@ -64,7 +64,7 @@ func refRowsAt(l string, width int) []string {
 // TestReferenceFollowsTheWidth: /help and /keys fill the window's width
 // instead of a fixed 70 columns. An entry's description wraps under
 // itself (a hanging indent) when there is room for the columns, and under
-// the names, indented 4, when there is not; a note is a wrapped paragraph.
+// the names, indented 4, when there is not; a heading is a wrapped paragraph.
 // No row is wider than the window and no word is lost or moved.
 func TestReferenceFollowsTheWidth(t *testing.T) {
 	for _, ref := range []string{helpNotes, command.HelpText, keyHelp} {
@@ -452,5 +452,27 @@ func TestBouncePos(t *testing.T) {
 	a, b := clickable("abcd", linkStyle, 0), clickable("abcd", linkStyle, 1)
 	if a == b && lipgloss.Width(a) > 0 && strings.Contains(a, "\x1b") {
 		t.Fatal("the light must move")
+	}
+}
+
+// TestHelpNotesAreEntries: after its heading every /help note is an entry
+// laid out as the commands are: two spaces, a short label, its text from
+// column 25, so a note's continuation rows hang under its own text.
+func TestHelpNotesAreEntries(t *testing.T) {
+	lines := strings.Split(helpNotes, "\n")
+	if lines[0] != "Mouse, themes and windows" {
+		t.Fatalf("heading: %q", lines[0])
+	}
+	for _, l := range lines[1:] {
+		lead, _, _, ok := refEntry(l)
+		if !ok || lipgloss.Width(lead) != 25 {
+			t.Errorf("not an entry with its text at column 25: %q", l)
+		}
+	}
+	rows := refRowsAt(lines[3], 60) // the selection note wraps
+	for _, r := range rows[1:] {
+		if !strings.HasPrefix(r, strings.Repeat(" ", 25)) {
+			t.Errorf("continuation not under the note's text: %q", r)
+		}
 	}
 }

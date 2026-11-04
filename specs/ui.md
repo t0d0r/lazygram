@@ -633,7 +633,10 @@ narrows them (see Vim mode); with vim off they are as described here.
 plain lines (no time stamp or marker; command lines start after two
 spaces), one logical line every 28 ms like a terminal on a slow serial
 line, first the notes on themes, the mouse, selection, windows and
-reactions (under the heading `Mouse, themes and windows`), then the command reference
+reactions (under the heading `Mouse, themes and windows`; each note an
+entry laid out as a command's, a short label where the names go:
+Themes, Clickable text, Selection, Double click, Mouse, Window 0,
+Reactions, New windows, Names), then the command reference
 (under `Commands`), last, so that when printing ends the commands are
 what the window shows (the window follows the newest line) and the
 notes are one scroll up; there is no separate help view. The command
@@ -658,8 +661,8 @@ terminal and re-flow on resize:
   names, the names take their own row (wrapped, keeping their two-space
   indent, if the window is narrower than they are) and the description
   goes on the rows under them, indented 4.
-- Any other line (a heading, a note) is a paragraph wrapped to the
-  width.
+- Any other line (a heading, the last line naming `/keys`) is a
+  paragraph wrapped to the width.
 
 No row is wider than the window (at least 10 columns), and no word is
 dropped or reordered; only a word wider than its room is broken.
@@ -673,7 +676,11 @@ last and the notes are one scroll up. Later the notes moved to `/help`:
 they describe using the client (themes, the mouse, selection, windows),
 not keys, and `/help` (or F1) is where a new user looks first; `/keys`
 is the table alone. `/help` is longer for it, so its commands come
-last, as the table does in `/keys`.
+last, as the table does in `/keys`. Decision: the notes were paragraphs
+at the margin, each wrapping back to the margin, so where one ended and
+the next began was hard to see beside the aligned command list; as
+labelled entries they start after two spaces, wrap under their own text
+and read like the commands under them.
 
 ## Commands
 

@@ -491,7 +491,7 @@ func TestHelpAndKeysDescribeFeedAndSettings(t *testing.T) {
 	}
 	help, keys := printed("/help"), printed("/keys")
 	for _, want := range []string{
-		"Window 0 is the server window: every chat interleaved, plus notices (/feed off: the notices only)",
+		"  Window 0               the server window: every chat interleaved, plus notices (/feed off: the notices only)",
 		"a row in /list or /win to open it, a row of /settings to set its next value",
 	} {
 		if !strings.Contains(help, want) {

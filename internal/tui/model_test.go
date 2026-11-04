@@ -478,7 +478,7 @@ func TestHelpPrintsSlowlyWithoutIndent(t *testing.T) {
 	if strings.Contains(v, "-!- Commands") || strings.Contains(v, "-!- Mouse") {
 		t.Fatal("no marker on help lines")
 	}
-	if !strings.Contains(v, "People are @name") || strings.Index(v, "Mouse, themes and windows") > strings.Index(v, "\nCommands") {
+	if !strings.Contains(v, "\n  Names ") || strings.Index(v, "Mouse, themes and windows") > strings.Index(v, "\nCommands") {
 		t.Fatalf("/help prints the notes on the mouse, themes and windows first:\n%s", v)
 	}
 	if strings.Contains(v, "\nKeys") || strings.Contains(v, "Ctrl-N / Ctrl-P") {
@@ -531,7 +531,7 @@ func TestKeysPrintsIntoServerWindow(t *testing.T) {
 	if strings.Contains(v, "-!- Keys") || strings.Contains(v, "\nCommands") || strings.Contains(v, "/quit, /q") {
 		t.Fatalf("plain lines, keys only, no command list:\n%s", v)
 	}
-	for _, note := range []string{"Mouse, themes and windows", "People are @name", "Themes:", "[Act: 1,2]"} {
+	for _, note := range []string{"Mouse, themes and windows", "people are @name", "/theme lists the colour schemes", "[Act: 1,2]"} {
 		if strings.Contains(v, note) {
 			t.Fatalf("the notes are /help's, not /keys': %q in\n%s", note, v)
 		}
@@ -581,13 +581,13 @@ func TestHelpEndsWithTheCommands(t *testing.T) {
 	if rows[len(rows)-1] != "Keyboard shortcuts: type /keys." {
 		t.Fatalf("the screen ends with the command reference:\n%s", strings.Join(rows, "\n"))
 	}
-	for _, note := range []string{"People are @name", "Themes:", "[Act: 1,2]"} {
+	for _, note := range []string{"people are @name", "/theme lists the colour schemes", "[Act: 1,2]"} {
 		if strings.Contains(strings.Join(rows, "\n"), note) {
 			t.Fatalf("note %q printed after the commands:\n%s", note, strings.Join(rows, "\n"))
 		}
 	}
 	m.Update(tea.WindowSizeMsg{Width: 160, Height: 80})
-	if v := ansi.Strip(body(m)); !strings.Contains(v, "People are @name, groups and channels are #name.\nCommands\n") {
+	if v := ansi.Strip(body(m)); !strings.Contains(v, "  Names                  people are @name, groups and channels are #name\nCommands\n") {
 		t.Fatalf("the notes, then the command reference:\n%s", v)
 	}
 }
