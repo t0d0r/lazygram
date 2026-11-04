@@ -362,6 +362,45 @@ func TestCloseNoticesAndStatus(t *testing.T) {
 	}
 }
 
+// TestCloseNoticesGoToWindowZero: run from a chat window, the notices
+// still go to window 0 and none to the window current before or after,
+// whether that window stays open or closes.
+func TestCloseNoticesGoToWindowZero(t *testing.T) {
+	for _, c := range []struct {
+		cur    int
+		arg    string
+		now    string // the current window after
+		closed []string
+	}{
+		{6, "1,3", "@bob", []string{"#news", "@alice"}}, // stays open
+		{3, "3-4", "#dev", []string{"@alice", "#ops"}},  // closes: #dev current
+	} {
+		m := wide(t)
+		enter(m, fmt.Sprint("/win ", c.cur))
+		notes := map[*win]int{} // the notices of every window before
+		for _, w := range m.wins {
+			notes[w] = len(w.notes)
+		}
+		zero := m.wins[0]
+		enter(m, "/close "+c.arg)
+		if m.isErr || m.winName(m.cur) != c.now {
+			t.Fatalf("in window %d, /close %s: current %s (%q); want %s", c.cur, c.arg, m.winName(m.cur), m.status, c.now)
+		}
+		var want []string
+		for _, name := range c.closed {
+			want = append(want, "window closed: "+name)
+		}
+		if got := noteTexts(zero)[notes[zero]:]; !slices.Equal(got, want) {
+			t.Errorf("in window %d, /close %s noted %q in window 0; want %q", c.cur, c.arg, got, want)
+		}
+		for _, w := range m.wins[1:] {
+			if len(w.notes) != notes[w] {
+				t.Errorf("in window %d, /close %s noted %q in %s", c.cur, c.arg, noteTexts(w)[notes[w]:], m.nameOf(w.chatID))
+			}
+		}
+	}
+}
+
 // TestCloseListSavesTheLayout: the layout after the windows closed is
 // what a new model over the same store opens.
 func TestCloseListSavesTheLayout(t *testing.T) {
