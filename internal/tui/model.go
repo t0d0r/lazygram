@@ -3356,17 +3356,19 @@ func (m *Model) rule(label string) string {
 
 // helpNotes is what /help prints before the command reference: how the
 // client is used beyond its commands (themes, the mouse, selection,
-// windows, reactions). One logical line each, wrapped when drawn.
+// windows, reactions). Each note is an entry like the commands', a short
+// label in the names column and its text in the description column, one
+// logical line each, laid out by refRows when drawn.
 const helpNotes = `Mouse, themes and windows
-Themes: /theme lists the colour schemes, /theme <name> switches (kept).
-Clickable text is bright and underlined; a running light plays over the one under the mouse pointer. /fx turns the light on or off (kept).
-Drag with the left button to select text; on release it is copied to the clipboard: through the terminal (OSC 52) and the system tool when there is one (pbcopy, wl-copy, xclip, xsel, clip); /clip picks (kept). The selection stays highlighted until the next click, or until the text under it changes or a cursor in it moves.
-Double click copies the word under the pointer, triple click the row; on a link or a name the first click acts and the next ones only select. Shift-click extends the selection where the terminal passes Shift on; most Linux terminals keep Shift-drag (Option on macOS) for their own selection, as does /mouse off.
-Mouse: click a chat name or nick in window 0 to open its window, a tag in the window bar to focus it, a row in /list or /win to open it, a row of /settings to set its next value, a link or a [photo] / [file] token to open it with the system; the wheel scrolls.
-Window 0 is the server window: every chat interleaved, plus notices (/feed off: the notices only); it stays at 0 and cannot be closed. /move N puts this window at N.
-Reactions show after a message as [emoji count ...], yours highlighted; window 0 says when someone adds one (with /feed on). The messages on screen are asked about every 20 seconds.
-A window opens for a chat when it gets a message or has unread ones; [Act: 1,2] in the status line lists windows with unread messages, and /unread goes to the next of them.
-People are @name, groups and channels are #name.`
+  Themes                 /theme lists the colour schemes, /theme <name> switches (kept)
+  Clickable text         bright and underlined; a running light plays over the one under the mouse pointer; /fx turns the light on or off (kept)
+  Selection              drag with the left button to select text; on release it is copied to the clipboard: through the terminal (OSC 52) and the system tool when there is one (pbcopy, wl-copy, xclip, xsel, clip); /clip picks (kept); the selection stays highlighted until the next click, or until the text under it changes or a cursor in it moves
+  Double click           copies the word under the pointer, a triple click the row; on a link or a name the first click acts and the next ones only select; Shift-click extends the selection where the terminal passes Shift on; most Linux terminals keep Shift-drag (Option on macOS) for their own selection, as does /mouse off
+  Mouse                  click a chat name or nick in window 0 to open its window, a tag in the window bar to focus it, a row in /list or /win to open it, a row of /settings to set its next value, a link or a [photo] / [file] token to open it with the system; the wheel scrolls
+  Window 0               the server window: every chat interleaved, plus notices (/feed off: the notices only); it stays at 0 and cannot be closed; /move N puts this window at N
+  Reactions              shown after a message as [emoji count ...], yours highlighted; window 0 says when someone adds one (with /feed on); the messages on screen are asked about every 20 seconds
+  New windows            a window opens for a chat when it gets a message or has unread ones; [Act: 1,2] in the status line lists windows with unread messages, and /unread goes to the next of them
+  Names                  people are @name, groups and channels are #name`
 
 // keyHelp is what /keys prints: the Keys table alone. Entries are one
 // logical line each, laid out as in command.HelpText and wrapped when

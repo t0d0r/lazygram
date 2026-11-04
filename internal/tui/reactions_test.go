@@ -345,7 +345,7 @@ func TestHelpTellsOfReactions(t *testing.T) {
 	enter(m, "/help")
 	drain(m)
 	for _, n := range m.wins[0].notes {
-		if strings.HasPrefix(n.text, "Reactions show after a message as [emoji count ...], yours highlighted; window 0 says when someone adds one (with /feed on).") {
+		if strings.HasPrefix(n.text, "  Reactions              shown after a message as [emoji count ...], yours highlighted; window 0 says when someone adds one (with /feed on);") {
 			return
 		}
 	}
