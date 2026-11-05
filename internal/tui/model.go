@@ -1983,6 +1983,8 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		return m.winCommand(c.Arg)
 	case command.Close:
 		m.closeCommand(c.Arg) // close.go
+	case command.CloseOthers:
+		m.closeOthers(c.Arg) // close.go
 	case command.Msg:
 		return m.msg(c.Arg)
 	case command.SendFile:

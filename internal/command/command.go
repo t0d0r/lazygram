@@ -46,6 +46,10 @@ const (
 	Vim            // vi keys (Normal and Insert modes) on the input, the lists and the pager: Arg is on or off; empty shows the setting
 	Unread         // focus the next window with unread messages after the current one, wrapping round
 	DoubleTab      // what Tab twice fast on an empty prompt does: Arg is off, last, unread or the time in ms; empty shows the setting
+
+	// CloseOthers closes every chat window but the current one; it takes no
+	// Arg (the TUI rejects one).
+	CloseOthers
 )
 
 // Command is a parsed slash command.
@@ -89,6 +93,7 @@ var table = map[string]Kind{
 	"vim":          Vim,
 	"unread":       Unread,
 	"doubletab":    DoubleTab,
+	"close-others": CloseOthers,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -138,6 +143,7 @@ const HelpText = `Commands
   /win @user | #chan     open or switch to that chat's window; /win is also /w, /window, /j, /join, /query
   /unread                the next window with unread messages after this one, in window order, wrapping round (with /doubletab unread, Tab twice fast does it too); none: an error
   /close [N,M-K]         close this window, or the windows given: N, a list or ranges (as 2,3-5), numbered as shown before the command; one bad number closes none; also /wc, /part
+  /close-others          close every chat window but this one; window 0 stays; refused in window 0; takes no argument
   /move N                move this window to position N; also /mv
   /last [N]              fetch the last N messages here (default 10); also /history, /hist
   /search [text]         page through this chat's local history; also /find, /log

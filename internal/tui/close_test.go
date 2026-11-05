@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"lazygram/internal/command"
 	"lazygram/internal/domain"
 )
@@ -446,4 +448,331 @@ func TestHelpNamesCloseLists(t *testing.T) {
 			t.Errorf("/help's /close line lacks %q: %q", want, line)
 		}
 	}
+}
+
+// TestHelpNamesCloseOthers: /help lists /close-others on a line of its
+// own, right after /close, saying what it keeps and that it takes no
+// argument.
+func TestHelpNamesCloseOthers(t *testing.T) {
+	lines := strings.Split(command.HelpText, "\n")
+	at := -1
+	for i, l := range lines {
+		if strings.HasPrefix(l, "  /close-others ") {
+			at = i
+		}
+	}
+	if at < 1 || !strings.HasPrefix(lines[at-1], "  /close ") {
+		t.Fatalf("/help has no /close-others line right after /close: at %d", at)
+	}
+	for _, want := range []string{"every chat window but this one", "window 0 stays", "takes no argument"} {
+		if !strings.Contains(lines[at], want) {
+			t.Errorf("/help's /close-others line lacks %q: %q", want, lines[at])
+		}
+	}
+}
+
+// closedNotes are the window 0 notices of closing the windows names.
+func closedNotes(names []string) []string {
+	var want []string
+	for _, name := range names {
+		want = append(want, "window closed: "+name)
+	}
+	return want
+}
+
+// TestCloseOthersKeepsOnlyTheCurrentChatWindow: from any chat window,
+// /close-others closes every other chat window at once, as /close with
+// their numbers would: the current window stays current, as window 1,
+// window 0 stays, each closed window is noted in window 0 in window order
+// (none in the window kept), one status names them, and the stored layout
+// is the one window left.
+func TestCloseOthersKeepsOnlyTheCurrentChatWindow(t *testing.T) {
+	for _, c := range []struct {
+		cur    int
+		status string
+		closed []string
+	}{
+		{1, "closed 6 windows: 2:#dev, 3:@alice, 4:#ops, 5:#qa, +2 more", []string{"#dev", "@alice", "#ops", "#qa", "@bob", "#web"}},
+		{4, "closed 6 windows: 1:#news, 2:#dev, 3:@alice, 5:#qa, +2 more", []string{"#news", "#dev", "@alice", "#qa", "@bob", "#web"}},
+		{7, "closed 6 windows: 1:#news, 2:#dev, 3:@alice, 4:#ops, +2 more", []string{"#news", "#dev", "@alice", "#ops", "#qa", "@bob"}},
+	} {
+		m := wide(t)
+		enter(m, fmt.Sprint("/win ", c.cur))
+		server, kept := m.wins[0], m.wins[c.cur]
+		notes := map[*win]int{}
+		for _, w := range m.wins {
+			notes[w] = len(w.notes)
+		}
+		cmd := enter(m, "/close-others")
+		if m.isErr || m.status != c.status || cmd != nil {
+			t.Errorf("in window %d, /close-others: %q (error %v, cmd %v); want %q", c.cur, m.status, m.isErr, cmd != nil, c.status)
+		}
+		if len(m.wins) != 2 || m.wins[0] != server || m.wins[1] != kept || m.cur != 1 {
+			t.Fatalf("in window %d, /close-others left %q, current %d; want only the window kept, current 1", c.cur, winNames(m), m.cur)
+		}
+		if got := noteTexts(server)[notes[server]:]; !slices.Equal(got, closedNotes(c.closed)) {
+			t.Errorf("in window %d, /close-others noted %q in window 0; want %q", c.cur, got, closedNotes(c.closed))
+		}
+		if len(kept.notes) != notes[kept] {
+			t.Errorf("in window %d, /close-others noted %q in the window kept", c.cur, noteTexts(kept)[notes[kept]:])
+		}
+		if l := storedLayout(t, m); !slices.Equal(l.Windows, []string{kept.chatID}) || l.Current != 1 {
+			t.Errorf("in window %d, /close-others stored %+v; want [%s] current 1", c.cur, l, kept.chatID)
+		}
+	}
+}
+
+// TestCloseOthersNamesWhatClosed: the status is /close's: one window by
+// name, several as a list.
+func TestCloseOthersNamesWhatClosed(t *testing.T) {
+	m := setup(t, newFake()) // 1 #news, 2 #dev, 3 @alice
+	enter(m, "/win 2")
+	enter(m, "/close-others")
+	if m.isErr || m.status != "closed 2 windows: 1:#news, 3:@alice" || winNames(m) != "#dev" {
+		t.Fatalf("/close-others with two others: %q, left %q", m.status, winNames(m))
+	}
+	m = setup(t, newFake())
+	enter(m, "/close 3")
+	enter(m, "/win 1")
+	before := len(m.wins[0].notes)
+	enter(m, "/close-others")
+	if m.isErr || m.status != "closed #dev" || winNames(m) != "#news" {
+		t.Fatalf("/close-others with one other: %q, left %q", m.status, winNames(m))
+	}
+	if got := noteTexts(m.wins[0])[before:]; !slices.Equal(got, closedNotes([]string{"#dev"})) {
+		t.Fatalf("/close-others with one other noted %q", got)
+	}
+}
+
+// TestCloseOthersFocusesNothing: the window kept is not focused again: no
+// read receipt goes, even with receipts on, and it keeps an unread mark
+// it has (as [unread] on its own /win row leaves it).
+func TestCloseOthersFocusesNothing(t *testing.T) {
+	f := wideFake()
+	m := setup(t, f)
+	for _, id := range []string{"c5", "c6", "c7", "c8"} {
+		m.openWin(id)
+	}
+	enter(m, "/read-receipts on")
+	enter(m, "/win 3")   // @alice: focused, its unread count read
+	m.wins[3].unread = 2 // marked unread again
+	receipts := len(f.read)
+	cmd := enter(m, "/close-others")
+	runAll(m, cmd)
+	if m.isErr || cmd != nil || len(f.read) != receipts {
+		t.Fatalf("/close-others: %q, cmd %v, receipts %v (had %d)", m.status, cmd != nil, f.read, receipts)
+	}
+	if winNames(m) != "@alice" || m.cur != 1 || m.wins[1].unread != 2 {
+		t.Fatalf("/close-others left %q current %d, unread %d; want @alice current, unread 2", winNames(m), m.cur, m.wins[1].unread)
+	}
+}
+
+// TestCloseOthersDropsTheLastWindow: the last focused window goes when it
+// is a chat window, as every other chat window closes; window 0 as the
+// last window stays.
+func TestCloseOthersDropsTheLastWindow(t *testing.T) {
+	m := wide(t)
+	enter(m, "/win 3")
+	enter(m, "/win 6") // @bob, @alice the last window
+	enter(m, "/close-others")
+	enter(m, "/win last")
+	if !m.isErr || m.status != "no last window" || m.winName(m.cur) != "@bob" {
+		t.Fatalf("a closed last window is none: %q, %s", m.status, m.winName(m.cur))
+	}
+	m = wide(t)
+	enter(m, "/win 6") // from window 0: the server window is the last window
+	enter(m, "/close-others")
+	enter(m, "/win last")
+	if m.isErr || m.cur != 0 {
+		t.Fatalf("window 0 stays the last window: %q, current %d", m.status, m.cur)
+	}
+}
+
+// TestCloseOthersSavesTheLayout: what a new model over the same store
+// opens is the window kept, current.
+func TestCloseOthersSavesTheLayout(t *testing.T) {
+	f := wideFake()
+	m := setup(t, f)
+	for _, id := range []string{"c5", "c6", "c7", "c8"} {
+		m.openWin(id)
+	}
+	enter(m, "/win 6") // @bob
+	enter(m, "/close-others")
+	again := New(Options{Store: m.opt.Store, Provider: f})
+	if got := chatIDs(again); !slices.Equal(got, []string{"c7"}) || again.cur != 1 {
+		t.Fatalf("a new start opens %v at %d; want [c7] at 1", got, again.cur)
+	}
+}
+
+// unchanged records what /close-others must leave alone when it closes
+// nothing, and plants a layout in the store that no window shows, so a
+// layout written by the command, even an equal one, is seen.
+type unchanged struct {
+	wins    []*win
+	cur     int
+	last    int
+	notes   map[*win]int
+	unread  map[*win]int
+	planted layout
+}
+
+func recordUnchanged(t *testing.T, m *Model) unchanged {
+	t.Helper()
+	u := unchanged{wins: slices.Clone(m.wins), cur: m.cur, last: m.lastWindow(), notes: map[*win]int{}, unread: map[*win]int{},
+		planted: layout{Windows: []string{"planted"}, Current: 42}}
+	for _, w := range m.wins {
+		u.notes[w], u.unread[w] = len(w.notes), w.unread
+	}
+	if err := m.opt.Store.SetState(layoutKey, u.planted); err != nil {
+		t.Fatal(err)
+	}
+	return u
+}
+
+func (u unchanged) check(t *testing.T, m *Model, what string) {
+	t.Helper()
+	if !slices.Equal(m.wins, u.wins) || m.cur != u.cur || m.lastWindow() != u.last {
+		t.Errorf("%s changed the windows: %q, current %d, last %d", what, winNames(m), m.cur, m.lastWindow())
+	}
+	for _, w := range m.wins {
+		if len(w.notes) != u.notes[w] {
+			t.Errorf("%s noted %q in %s", what, noteTexts(w)[u.notes[w]:], m.nameOf(w.chatID))
+		}
+		if w.unread != u.unread[w] {
+			t.Errorf("%s changed the unread count of %s: %d, was %d", what, m.nameOf(w.chatID), w.unread, u.unread[w])
+		}
+	}
+	if l := storedLayout(t, m); !reflect.DeepEqual(l, u.planted) {
+		t.Errorf("%s wrote the stored layout: %+v", what, l)
+	}
+}
+
+// TestCloseOthersAloneIsANoOp: when the current window is the only chat
+// window there is nothing to close: the status says so, as information,
+// not an error, and nothing changes: no notice, the windows, the current
+// and the last window, unread counts, and the stored layout, which is
+// not written.
+func TestCloseOthersAloneIsANoOp(t *testing.T) {
+	f := newFake()
+	m := setup(t, f)
+	enter(m, "/read-receipts on")
+	enter(m, "/close 2-3")
+	enter(m, "/win 1")   // #news alone; window 0 the last window
+	m.wins[1].unread = 2 // marked unread again
+	receipts := len(f.read)
+	u := recordUnchanged(t, m)
+	cmd := enter(m, "/close-others")
+	runAll(m, cmd)
+	if m.isErr || m.status != "no other chat window to close" || cmd != nil || len(f.read) != receipts {
+		t.Fatalf("/close-others alone: %q (error %v, cmd %v, receipts %v)", m.status, m.isErr, cmd != nil, f.read)
+	}
+	u.check(t, m, "/close-others alone")
+}
+
+// TestCloseOthersRefusedInWindowZero: window 0 is no chat window to keep,
+// so /close-others there is the error of every command that needs a chat
+// window and nothing changes, with chat windows open or none.
+func TestCloseOthersRefusedInWindowZero(t *testing.T) {
+	const want = "the server window has no chat; /win to a chat first"
+	m := wide(t)
+	enter(m, "/win 3")
+	enter(m, "/win 0") // @alice the last window
+	u := recordUnchanged(t, m)
+	cmd := enter(m, "/close-others")
+	if !m.isErr || m.status != want || cmd != nil {
+		t.Fatalf("/close-others in window 0: %q (error %v); want the error %q", m.status, m.isErr, want)
+	}
+	u.check(t, m, "/close-others in window 0")
+	m = setup(t, newFake())
+	enter(m, "/close 1-3")
+	u = recordUnchanged(t, m)
+	enter(m, "/close-others")
+	if !m.isErr || m.status != want {
+		t.Fatalf("/close-others in window 0 alone: %q (error %v); want the error %q", m.status, m.isErr, want)
+	}
+	u.check(t, m, "/close-others in window 0 alone")
+}
+
+// TestCloseOthersTakesNoArgument: any argument is an error and nothing
+// changes; it is checked first, so window 0 and a window alone give it
+// too. Spaces alone are no argument.
+func TestCloseOthersTakesNoArgument(t *testing.T) {
+	const want = "/close-others takes no argument; /close 2,3-5 closes the windows given"
+	for _, c := range []struct {
+		cur  int
+		arg  string
+		solo bool // the current window is the only chat window
+	}{
+		{4, "3", false},
+		{4, "4", false},
+		{4, "1-3", false},
+		{4, "2,3-5", false},
+		{4, "x", false},
+		{4, "all", false},
+		{4, "--force", false},
+		{4, "0", false},
+		{0, "3", false},
+		{1, "3", true},
+	} {
+		m := wide(t)
+		if c.solo {
+			enter(m, "/close 2-7")
+		}
+		enter(m, fmt.Sprint("/win ", c.cur))
+		u := recordUnchanged(t, m)
+		line := "/close-others " + c.arg
+		cmd := enter(m, line)
+		if !m.isErr || m.status != want || cmd != nil {
+			t.Errorf("%q in window %d: %q (error %v); want the error %q", line, c.cur, m.status, m.isErr, want)
+		}
+		u.check(t, m, fmt.Sprintf("%q in window %d", line, c.cur))
+	}
+	m := wide(t)
+	enter(m, "/win 2")
+	enter(m, "/close-others   ")
+	if m.isErr || winNames(m) != "#dev" {
+		t.Fatalf("/close-others with spaces after it: %q, left %q", m.status, winNames(m))
+	}
+}
+
+// TestTabCompletesCloseOthers: Tab completes /close-others from its
+// prefix, offers nothing after it (it takes no argument: no chat names),
+// and /close Tab now stops at /close, the prefix both commands share, as
+// /clip does beside /clipboard; a second Tab lists both.
+func TestTabCompletesCloseOthers(t *testing.T) {
+	m := setup(t, newFake())
+	for typed, want := range map[string]string{
+		"/close-o":         "/close-others ",
+		"/CLOSE-OT":        "/close-others ",
+		"/close-others ":   "/close-others ",
+		"/close-others al": "/close-others al",
+		"/close":           "/close",
+		"/close al":        "/close al", // numbers
+	} {
+		m.input, m.comp = nil, nil
+		typ(m, typed)
+		press(m, tea.KeyTab)
+		if got := string(m.input); got != want {
+			t.Errorf("%q: got %q, want %q", typed, got, want)
+		}
+	}
+	m.input, m.comp = nil, nil
+	typ(m, "/close")
+	press(m, tea.KeyTab)
+	press(m, tea.KeyTab)
+	if v := body(m); !strings.Contains(v, "/close  /close-others") {
+		t.Errorf("the second Tab lists /close and /close-others:\n%s", v)
+	}
+}
+
+// TestHintNamesCloseOthers: a start hint makes /close-others known; read
+// in window 0, which refuses it, it says it works in a chat window
+// (TestHintsAreWellFormed checks the form).
+func TestHintNamesCloseOthers(t *testing.T) {
+	for _, h := range hintPool {
+		if strings.Contains(h, "/close-others ") && strings.Contains(h, "chat window") {
+			return
+		}
+	}
+	t.Fatal("no start hint names /close-others")
 }

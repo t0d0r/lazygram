@@ -38,9 +38,9 @@ completion, and an activity indicator.
   Ctrl-X, Ctrl-N and Ctrl-P, `/search`, double and triple click,
   `/theme`, `/autojoin`, `/read-receipts`, `/whois`, `/send`,
   `/open <link>`, Ctrl-L, `/about`, `/mark-as-read`, `/names`, `/last`,
-  Up and Down, `/mouse`, PgUp and PgDn, `/move` and `/close`, `/feed
-  off`, `/settings`, `/win last` and `/unread`, `/doubletab last` or
-  `unread`, `/vim on`), so
+  Up and Down, `/mouse`, PgUp and PgDn, `/move` and `/close`,
+  `/close-others`, `/feed off`, `/settings`, `/win last` and `/unread`,
+  `/doubletab last` or `unread`, `/vim on`), so
   the pair differs between starts (`Options.Rand` draws them,
   `rand.IntN` unless a test injects one). They are printed once per start, in window 0 only,
   as part of its start-up screen, so they roll in with it when window 0
@@ -51,8 +51,9 @@ completion, and an activity indicator.
   code, and names only commands the parser knows. A hint is read in
   window 0, which has no chat, so it never speaks of "this" chat or
   window, and one that names Ctrl-X or a command the server window
-  refuses (`/send`, `/mark-as-read`, `/last`, `/move`, `/close`, `/edit`,
-  `/delete`, `/me`, `/press`) says it works in a chat window. A word such
+  refuses (`/send`, `/mark-as-read`, `/last`, `/move`, `/close`,
+  `/close-others`, `/edit`, `/delete`, `/me`, `/press`) says it works in
+  a chat window. A word such
   as `on` or `off` after a command appears only where that command takes
   it (`/autojoin off`, `/read-receipts on`); `/mouse` takes none, it
   toggles, so its hint says so. Tests check the form, the command names,
@@ -226,6 +227,45 @@ completion, and an activity indicator.
   but keeps its value for the order of a range, so a reversed range is
   named as the typo it is whatever the size of its numbers, and the error
   never depends on the machine's int size.
+- `/close-others` closes every chat window except the current one, at
+  once (code: `internal/tui/close.go`); window 0 always stays. It is
+  `/close` with the numbers of all the other chat windows and runs
+  through the same code, so everything above holds: each closed window
+  is noted in window 0 as `window closed: <name>`, in window order, and
+  none in the window kept; the status names what closed, `closed <name>`
+  for one window, `closed N windows: 1:#news, 3:@alice` for several
+  (numbered as before the command), cut after four as `+N more`; the
+  current window stays current, as window 1; closing focuses nothing, so
+  no read receipt is sent (with `/read-receipts on` too) and no unread
+  count changes, the kept window's included; the last focused window
+  goes when it was a chat window (window 0 as the last window stays);
+  the layout is saved once, after all of them close. It takes no
+  argument and has no short form. Three cases close nothing; the checks
+  go in this order, and on each nothing changes (the windows, the
+  current and the last window, the notices, unread counts) and the
+  stored layout is not written: any argument (`/close-others 3`,
+  `/close-others all`; spaces alone are none), in any window, is the
+  error `/close-others takes no argument; /close 2,3-5 closes the
+  windows given`; then in window 0, with chat windows open or none, it
+  is the error `the server window has no chat; /win to a chat first`,
+  the one every command that needs a chat window gives; then when the
+  current window is the only chat window the status says `no other chat
+  window to close`, as information, not an error. `/help` lists it
+  right after `/close` as `/close-others  close every chat window but
+  this one; window 0 stays; refused in window 0; takes no argument`, and
+  a start hint names it. Decision: the window kept is the current chat
+  window, so window 0, which has none to keep, refuses instead of
+  closing every chat window (`/close 1-N` does that), with the shared
+  error of the commands that need a chat window (`/send`,
+  `/mark-as-read`, `/edit`). Decision: an argument is refused, not
+  ignored, because `/close-others 3` could mean keep 3 or close 3; it
+  closes nothing and the error names `/close` for given windows; the
+  argument is checked first, as `/close` checks the form first.
+  Decision: nothing to close is information, not an error, because what
+  the command asks for already holds; nothing changed, so the layout is
+  not written. Decision: it reuses the closing of `/close`, so the
+  notices, the status, the current window, the receipts and the single
+  save cannot drift apart between the two commands.
 - Switching to a window clears its unread count. The first time a chat
   window is shown, the last 10 messages of the chat are fetched from the
   service (`-!- fetching the last 10 messages`, then
@@ -749,6 +789,7 @@ and read like the commands under them.
 | `/win @user`, `/win #chan`    | open or switch to that chat's window                 |
 | `/unread`                     | focus the next window with unread messages after the current one, in window order and wrapping round (never window 0; the current window last); a focus like `/win N`; `no unread window` when there is none, and nothing changes; with `/doubletab unread`, Tab twice fast on an empty prompt does the same from the window the first Tab left (see Windows) |
 | `/close [N,M-K]`              | close the current window, or the windows given: a number, a list or ranges, as `/close 2,3-5`, numbered as the window bar shows them before the command; all or nothing: a malformed item, window 0 or a number past the last window is an error and nothing closes (see Windows) |
+| `/close-others`               | close every chat window but the current one, at once, as `/close` with their numbers; window 0 stays; any argument and window 0 are errors, and with no other chat window it says `no other chat window to close`; then nothing changes and the layout is not written; it has no short form (see Windows) |
 | `/last [N]`                   | fetch the last N messages (default 10, max 100)      |
 | `/search [text]`              | pager over the current window's local history        |
 | `/whois [name]`               | print what is known about a chat (default: this window's); in a group or channel window a name is one of its members first (see Members) |
@@ -787,6 +828,7 @@ Short forms: `/h` for `/help`; `/shortcuts`, `/bindings` for `/keys`;
 `/colors`, `/colours` for `/theme`; `/version` for `/about`; `/lights`,
 `/anim` for `/fx`; `/nicks` for `/names`. `/settings` has none: `/set`
 and `/options` are unknown commands, like any other unknown name.
+`/close-others` has none either (`/closeothers` is unknown).
 `/help` prints every spelling
 the parser accepts, the short forms as `also /x, /y` after their
 command, so the printed reference and the parser table never disagree
@@ -2012,8 +2054,11 @@ and chat names
 where the command takes a chat: the first argument of `/win`, `/msg`,
 `/whois` and `/list`, every word of `/me` and `/edit` text, and every
 word of a line without a command (message text). After any other
-command (`/last`, `/search`, `/press`, the settings) Tab offers no chat
-names: those arguments are numbers, settings or free text. A chat is
+command (`/last`, `/search`, `/press`, the settings, `/close-others`)
+Tab offers no chat names: those arguments are numbers, settings or free
+text, and `/close-others` takes none. `/close` Tab stops at `/close`,
+which `/close-others` begins too, as `/clip` does beside `/clipboard`;
+a second Tab lists both. A chat is
 offered when the word begins its alias or its title as shown, in either
 script (see Search in either script), by nick and by name alike; a
 typed `@` or `#` must be the chat's own sigil, and without one the alias

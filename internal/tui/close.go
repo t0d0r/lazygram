@@ -12,13 +12,25 @@ import (
 // window, /close N window N, and /close 2,3-5 the windows a list of
 // numbers and ranges names. Every number is the window's number before
 // the command, as the window bar shows it, and the whole list is checked
-// before anything closes, so one bad item closes nothing.
+// before anything closes, so one bad item closes nothing. /close-others
+// closes every chat window but the current one, the same way.
 
 // The errors of /close. The server window's is also the /win list's
 // [close] button's on window 0.
 const (
 	closeFormErr   = "/close takes window numbers: N, a list or ranges (as 2,3-5)"
 	closeServerErr = "cannot close that window (0 is the server window)"
+)
+
+// What /close-others says instead of closing. It takes no argument, and
+// names /close for closing given windows. Window 0 is no chat window to
+// keep, so it gets the error of every command that needs a chat window.
+// With the current window the only chat window what it asks for already
+// holds: information, not an error.
+const (
+	closeOthersArgErr    = "/close-others takes no argument; /close 2,3-5 closes the windows given"
+	closeOthersServerErr = "the server window has no chat; /win to a chat first"
+	closeOthersNone      = "no other chat window to close"
 )
 
 // closeCommand runs /close with its argument; none closes the current
@@ -31,6 +43,34 @@ func (m *Model) closeCommand(arg string) {
 	idx, err := closeSpec(arg, len(m.wins)-1)
 	if err != nil {
 		m.setErr(err.Error())
+		return
+	}
+	m.closeWins(idx)
+}
+
+// closeOthers runs /close-others: every chat window but the current one
+// closes at once, through closeWins, so it is /close with their numbers.
+// The checks go in order, the argument first, as /close checks the form
+// first: an argument, then window 0, are errors; then none to close is
+// information. On each of them nothing changes and the layout is not
+// written.
+func (m *Model) closeOthers(arg string) {
+	if arg != "" {
+		m.setErr(closeOthersArgErr)
+		return
+	}
+	if m.cur == 0 {
+		m.setErr(closeOthersServerErr)
+		return
+	}
+	var idx []int
+	for i := 1; i < len(m.wins); i++ {
+		if i != m.cur {
+			idx = append(idx, i)
+		}
+	}
+	if len(idx) == 0 {
+		m.setInfo(closeOthersNone)
 		return
 	}
 	m.closeWins(idx)
