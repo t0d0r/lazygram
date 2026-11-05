@@ -26,6 +26,12 @@ func TestParse(t *testing.T) {
 		{"/close 2,3-5", Command{Close, "2,3-5"}, false},
 		{"/wc  2, 3-5 ", Command{Close, "2, 3-5"}, false},
 		{"/part 2 3 5", Command{Close, "2 3 5"}, false},
+		{"/close-others", Command{CloseOthers, ""}, false},
+		{"  /CLOSE-OTHERS ", Command{CloseOthers, ""}, false},
+		{"/close-others 3", Command{CloseOthers, "3"}, false}, // the TUI rejects it
+		{"/closeothers", Command{}, true},                     // one spelling only
+		{"/close-other", Command{}, true},
+		{"/wc-others", Command{}, true},
 		{"/last", Command{Last, ""}, false},
 		{"/history 20", Command{Last, "20"}, false},
 		{"/search", Command{Search, ""}, false},
