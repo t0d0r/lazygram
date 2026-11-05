@@ -262,6 +262,7 @@ var hintNeedsChat = map[command.Kind]string{
 	command.Last: "/last 5", command.Move: "/move 2", command.Close: "/close",
 	command.Edit: "/edit x", command.Delete: "/delete", command.Me: "/me x",
 	command.Press: "/press 1", command.CloseOthers: "/close-others",
+	command.Like: "/like",
 }
 
 // TestHintNeedsChatHolds keeps hintNeedsChat true of the code: each of

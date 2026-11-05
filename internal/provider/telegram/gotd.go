@@ -280,6 +280,17 @@ func (c *MTProto) PollReactions(ctx context.Context, chatID string, ids []string
 	return c.svc.PollReactions(ctx, chatID, ids)
 }
 
+// React implements Client: one request, under the client lock like the
+// others.
+func (c *MTProto) React(ctx context.Context, chatID, msgID, emoji string) ([]domain.Change, error) {
+	if err := c.wait(ctx); err != nil {
+		return nil, err
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.svc.React(ctx, chatID, msgID, emoji)
+}
+
 // Recent implements Client.
 func (c *MTProto) Recent(ctx context.Context, chatID string, limit int) ([]domain.Message, error) {
 	if err := c.wait(ctx); err != nil {

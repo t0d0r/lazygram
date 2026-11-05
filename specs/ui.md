@@ -40,7 +40,7 @@ completion, and an activity indicator.
   `/open <link>`, Ctrl-L, `/about`, `/mark-as-read`, `/names`, `/last`,
   Up and Down, `/mouse`, PgUp and PgDn, `/move` and `/close`,
   `/close-others`, `/feed off`, `/settings`, `/win last` and `/unread`,
-  `/doubletab last` or `unread`, `/vim on`), so
+  `/doubletab last` or `unread`, `/vim on`, `/like`), so
   the pair differs between starts (`Options.Rand` draws them,
   `rand.IntN` unless a test injects one). They are printed once per start, in window 0 only,
   as part of its start-up screen, so they roll in with it when window 0
@@ -52,8 +52,8 @@ completion, and an activity indicator.
   window 0, which has no chat, so it never speaks of "this" chat or
   window, and one that names Ctrl-X or a command the server window
   refuses (`/send`, `/mark-as-read`, `/last`, `/move`, `/close`,
-  `/close-others`, `/edit`, `/delete`, `/me`, `/press`) says it works in
-  a chat window. A word such
+  `/close-others`, `/edit`, `/delete`, `/me`, `/press`, `/like`) says it
+  works in a chat window. A word such
   as `on` or `off` after a command appears only where that command takes
   it (`/autojoin off`, `/read-receipts on`); `/mouse` takes none, it
   toggles, so its hint says so. Tests check the form, the command names,
@@ -789,6 +789,7 @@ and read like the commands under them.
 | `/win @user`, `/win #chan`    | open or switch to that chat's window                 |
 | `/unread`                     | focus the next window with unread messages after the current one, in window order and wrapping round (never window 0; the current window last); a focus like `/win N`; `no unread window` when there is none, and nothing changes; with `/doubletab unread`, Tab twice fast on an empty prompt does the same from the window the first Tab left (see Windows) |
 | `/close [N,M-K]`              | close the current window, or the windows given: a number, a list or ranges, as `/close 2,3-5`, numbered as the window bar shows them before the command; all or nothing: a malformed item, window 0 or a number past the last window is an error and nothing closes (see Windows) |
+| `/like [name]`                | react to the newest message someone else sent in this chat: `like` (the default, a thumbs up), `dislike`, `love`, `fire`, `laugh`, `sad`, `party`, `clap`, `thanks`, `ok`, `think`, `eyes` (aliases `+1`, `-1`, `heart`, `tada`, `pray`); it replaces the account's reaction there; errors in window 0, for another name and with no such message (see Reactions, Sending a reaction) |
 | `/close-others`               | close every chat window but the current one, at once, as `/close` with their numbers; window 0 stays; any argument and window 0 are errors, and with no other chat window it says `no other chat window to close`; then nothing changes and the layout is not written; it has no short form (see Windows) |
 | `/last [N]`                   | fetch the last N messages (default 10, max 100)      |
 | `/search [text]`              | pager over the current window's local history        |
@@ -828,7 +829,8 @@ Short forms: `/h` for `/help`; `/shortcuts`, `/bindings` for `/keys`;
 `/colors`, `/colours` for `/theme`; `/version` for `/about`; `/lights`,
 `/anim` for `/fx`; `/nicks` for `/names`. `/settings` has none: `/set`
 and `/options` are unknown commands, like any other unknown name.
-`/close-others` has none either (`/closeothers` is unknown).
+`/close-others` has none either (`/closeothers` is unknown), nor has
+`/like` (`/react` is unknown; its reaction names have aliases).
 `/help` prints every spelling
 the parser accepts, the short forms as `also /x, /y` after their
 command, so the printed reference and the parser table never disagree
@@ -1132,8 +1134,86 @@ client's own notices. Decision: a reactor is named only when new, and
 no more of them than the count rose, because Telegram lists the recent
 reactors with every report, old ones included.
 
-Not yet: sending reactions (`/react`), the emoji behind a custom
-reaction (it needs a document fetch), and the list of who reacted.
+### Sending a reaction: /like
+
+`/like [name]` sets the account's reaction on one message of the current
+chat window (code: `internal/tui/like.go`). The name says which
+reaction, one of a fixed vocabulary, matched without regard to case;
+`/like` alone is `like`:
+
+| name      | also    | reaction                                  |
+|-----------|---------|-------------------------------------------|
+| `like`    | `+1`    | thumbs up, U+1F44D (the default)          |
+| `dislike` | `-1`    | thumbs down, U+1F44E                      |
+| `love`    | `heart` | red heart, U+2764 (no U+FE0F)             |
+| `fire`    |         | fire, U+1F525                             |
+| `laugh`   |         | beaming face with smiling eyes, U+1F601   |
+| `sad`     |         | crying face, U+1F622                      |
+| `party`   | `tada`  | party popper, U+1F389                     |
+| `clap`    |         | clapping hands, U+1F44F                   |
+| `thanks`  | `pray`  | folded hands, U+1F64F                     |
+| `ok`      |         | OK hand, U+1F44C                          |
+| `think`   |         | thinking face, U+1F914                    |
+| `eyes`    |         | eyes, U+1F440                             |
+
+Each is in Telegram's standard reaction set exactly as listed there (the
+Bot API's `ReactionTypeEmoji`, whose heart has no U+FE0F); a chat may
+still allow fewer (below). Anything else, an emoji typed as the
+argument and more than one word included, is the error `/like takes
+like, dislike, love, fire, laugh, sad, party, clap, thanks, ok, think
+or eyes`. Tab after `/like` offers the twelve names, not the aliases.
+
+The target is one message: the newest message lazygram holds of the
+current window's chat, in the order the window shows them (by time),
+that someone other than the account sent (`Sender` is not `me`) and
+that has an id. Notices are not messages; the account's own messages
+are skipped, so the target is what the reader most likely just read,
+however many of the account's own lines came after it. A message older
+than what lazygram holds is never a target, and `/like` never reacts to
+more than one message.
+
+The checks go in this order, and on each nothing is sent and nothing
+changes: an unknown name (in any window); then window 0, `the server
+window has no chat; /win to a chat first`; then a provider that cannot
+send reactions (no `provider.Reactor`), `reactions cannot be sent with
+<provider>`; then no target, `no message from someone else in <chat> to
+react to`, the chat named as `/names` shows it. Otherwise the status
+says `reacting E to ada "first words"...` (E the emoji, the message
+named as reaction notices name it: its author and first words) and the
+request goes out in the background (30 seconds at most). When it
+succeeds the status says `reacted E to ada "first words"`, and the
+message's reactions as the service gives them back with its answer, if
+it does, are applied at once as a poll's are (`Store.React`, every
+window; the account's own reaction makes no notice); otherwise the next
+poll of the messages on screen shows it. When it fails the status says
+`reaction failed: <why>` in red and window 0 gets `error: reaction
+failed: <why>`, as for every failed request, and nothing changes. The
+reaction is not focused, read or counted: no read receipt, no unread
+count changes.
+
+Telegram (`messages.sendReaction`, specs/providers.md) takes the
+account's whole set of reactions on a message, so the one sent replaces
+the account's earlier reaction there. Its refusals are told in words:
+a reaction this chat does not allow (`REACTION_INVALID`), one that needs
+Telegram Premium, a message that already has as many different
+reactions as it may, an account that may not react there (write
+forbidden, banned, an anonymous admin), a message that is gone.
+
+Decision: one message, chosen by a rule that can be checked on screen,
+because a reaction is public and cannot be taken back from lazygram
+(below); no range, no message id. Decision: the newest message from
+someone else, not the newest message: reacting to one's own last line
+is rarely meant. Decision: a fixed vocabulary of names, not any emoji:
+the names are plain ASCII, complete with Tab, and each maps to an emoji
+the API documentation lists, while a typed emoji could be any of
+thousands the service refuses; the aliases are the names other chat
+tools use. Decision: the checks go from the form to the state, as for
+`/close-others`, so a typo is named first. Decision: no removal yet:
+the documentation read does not say that an empty list removes a
+reaction, so `/like off` waits until that is confirmed (todo).
+
+Not yet: removing a reaction, the emoji behind a custom reaction (it
+needs a document fetch), and the list of who reacted.
 
 ## Editing and deleting
 
@@ -2049,7 +2129,8 @@ message text complete that chat's `@nicks` instead (see Members).
 Otherwise a command's own first-argument words, whatever its spelling
 (`/win list|last`, `/list --show-deleted`, `/autojoin on|off`,
 `/feed on|off`, `/read-receipts on|off`, `/vim on|off`,
-`/doubletab off|last|unread`, `/clip auto|osc52|tool|off`),
+`/doubletab off|last|unread`, `/clip auto|osc52|tool|off`, `/like` and
+its twelve reaction names),
 and chat names
 where the command takes a chat: the first argument of `/win`, `/msg`,
 `/whois` and `/list`, every word of `/me` and `/edit` text, and every

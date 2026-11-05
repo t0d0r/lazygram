@@ -40,6 +40,7 @@ var hintPool = []string{
 	"hint: PgUp / PgDn scroll a page; End jumps back to the newest line",
 	"hint: /move N moves a chat window to position N; /close closes it",
 	"hint: /close-others in a chat window closes every other chat window",
+	"hint: /like in a chat window reacts to the last message from others",
 	"hint: /feed off keeps chat messages and reactions out of window 0",
 	"hint: /settings lists every setting; Enter or Left/Right change one",
 	"hint: /win last jumps back, /unread to the next unread window",

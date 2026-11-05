@@ -205,6 +205,32 @@ func TestLastOwnAndRemove(t *testing.T) {
 	}
 }
 
+// TestLastFromOthers: /like's target is the newest message of the chat
+// someone other than the account sent, with an id; the account's own
+// lines after it and other chats do not count.
+func TestLastFromOthers(t *testing.T) {
+	ms := []Message{
+		msg("a", "1", 0, "x", "older theirs"),
+		msg("a", "2", 1, "y", "theirs"),
+		msg("a", "3", 2, "me", "mine after it"),
+		msg("b", "1", 3, "z", "other chat"),
+		msg("a", "", 4, "w", "no id"),
+	}
+	got, ok := LastFromOthers(ms, "a")
+	if !ok || got.ID != "2" || got.Sender != "y" {
+		t.Fatalf("the newest from someone else: %+v %v", got, ok)
+	}
+	if got, ok := LastFromOthers(ms, "b"); !ok || got.ID != "1" {
+		t.Fatalf("its own chat only: %+v %v", got, ok)
+	}
+	if _, ok := LastFromOthers(ms, "c"); ok {
+		t.Fatal("no message of the chat: none")
+	}
+	if _, ok := LastFromOthers([]Message{msg("a", "1", 0, "me", "only mine")}, "a"); ok {
+		t.Fatal("only the account's own: none")
+	}
+}
+
 func TestIsImageName(t *testing.T) {
 	for name, want := range map[string]bool{"a.JPG": true, "dir/b.png": true, "c.webp": true, "d.pdf": false, "noext": false, "x.tar.gz": false, "../a.gif": true} {
 		if IsImageName(name) != want {

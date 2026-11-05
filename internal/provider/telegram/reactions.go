@@ -2,6 +2,7 @@ package telegram
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -236,6 +237,75 @@ func (s *service) PollReactions(ctx context.Context, chat string, msgIDs []strin
 		}
 	}
 	return out, nil
+}
+
+// React sets the account's reaction on message msgID of chat to emoji
+// (/like): messages.sendReaction with a one-element list, which is the
+// account's whole set on that message, so it replaces an earlier one;
+// big and add_to_recent stay unset. A message id that is no number, an
+// empty emoji or an unknown chat send nothing. The reactions the answer
+// carries come back as Reacted changes, as a poll's do (without Own); the
+// API documentation does not promise any. MESSAGE_NOT_MODIFIED, which the
+// method's documentation lists for nothing changed, is done; the other
+// documented refusals are told in words (reactError).
+func (s *service) React(ctx context.Context, chat, msgID, emoji string) ([]domain.Change, error) {
+	id, err := strconv.Atoi(msgID)
+	if err != nil || id <= 0 {
+		return nil, fmt.Errorf("telegram: bad message id %q", msgID)
+	}
+	if emoji == "" {
+		return nil, errors.New("telegram: empty reaction")
+	}
+	ent, err := s.entity(ctx, chat)
+	if err != nil {
+		return nil, err
+	}
+	req := &tg.MessagesSendReactionRequest{Peer: ent.peer, MsgID: id}
+	req.SetReaction([]tg.ReactionClass{&tg.ReactionEmoji{Emoticon: emoji}})
+	res, err := s.api.MessagesSendReaction(ctx, req)
+	switch {
+	case tgerr.Is(err, "MESSAGE_NOT_MODIFIED"):
+		return nil, nil
+	case err != nil:
+		return nil, reactError(err)
+	}
+	updates, e := updatesParts(res)
+	s.names.learnUsers(e.Users)
+	var out []domain.Change
+	for _, uc := range updates {
+		if u, ok := uc.(*tg.UpdateMessageReactions); ok {
+			if c, ok := reactedEvent(u, e, s.names.get, false); ok {
+				out = append(out, c)
+			}
+		}
+	}
+	return out, nil
+}
+
+// reactRefusals are the refusals of messages.sendReaction told in words,
+// from the method's documented errors.
+var reactRefusals = []struct {
+	why   string
+	codes []string
+}{
+	{"this chat does not allow that reaction", []string{"REACTION_INVALID"}},
+	{"the message has as many different reactions as it may", []string{"REACTIONS_TOO_MANY"}},
+	{"that reaction needs Telegram Premium", []string{"PREMIUM_ACCOUNT_REQUIRED"}},
+	{"this account may not react in this chat", []string{"CHAT_WRITE_FORBIDDEN", "USER_BANNED_IN_CHANNEL", "ANONYMOUS_REACTIONS_DISABLED", "CHANNEL_PRIVATE"}},
+	{"the message is gone", []string{"MESSAGE_ID_INVALID", "MSG_ID_INVALID"}},
+}
+
+// reactError says why a reaction was refused, with Telegram's code, or
+// passes another error on.
+func reactError(err error) error {
+	if rpc, ok := tgerr.As(err); ok {
+		for _, r := range reactRefusals {
+			if slices.Contains(r.codes, rpc.Type) {
+				return fmt.Errorf("telegram: %s (%s)", r.why, rpc.Type)
+			}
+		}
+	}
+	return fmt.Errorf("telegram: reaction: %w", err)
 }
 
 // updatesParts takes the updates out of a response, with the users and

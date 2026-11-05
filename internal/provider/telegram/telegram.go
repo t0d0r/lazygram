@@ -34,6 +34,7 @@ type Client interface {
 	MarkUnread(ctx context.Context, chatID string, unread bool) error
 	Members(ctx context.Context, chatID string) ([]domain.Participant, error)
 	PollReactions(ctx context.Context, chatID string, ids []string) ([]domain.Change, error)
+	React(ctx context.Context, chatID, msgID, emoji string) ([]domain.Change, error)
 }
 
 // Provider adapts a Client to provider.Provider.
@@ -175,6 +176,15 @@ func (p *Provider) PollReactions(ctx context.Context, chatID string, ids []strin
 		return nil, fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
 	}
 	return p.client.PollReactions(ctx, chatID, ids)
+}
+
+// React implements provider.Reactor: the account's reaction on one
+// message (/like).
+func (p *Provider) React(ctx context.Context, chatID, msgID, emoji string) ([]domain.Change, error) {
+	if p.client == nil {
+		return nil, fmt.Errorf("telegram: %w", provider.ErrNotImplemented)
+	}
+	return p.client.React(ctx, chatID, msgID, emoji)
 }
 
 // Recent implements provider.Provider.

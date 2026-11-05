@@ -45,6 +45,7 @@ type api interface {
 	MessagesMarkDialogUnread(ctx context.Context, req *tg.MessagesMarkDialogUnreadRequest) (bool, error)
 	ChannelsGetParticipants(ctx context.Context, req *tg.ChannelsGetParticipantsRequest) (tg.ChannelsChannelParticipantsClass, error)
 	MessagesGetMessagesReactions(ctx context.Context, req *tg.MessagesGetMessagesReactionsRequest) (tg.UpdatesClass, error)
+	MessagesSendReaction(ctx context.Context, req *tg.MessagesSendReactionRequest) (tg.UpdatesClass, error)
 }
 
 // service implements Client on top of api. It is read-only. Every History
@@ -728,6 +729,10 @@ func (f floodAPI) MessagesGetHistory(ctx context.Context, req *tg.MessagesGetHis
 
 func (f floodAPI) MessagesSendMessage(ctx context.Context, req *tg.MessagesSendMessageRequest) (tg.UpdatesClass, error) {
 	return retryFlood(ctx, f.sleep, func() (tg.UpdatesClass, error) { return f.api.MessagesSendMessage(ctx, req) })
+}
+
+func (f floodAPI) MessagesSendReaction(ctx context.Context, req *tg.MessagesSendReactionRequest) (tg.UpdatesClass, error) {
+	return retryFlood(ctx, f.sleep, func() (tg.UpdatesClass, error) { return f.api.MessagesSendReaction(ctx, req) })
 }
 
 func (f floodAPI) MessagesGetBotCallbackAnswer(ctx context.Context, req *tg.MessagesGetBotCallbackAnswerRequest) (*tg.MessagesBotCallbackAnswer, error) {

@@ -298,6 +298,17 @@ func LastOwn(msgs []Message, chatID string) (Message, bool) {
 	return Message{}, false
 }
 
+// LastFromOthers returns the newest message of chatID that someone
+// other than this account sent and that has an id: the target of /like.
+func LastFromOthers(msgs []Message, chatID string) (Message, bool) {
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if msgs[i].ChatID == chatID && msgs[i].Sender != "me" && msgs[i].ID != "" {
+			return msgs[i], true
+		}
+	}
+	return Message{}, false
+}
+
 // Remove drops the message with the given chat and id, if present.
 func Remove(msgs []Message, chatID, msgID string) []Message {
 	for i := range msgs {

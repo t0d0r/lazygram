@@ -5,6 +5,7 @@ package demo
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -235,6 +236,54 @@ func (p *Provider) PollReactions(_ context.Context, chatID string, ids []string)
 		}
 	}
 	return out, nil
+}
+
+// React implements provider.Reactor: the account's reaction on a line
+// that is there, set in memory (withMine), reported as a poll would.
+// Nothing leaves the process.
+func (p *Provider) React(_ context.Context, chatID, msgID, emoji string) ([]domain.Change, error) {
+	if emoji == "" {
+		return nil, errors.New("demo: empty reaction")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	now := p.now()
+	p.reactLocked(now)
+	for i := range p.msgs {
+		m := &p.msgs[i]
+		if m.ChatID == chatID && m.ID == msgID && !m.Time.After(now) {
+			m.Reactions = withMine(m.Reactions, emoji)
+			return []domain.Change{p.reactedLocked(*m, false)}, nil
+		}
+	}
+	return nil, fmt.Errorf("demo: no line %s in %s", msgID, chatID)
+}
+
+// withMine returns rs with the account's reaction set to emoji, without
+// touching rs: the account's earlier reactions are taken off (a count
+// that drops to zero goes) but for the paid star, which Telegram sets
+// apart, then emoji is added as the account's, on its entry or at the
+// end.
+func withMine(rs []domain.Reaction, emoji string) []domain.Reaction {
+	var out []domain.Reaction
+	for _, r := range rs {
+		if r.Mine && r.Emoji != star {
+			r.Count -= r.Own()
+			r.Mine, r.MineCount = false, 0
+			if r.Count <= 0 {
+				continue
+			}
+		}
+		out = append(out, r)
+	}
+	for i := range out {
+		if out[i].Emoji == emoji {
+			out[i].Count++
+			out[i].Mine = true
+			return out
+		}
+	}
+	return append(out, domain.Reaction{Emoji: emoji, Count: 1, Mine: true})
 }
 
 // Name implements provider.Provider.

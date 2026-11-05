@@ -976,6 +976,8 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		m.rcache = &renderCache{}
 		m.setInfo("edited")
+	case likedMsg:
+		return m, m.liked(msg) // like.go
 	case deletedMsg:
 		if msg.err != nil {
 			m.fail("delete: " + errText(msg.err))
@@ -1985,6 +1987,8 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.closeCommand(c.Arg) // close.go
 	case command.CloseOthers:
 		m.closeOthers(c.Arg) // close.go
+	case command.Like:
+		return m, m.like(c.Arg) // like.go
 	case command.Msg:
 		return m.msg(c.Arg)
 	case command.SendFile:
@@ -2558,6 +2562,7 @@ var argWords = map[command.Kind][]string{
 	command.Vim:       {"on", "off"},
 	command.DoubleTab: doubleTabWords,
 	command.Clip:      {"auto", "osc52", "tool", "off"},
+	command.Like:      likeWords(),
 }
 
 // chatArgs says where a command's words complete chat names: its first
@@ -3344,7 +3349,7 @@ const helpNotes = `Mouse, themes and windows
   Double click           copies the word under the pointer, a triple click the row; on a link or a name the first click acts and the next ones only select; Shift-click extends the selection where the terminal passes Shift on; most Linux terminals keep Shift-drag (Option on macOS) for their own selection, as does /mouse off
   Mouse                  click a chat name or nick in window 0 to open its window, a tag in the window bar to focus it, a row in /list or /win to open it, a row of /settings to set its next value, a link or a [photo] / [file] token to open it with the system; the wheel scrolls
   Window 0               the server window: every chat interleaved, plus notices (/feed off: the notices only); it stays at 0 and cannot be closed; /move N puts this window at N
-  Reactions              shown after a message as [emoji count ...], yours highlighted; window 0 says when someone adds one (with /feed on); the messages on screen are asked about every 20 seconds
+  Reactions              shown after a message as [emoji count ...], yours highlighted; window 0 says when someone adds one (with /feed on); the messages on screen are asked about every 20 seconds; /like in a chat window reacts to the newest message someone else sent there
   New windows            a window opens for a chat when it gets a message or has unread ones; [Act: 1,2] in the status line lists windows with unread messages, and /unread goes to the next of them
   Names                  people are @name, groups and channels are #name`
 

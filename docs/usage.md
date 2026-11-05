@@ -88,6 +88,7 @@ still lack their senders' usernames), and `/last N` fetches more.
 | `/msg <@user|#chan> <text>` | send to a chat, opening its window if needed; the chat may be named by its title as `/names` shows it, spaces and all, in Cyrillic or Latin (`/msg @Ivan Petrov hi` sends `hi`) |
 | `/send <path> [caption]`   | send a local file (Tab completes the path); pictures go as photos |
 | `/edit [text]`, `/delete`  | change or remove your last message in this chat |
+| `/like [name]`             | react to the newest message someone else sent in this chat: `like` (the default, a thumbs up; also `+1`), `dislike` (`-1`), `love` (`heart`), `fire`, `laugh`, `sad`, `party` (`tada`), `clap`, `thanks` (`pray`), `ok`, `think`, `eyes`; Tab completes the names; it replaces your reaction on that message; a chat may allow fewer reactions, and Telegram's refusal is shown; there is no way to remove a reaction yet |
 | `/names`                   | show chats by nick (`@alias`) or by name (`@Title`); commands and Tab accept either |
 | `/press N`                 | press button N under the latest bot message; `/press <msg> N` for an older one |
 | `/open [msg]`              | fetch a `[photo]`/`[file]` into the encrypted vault; pictures are shown in the window (`/open out` for the system viewer); `/open <link>` opens an http(s) link in the browser, Tab offers the chat's ten most recent links |
