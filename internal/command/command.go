@@ -50,6 +50,10 @@ const (
 	// CloseOthers closes every chat window but the current one; it takes no
 	// Arg (the TUI rejects one).
 	CloseOthers
+	// Like sets the account's reaction on the newest message someone else
+	// sent in the current window's chat: Arg names the reaction (empty:
+	// like).
+	Like
 )
 
 // Command is a parsed slash command.
@@ -94,6 +98,7 @@ var table = map[string]Kind{
 	"unread":       Unread,
 	"doubletab":    DoubleTab,
 	"close-others": CloseOthers,
+	"like":         Like,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -155,6 +160,7 @@ const HelpText = `Commands
   /redraw, /clear        drop the notices and pictures from this window; the messages stay
   /edit [text]           edit your last message here (no text: put it in the prompt); also /e
   /delete                delete your last message here, for everyone; also /del, /rm
+  /like [name]           react to the newest message someone else sent here: like (the default, a thumbs up; also +1), dislike (-1), love (heart), fire, laugh, sad, party (tada), clap, thanks (pray), ok, think, eyes; it replaces your reaction there
   /press N | <msg> N     press a bot button (numbers shown under it); also /button, /btn
   /open [msg]            fetch a photo and show it in the terminal (a file: decrypt a copy and show where)
   /open out [msg]        the same, but in the system viewer

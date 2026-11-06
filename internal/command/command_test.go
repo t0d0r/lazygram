@@ -32,6 +32,12 @@ func TestParse(t *testing.T) {
 		{"/closeothers", Command{}, true},                     // one spelling only
 		{"/close-other", Command{}, true},
 		{"/wc-others", Command{}, true},
+		{"/like", Command{Like, ""}, false},
+		{"/LIKE  Fire ", Command{Like, "Fire"}, false}, // the TUI matches names without case
+		{"/like +1", Command{Like, "+1"}, false},
+		{"/like fire extra", Command{Like, "fire extra"}, false}, // the TUI rejects it
+		{"/react", Command{}, true},                              // one spelling only
+		{"/likes", Command{}, true},
 		{"/last", Command{Last, ""}, false},
 		{"/history 20", Command{Last, "20"}, false},
 		{"/search", Command{Search, ""}, false},

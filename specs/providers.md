@@ -51,6 +51,17 @@ service asked for a pause of `Wait` (nothing is polled until it has
 passed). Which messages are polled and when is the TUI's rule
 (specs/ui.md, Reactions).
 
+`provider.Reactor` is optional: a provider that can set the account's
+reaction implements `React(ctx, chatID, msgID, emoji) ([]domain.Change,
+error)`. It sets the account's reaction on that message to the one
+emoji given, replacing the account's earlier reaction there, and returns
+the message's reactions as the service gave them back with its answer,
+as `domain.Reacted` changes (none when the answer carries none), which
+the caller applies like a poll's. The TUI calls it only for `/like`, on
+one message, once per command (specs/ui.md, Reactions, Sending a
+reaction). The demo implements it in memory; with no client the
+Telegram provider returns `ErrNotImplemented`.
+
 Reactions (`Message.Reactions`) are a list of `{Emoji, Count, Mine}` in
 the service's order: `Emoji` is the emoji, or `*`
 (`domain.CustomReaction`) for all custom-emoji reactions of the message
@@ -111,6 +122,14 @@ who has no username; `#news` hides its subscribers. `@demobot` asks a question w
 `Deploy`, `Hold` and a `Runbook` link; `Press` answers and edits the
 question. `@linus` sends one photo; `Fetch` draws a small PNG in memory for it. Started with `lazygram demo`; nothing
 is kept on disk.
+
+`React` sets the account's reaction on a demo line in memory: the
+account's earlier reactions on that line are taken off (a count that
+drops to zero goes; the paid star stays, Telegram sets those apart),
+then the emoji is added as the account's (`Mine`), on its entry or as a
+new one at the end. It returns that line's Reacted change, as a poll
+would, and later polls report the line that way. A chat or line the
+demo does not have is an error. Nothing leaves the process.
 
 Reactions: four past lines carry some from the start (a thumbs-up on
 ada's fix in `#dev`; a party popper and the account's own thumbs-up on
@@ -372,6 +391,42 @@ until it has passed no poll of any chat is sent, and every call returns
 a `*provider.WaitError` with the time left. Other errors are returned
 and change nothing. The call holds the client lock like the others; it
 is one small request.
+
+Sending one (`React`, for `/like`): messages.sendReaction with the
+chat's input peer (from the dialog list, read again once when the chat
+is not in it, as for every send; still missing, an error and no
+reaction request), the numeric message id (anything else, or an empty
+emoji, is an error without a request) and a one-element `reaction` list holding a
+`reactionEmoji` with the emoji, `big` and `add_to_recent` unset. The
+list is the account's whole set on that message (the API documentation:
+reactions are sent in ascending order and older ones are removed to stay
+within `reactions_user_max_default` / `reactions_user_max_premium`), so
+one sent replaces the account's earlier reaction there. A FLOOD_WAIT is
+retried once like any call. The answer is Updates: any
+updateMessageReactions in it is converted as a poll's is (without `Own`)
+and returned, and the users it carries are learned; the documentation
+read does not say the answer always holds one, so nothing depends on it.
+Errors, from the method's documented list, are told in words, each with
+the code:
+
+- REACTION_INVALID: the chat does not allow that reaction (a chat may
+  allow some or none, `available_reactions` in its full info);
+- REACTIONS_TOO_MANY: the message has `reactions_uniq_max` different
+  reactions already;
+- PREMIUM_ACCOUNT_REQUIRED: the reaction needs Telegram Premium;
+- CHAT_WRITE_FORBIDDEN, USER_BANNED_IN_CHANNEL,
+  ANONYMOUS_REACTIONS_DISABLED, CHANNEL_PRIVATE: the account may not
+  react in that chat;
+- MESSAGE_ID_INVALID, MSG_ID_INVALID: the message is gone;
+- MESSAGE_NOT_MODIFIED (listed for the method: nothing changed, the
+  reaction was set already) is success, with nothing to apply;
+- anything else is returned as `telegram: reaction: <error>`.
+
+Not done: removing a reaction. The documentation read does not say an
+empty or absent `reaction` list removes one, so it waits for a
+confirmed source (todo). Reactions are never sent by tests or live
+checks to a linked account: the Telegram code is tested with the fake
+`api`, the TUI with a fake provider and the demo.
 
 ### Typing
 

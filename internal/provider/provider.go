@@ -45,6 +45,16 @@ type ReactionPoller interface {
 	PollReactions(ctx context.Context, chatID string, ids []string) ([]domain.Change, error)
 }
 
+// Reactor is implemented by a service that can set the account's
+// reaction on a message. React sets the account's reaction on message
+// msgID of chatID to the one emoji given, replacing the account's earlier
+// reaction there, and returns the message's reactions as the service gave
+// them back with its answer, as domain.Reacted changes to apply like a
+// poll's (none when the answer carries none).
+type Reactor interface {
+	React(ctx context.Context, chatID, msgID, emoji string) ([]domain.Change, error)
+}
+
 // ErrNotPollable says a chat's reactions cannot be asked for (Telegram: a
 // private or invalid channel, or message ids it does not take).
 var ErrNotPollable = errors.New("reactions cannot be polled in this chat")

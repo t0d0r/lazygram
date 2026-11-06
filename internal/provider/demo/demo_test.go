@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"image/png"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -313,5 +314,80 @@ func TestWithReactionLeavesItsInputAlone(t *testing.T) {
 	}
 	if got := withReaction(rs, "b"); len(got) != 2 || got[1] != (domain.Reaction{Emoji: "b", Count: 1}) || len(rs) != 1 {
 		t.Fatalf("a new emoji goes last: %+v", got)
+	}
+}
+
+// lineByText is the demo line with that text.
+func lineByText(t *testing.T, p *Provider, text string) domain.Message {
+	t.Helper()
+	for _, m := range p.msgs {
+		if m.Text == text {
+			return m
+		}
+	}
+	t.Fatalf("no demo line %q", text)
+	return domain.Message{}
+}
+
+// TestReactSetsTheAccountsReaction: /like on a demo line takes the
+// account's earlier reaction off (a count that drops to zero goes) and
+// adds the new one as the account's; the answer and later polls report
+// the line that way.
+func TestReactSetsTheAccountsReaction(t *testing.T) {
+	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	p := NewAt(func() time.Time { return clock })
+	var r provider.Reactor = p
+	fix := lineByText(t, p, "pushed a fix for the scrollback off-by-one") // thumbs up 2, none the account's
+	got, err := r.React(context.Background(), fix.ChatID, fix.ID, heart)
+	want := []domain.Reaction{{Emoji: thumbsUp, Count: 2}, {Emoji: heart, Count: 1, Mine: true}}
+	if err != nil || len(got) != 1 || got[0].Kind != domain.Reacted || got[0].Own || got[0].Msg.ID != fix.ID || got[0].ChatID != fix.ChatID ||
+		!slices.Equal(got[0].Msg.Reactions, want) {
+		t.Fatalf("a new reaction of the account's goes last: %+v %v", got, err)
+	}
+	if polled, _ := p.PollReactions(context.Background(), fix.ChatID, []string{fix.ID}); len(polled) != 1 || !slices.Equal(polled[0].Msg.Reactions, want) {
+		t.Fatalf("later polls report it: %+v", polled)
+	}
+	rc := lineByText(t, p, "release candidate tagged") // party 3, the account's thumbs up 1
+	got, _ = r.React(context.Background(), rc.ChatID, rc.ID, fire)
+	if want := []domain.Reaction{{Emoji: party, Count: 3}, {Emoji: fire, Count: 1, Mine: true}}; !slices.Equal(got[0].Msg.Reactions, want) {
+		t.Fatalf("the account's earlier reaction is replaced: %+v", got[0].Msg.Reactions)
+	}
+	got, _ = r.React(context.Background(), rc.ChatID, rc.ID, party)
+	if want := []domain.Reaction{{Emoji: party, Count: 4, Mine: true}}; !slices.Equal(got[0].Msg.Reactions, want) {
+		t.Fatalf("on an entry already there: %+v", got[0].Msg.Reactions)
+	}
+	got, _ = r.React(context.Background(), rc.ChatID, rc.ID, party)
+	if want := []domain.Reaction{{Emoji: party, Count: 4, Mine: true}}; !slices.Equal(got[0].Msg.Reactions, want) {
+		t.Fatalf("the same reaction again changes nothing: %+v", got[0].Msg.Reactions)
+	}
+}
+
+// TestReactKeepsThePaidStar: Telegram sets paid reactions apart, so the
+// demo keeps the account's star when it reacts.
+func TestReactKeepsThePaidStar(t *testing.T) {
+	rs := []domain.Reaction{{Emoji: star, Count: 5, Mine: true, MineCount: 2}, {Emoji: domain.CustomReaction, Count: 3, Mine: true, MineCount: 2}}
+	got := withMine(rs, thumbsUp)
+	want := []domain.Reaction{{Emoji: star, Count: 5, Mine: true, MineCount: 2}, {Emoji: domain.CustomReaction, Count: 1}, {Emoji: thumbsUp, Count: 1, Mine: true}}
+	if !slices.Equal(got, want) || rs[1].Count != 3 {
+		t.Fatalf("withMine: %+v (input %+v)", got, rs)
+	}
+}
+
+// TestReactRefusesWhatTheDemoLacks: a chat or line the demo does not have,
+// a line not there yet and an empty emoji are errors and change nothing.
+func TestReactRefusesWhatTheDemoLacks(t *testing.T) {
+	clock := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	p := NewAt(func() time.Time { return clock })
+	fix := lineByText(t, p, "pushed a fix for the scrollback off-by-one")
+	tip := lineByText(t, p, "tip: /win 2 switches windows, Tab completes names") // arrives later
+	for _, c := range []struct{ chat, id, emoji string }{
+		{fix.ChatID, "404", heart}, {"demo-404", fix.ID, heart}, {tip.ChatID, tip.ID, heart}, {fix.ChatID, fix.ID, ""},
+	} {
+		if got, err := p.React(context.Background(), c.chat, c.id, c.emoji); err == nil || got != nil {
+			t.Errorf("React(%q, %q, %q): %+v %v", c.chat, c.id, c.emoji, got, err)
+		}
+	}
+	if m := lineByText(t, p, "pushed a fix for the scrollback off-by-one"); len(m.Reactions) != 1 || m.Reactions[0].Count != 2 {
+		t.Fatalf("nothing changed: %+v", m.Reactions)
 	}
 }

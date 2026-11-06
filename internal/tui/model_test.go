@@ -27,17 +27,28 @@ type fake struct {
 	msgs      []domain.Message            // returned by Sync
 	recent    map[string][]domain.Message // returned by Recent
 	err       error
-	calls     []string // Recent calls as "chat:limit"
-	sent      []string // Send calls as "chat:text"
-	pressed   []string // Press calls as "chat:msg:label"
-	fetched   []string // Fetch calls as "chat:msg"
-	edited    []string // Edit calls as "chat:msg:text"
-	deleted   []string // Delete calls as "chat:msg"
-	picture   []byte   // what Fetch returns when set
-	sentFiles []string // SendFile calls as "chat:name:bytes:caption"
-	read      []string // MarkRead calls as "chat:msg"
-	marks     []string // MarkUnread calls as "chat:unread"
-	markErr   error    // returned by MarkUnread when set, instead of err
+	calls     []string        // Recent calls as "chat:limit"
+	sent      []string        // Send calls as "chat:text"
+	pressed   []string        // Press calls as "chat:msg:label"
+	fetched   []string        // Fetch calls as "chat:msg"
+	edited    []string        // Edit calls as "chat:msg:text"
+	deleted   []string        // Delete calls as "chat:msg"
+	picture   []byte          // what Fetch returns when set
+	sentFiles []string        // SendFile calls as "chat:name:bytes:caption"
+	read      []string        // MarkRead calls as "chat:msg"
+	marks     []string        // MarkUnread calls as "chat:unread"
+	markErr   error           // returned by MarkUnread when set, instead of err
+	reacted   []string        // React calls as "chat:msg:emoji"
+	reactBack []domain.Change // what React returns
+	reactErr  error           // returned by React when set (not err, which every call returns)
+}
+
+func (f *fake) React(_ context.Context, chatID, msgID, emoji string) ([]domain.Change, error) {
+	f.reacted = append(f.reacted, chatID+":"+msgID+":"+emoji)
+	if f.reactErr != nil {
+		return nil, f.reactErr
+	}
+	return f.reactBack, nil
 }
 
 func (f *fake) MarkRead(_ context.Context, chatID, msgID string) error {

@@ -57,6 +57,10 @@ func TestInertWithoutClient(t *testing.T) {
 	}
 	var _ provider.Provider = p
 	var _ provider.ReactionPoller = p
+	if _, err := p.React(context.Background(), "x", "1", "y"); !errors.Is(err, provider.ErrNotImplemented) {
+		t.Fatal(err)
+	}
+	var _ provider.Reactor = p
 	var _ provider.ChangeSource = p
 }
 

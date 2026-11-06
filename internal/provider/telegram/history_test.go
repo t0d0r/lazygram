@@ -47,6 +47,34 @@ type fakeAPI struct {
 	reactions tg.UpdatesClass // served by MessagesGetMessagesReactions
 	reactErr  error           // returned by it instead
 	polls     []string        // its calls as "<peer type>:<ids>"
+
+	sendAnswer tg.UpdatesClass // served by MessagesSendReaction; nil: an empty Updates
+	sendErr    error           // returned by it instead
+	sendFlood  int             // FLOOD_WAIT errors it returns first
+	reacted    []string        // its calls as "<peer type>:<msg id>:<emoticons>:big=<b>:recent=<b>"
+}
+
+func (f *fakeAPI) MessagesSendReaction(_ context.Context, r *tg.MessagesSendReactionRequest) (tg.UpdatesClass, error) {
+	var emoji []string
+	for _, x := range r.Reaction {
+		if e, ok := x.(*tg.ReactionEmoji); ok {
+			emoji = append(emoji, e.Emoticon)
+		} else {
+			emoji = append(emoji, fmt.Sprintf("%T", x))
+		}
+	}
+	f.reacted = append(f.reacted, fmt.Sprintf("%T:%d:%v:big=%v:recent=%v", r.Peer, r.MsgID, emoji, r.Big, r.AddToRecent))
+	if f.sendFlood > 0 {
+		f.sendFlood--
+		return nil, tgerr.New(420, "FLOOD_WAIT_2")
+	}
+	if f.sendErr != nil {
+		return nil, f.sendErr
+	}
+	if f.sendAnswer == nil {
+		return &tg.Updates{}, nil
+	}
+	return f.sendAnswer, nil
 }
 
 func (f *fakeAPI) MessagesGetMessagesReactions(_ context.Context, r *tg.MessagesGetMessagesReactionsRequest) (tg.UpdatesClass, error) {
