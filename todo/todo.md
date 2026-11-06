@@ -85,7 +85,7 @@
 - [x] point the recipe at the latest release: v0.4.20, entry and icon from the tarball, `wl-clipboard` optional, rebuilt and tested in Arch Linux and Arch Linux ARM containers (packaging/omarchy/README.md)
 - [x] v0.4.21 released (assets verified against SHA256SUMS, the stable installer URL installs it); Homebrew formula at 0.4.21; the recipe builds v0.4.21, built and tested in Arch Linux and Arch Linux ARM containers (packaging/omarchy/README.md)
 - [x] submit: fork omacom/omarchy-pkgs, copy packaging/omarchy/lazygram to pkgbuilds/lazygram, open the PR: omacom/omarchy-pkgs#2022 for 0.4.21, validators rerun on their master first (packaging/omarchy/README.md, packaging/omarchy/PR.md)
-- [ ] omacom/omarchy-pkgs#2022 (now 0.4.29): a maintainer's build-approved label, green builds on both architectures, merge; answer review comments
+- [ ] omacom/omarchy-pkgs#2022 (now 0.4.30): a maintainer's build-approved label, green builds on both architectures, merge; answer review comments
 - [ ] after the package is published: README install line "omarchy pkg add lazygram" first, verify both channels and architectures
 - [ ] man page and shell completions (optional; the recipe would install them)
 
@@ -193,6 +193,8 @@
 - [x] Homebrew formula at 0.4.28 (tap `c35175f`, the v0.4.28 source tarball's sha256 checked on two downloads): built from source, `brew test` passed
 - [x] v0.4.29 from the Release workflow (/close-others): assets and provenance verified, a tampered file refused, the installer URL installs it; PKGBUILD at 0.4.29 built and tested on both architectures, omacom/omarchy-pkgs#2022 moved to 0.4.29 with the validators rerun on their master `525f91b` (session/2026-11-05-release-0429.md)
 - [x] Homebrew formula at 0.4.29 (tap `a294169`, the v0.4.29 source tarball's sha256 checked on two downloads): built from source, `brew test` passed
+- [x] v0.4.30 from the Release workflow (/like): assets and provenance verified, a tampered file refused, the installer URL installs it; PKGBUILD at 0.4.30 built and tested on both architectures, omacom/omarchy-pkgs#2022 moved to 0.4.30 with the validators rerun on their master `bf44164` (session/2026-11-07-release-0430.md)
+- [x] Homebrew formula at 0.4.30 (tap `49f8b9f`, the v0.4.30 source tarball's sha256 checked on two downloads): built from source, `brew test` passed
 - [x] delete the GitHub releases v0.3.0 to v0.4.21 after v0.4.22 is verified; their tags stay (specs/release.md, Decisions)
 - [x] repository settings: Dependabot alerts and security updates, immutable releases, ruleset `release tags` (no deletion or move of `v*`), ruleset `master` requires a pull request and a passing `Linux` check on an up-to-date branch, no bypass (specs/ci.md, Repository settings)
 - [x] head branches deleted when their pull request is merged; the merged ones from #11 to #14 removed (specs/ci.md, Repository settings)
