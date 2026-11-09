@@ -12,7 +12,7 @@ require (
 	github.com/rivo/uniseg v0.4.7
 	golang.org/x/image v0.47.0
 	golang.org/x/term v0.47.0
-	modernc.org/sqlite v1.61.0
+	modernc.org/sqlite v1.61.1
 	rsc.io/qr v0.2.0
 )
 
