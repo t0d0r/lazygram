@@ -102,8 +102,11 @@ func (m *Model) markAsRead() (tea.Model, tea.Cmd) {
 // the service one at a time, in the order asked: while one is on its way
 // the latest further request for that chat waits, and earlier waiting ones
 // are dropped, so the last press decides what the service ends with.
-// A waiting /x's request passes to a later read request that replaces its
-// report; an [unread] cancels the chat's /x, waiting or on its way.
+// A waiting /x's request passes to a later /mark-as-read that replaces its
+// report, which is bounded by a message id like its own. A [read] is not
+// (it reports up to the service's newest, seen here or not), so it and an
+// [unread] replace a waiting /x without its closing; an [unread] cancels
+// the chat's /x also when its report is on its way.
 type pendingReport struct {
 	act, id string
 	x       *readCloseReq // the /x request this report answers, if any
@@ -121,8 +124,15 @@ func (m *Model) report(chatID, act, id string, x *readCloseReq) tea.Cmd {
 		delete(m.readClosing, chatID)
 	}
 	if m.reporting[chatID] {
-		if was := m.reportNext[chatID].x; act == "read" && x == nil {
-			x = was // the waiting /x is answered by this report instead
+		if was := m.reportNext[chatID].x; was != nil && x == nil {
+			if act == "read" && id != "" {
+				x = was // the waiting /x is answered by this report instead
+			} else {
+				if m.readClosing[chatID] == was {
+					delete(m.readClosing, chatID)
+				}
+				m.setInfo(m.status + "; the waiting /x is dropped, its window stays")
+			}
 		}
 		m.reportNext[chatID] = pendingReport{act, id, x}
 		return nil

@@ -482,26 +482,149 @@ func TestXSameSecondNumericIDs(t *testing.T) {
 	}
 }
 
-// TestXTransferredToListReadKeepsTheGuard: a [read] that replaces a
-// waiting /x reports up to the service's newest, without a message id;
-// the window still stays when a message arrived after /x was typed.
-func TestXTransferredToListReadKeepsTheGuard(t *testing.T) {
+// TestXQueuedListReadDropsTheClosing: a [read] reports up to the
+// service's newest message, without a message id, so it may cover a
+// message lazygram has not been given yet and no check here can see.
+// When it replaces a waiting /x it stays the explicit [read] it is and
+// the closing is dropped, said at once; the window stays, with or
+// without a message held since.
+func TestXQueuedListReadDropsTheClosing(t *testing.T) {
+	for _, arrives := range []bool{false, true} {
+		f := newFake()
+		m, _ := inAlice(t, f)
+		first := enter(m, "/mark-as-read")
+		enter(m, "/x") // waits
+		if arrives {
+			f.msgs = append(f.msgs, mk("c2", "9", "alice", "one more thing", 5))
+			m.Update(m.syncCmd()())
+		}
+		enter(m, "/list alice")
+		press(m, tea.KeyRight) // [read]: replaces the waiting /x's report
+		press(m, tea.KeyEnter)
+		if m.isErr || !strings.HasSuffix(m.status, "; the waiting /x is dropped, its window stays") {
+			t.Fatalf("arrives %v: the press says the closing is off: %q", arrives, m.status)
+		}
+		_, next := m.Update(first())
+		runAll(m, next)
+		if len(f.read) != 2 || f.read[1] != "c2:" {
+			t.Fatalf("arrives %v: the [read] went, up to the service's newest: %v", arrives, f.read)
+		}
+		if _, open := m.winFor("c2"); open == nil || closedCount(m) != 0 || m.status != "reported @alice read" {
+			t.Fatalf("arrives %v: an unbounded [read] closes nothing: %q, %q", arrives, winNames(m), m.status)
+		}
+		if len(m.readClosing) != 0 {
+			t.Fatalf("arrives %v: no request is left standing", arrives)
+		}
+	}
+	// A [read] pressed while /x's own bounded report is on its way does
+	// not undo it: /x closes on its answer, then the [read] goes.
 	f := newFake()
 	m, _ := inAlice(t, f)
-	first := enter(m, "/mark-as-read")
-	enter(m, "/x") // waits
-	f.msgs = append(f.msgs, mk("c2", "9", "alice", "one more thing", 5))
-	m.Update(m.syncCmd()())
+	cmd := enter(m, "/x")
 	enter(m, "/list alice")
-	press(m, tea.KeyRight) // [read]: replaces the waiting /x's report
+	press(m, tea.KeyRight)
 	press(m, tea.KeyEnter)
-	_, next := m.Update(first())
+	_, next := m.Update(cmd())
+	if winNames(m) != "#news #dev" || next == nil {
+		t.Fatalf("/x on its way closes on its own answer: %q, %q", winNames(m), m.status)
+	}
 	runAll(m, next)
 	if len(f.read) != 2 || f.read[1] != "c2:" {
-		t.Fatalf("the [read] went, up to the service's newest: %v", f.read)
+		t.Fatalf("then the [read] goes: %v", f.read)
 	}
+}
+
+// TestXWaitsForAFetchOnItsWay: a sync or a history fetch of the chat
+// that is on its way when the answer comes may already have taken a new
+// message from the service that lazygram has not been handed. The
+// window is not closed before that result is in: the answer says it
+// waits, and the result decides, by the same checks.
+func TestXWaitsForAFetchOnItsWay(t *testing.T) {
+	const waits = "reported @alice read; closing its window once the fetch on its way is in..."
+	// A sync that brings a message of the chat keeps the window.
+	f := newFake()
+	m, _ := inAlice(t, f)
+	cmd := enter(m, "/x")
+	f.msgs = append(f.msgs, mk("c2", "9", "alice", "one more thing", 5))
+	m.syncing = true
+	pending := m.syncCmd()() // fetched and cached, not handed over yet
+	runAll(m, cmd)
+	if _, open := m.winFor("c2"); open == nil || closedCount(m) != 0 || m.isErr || m.status != waits {
+		t.Fatalf("with a sync on its way the answer closes nothing yet: %q, %q", winNames(m), m.status)
+	}
+	m.Update(pending)
 	if _, open := m.winFor("c2"); open == nil || closedCount(m) != 0 || m.status != "reported @alice read; a newer message arrived, window kept" {
-		t.Fatalf("a message after /x keeps the window whatever report answers: %q, %q", winNames(m), m.status)
+		t.Fatalf("the sync brought a message: %q, %q", winNames(m), m.status)
+	}
+	if len(m.readClosing) != 0 {
+		t.Fatal("the request is over")
+	}
+
+	// A sync that brings nothing for the chat lets the window close.
+	f = newFake()
+	m, _ = inAlice(t, f)
+	cmd = enter(m, "/x")
+	f.msgs = append(f.msgs, mk("c1", "9", "ada", "elsewhere", 5))
+	m.syncing = true
+	pending = m.syncCmd()()
+	runAll(m, cmd)
+	if _, open := m.winFor("c2"); open == nil || m.status != waits {
+		t.Fatalf("waiting: %q, %q", winNames(m), m.status)
+	}
+	m.Update(pending)
+	if winNames(m) != "#news #dev" || closedCount(m) != 1 {
+		t.Fatalf("nothing new for the chat: the window closes after the sync: %q, %q", winNames(m), m.status)
+	}
+
+	// A failed sync is over too: the checks decide on what is held.
+	f = newFake()
+	m, _ = inAlice(t, f)
+	answer := enter(m, "/x")()
+	f.err = errors.New("offline")
+	m.syncing = true
+	pending = m.syncCmd()()
+	m.Update(answer)
+	m.Update(pending)
+	if winNames(m) != "#news #dev" || !m.isErr || !strings.Contains(m.status, "sync: ") {
+		t.Fatalf("after a failed sync: %q, %q", winNames(m), m.status)
+	}
+
+	// A history fetch of the chat on its way is waited for as well; one
+	// of another chat is not.
+	f = newFake()
+	m, _ = inAlice(t, f)
+	cmd = enter(m, "/x")
+	f.recent["c2"] = append(f.recent["c2"], mk("c2", "9", "alice", "one more thing", 5))
+	fetch := m.recentCmd("c2", 10)
+	other := m.recentCmd("c1", 10)
+	page := fetch()
+	runAll(m, cmd)
+	if _, open := m.winFor("c2"); open == nil || m.status != waits {
+		t.Fatalf("with a fetch of the chat on its way: %q, %q", winNames(m), m.status)
+	}
+	m.Update(other())
+	if _, open := m.winFor("c2"); open == nil || closedCount(m) != 0 {
+		t.Fatalf("another chat's fetch settles nothing: %q", winNames(m))
+	}
+	m.Update(page)
+	if _, open := m.winFor("c2"); open == nil || closedCount(m) != 0 || m.status != "reported @alice read; a newer message arrived, window kept" {
+		t.Fatalf("the fetch brought a message: %q, %q", winNames(m), m.status)
+	}
+
+	// An [unread] while the closing waits cancels it.
+	f = newFake()
+	m, _ = inAlice(t, f)
+	cmd = enter(m, "/x")
+	m.syncing = true
+	pending = m.syncCmd()()
+	runAll(m, cmd)
+	enter(m, "/list alice")
+	press(m, tea.KeyRight)
+	press(m, tea.KeyRight)
+	runAll(m, press(m, tea.KeyEnter))
+	m.Update(pending)
+	if _, open := m.winFor("c2"); open == nil || closedCount(m) != 0 {
+		t.Fatalf("an [unread] while the closing waits keeps the window: %q, %q", winNames(m), m.status)
 	}
 }
 
@@ -542,7 +665,7 @@ func TestXSettlesAHeldTab(t *testing.T) {
 	m, step, held := fromDev(t, f) // in #dev; @alice has 2 unread
 	enter(m, "/read-receipts on")
 	f.read, f.marks = nil, nil
-	press(m, tea.KeyTab)
+	runAll(m, press(m, tea.KeyTab)) // with the window's first history fetch answered
 	w := m.wins[3]
 	if m.cur != 3 || w.chatID != "c2" || m.held == nil {
 		t.Fatalf("Tab shows @alice and holds it: current %d, held %v", m.cur, m.held != nil)

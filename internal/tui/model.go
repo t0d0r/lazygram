@@ -836,6 +836,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.changeCh = nil
 	case recentMsg:
 		delete(m.loading, msg.chatID)
+		defer m.settleReadClose(msg.chatID) // readclose.go: a /x that waited for this page
 		_, w := m.winFor(msg.chatID)
 		if w == nil {
 			w = m.wins[0]
@@ -1303,6 +1304,7 @@ func (m *Model) synced(msg syncedMsg) {
 	if len(msg.fresh) > 0 {
 		m.arrived(msg.fresh)
 	}
+	m.settleReadCloses() // readclose.go: a /x that waited for this result
 	m.react.learn(msg.page)
 	// With nothing fresh there is nothing to say: a status that pops up
 	// every poll only flickers.

@@ -107,6 +107,47 @@ unread check, same-second arrivals missed, older history counted as an
 arrival, the hold not dropped, a waiting `/x` not passed on, no
 numeric tie-break.
 
+### Second review round
+
+Two further cases, each reproduced as a failing test first:
+
+6. A `[read]` replacing a waiting `/x` took over its closing. `[read]`
+   reports without a message id, so the service marks read up to its
+   own newest message, which may be one lazygram was not given yet; no
+   check here can see it, and the window closed. Now only a report
+   bounded by a message id (`/mark-as-read`) takes over a waiting
+   `/x`; a `[read]` or `[unread]` drops the closing and the press says
+   `...; the waiting /x is dropped, its window stays`. `[read]` itself
+   is unchanged (it is an explicit "this chat is read"). A `[read]`
+   pressed while `/x`'s own report is on its way does not undo it.
+7. The answer could come after a sync or history fetch had stored a
+   new message in the cache but before its result was handed to the
+   TUI; the window closed, and reopened only if that result was
+   delivered. Now an answered `/x` waits while `Model.syncing` or
+   `Model.loading[chat]` is set (`reported @name read; closing its
+   window once the fetch on its way is in...`) and is decided by the
+   same checks after every sync and history fetch
+   (`settleReadClose`). The wait ends with the fetch, failed or not
+   (90 s limit each).
+
+Not covered, by design: a message the service has that no fetch has
+asked for yet when the window closes. The receipt is bounded, so it
+stays unread at the service, a later sync opens a window for it
+(`arrived`), and after a restart `/autojoin` opens unread chats. No
+claim is made that no ordering of events can close a window just
+before a message arrives; the claim is that `/x` does not close over a
+message already held or already fetched, and never marks read a
+message it did not hold.
+
+Tests: `TestXQueuedListReadDropsTheClosing` (replaces
+`TestXTransferredToListReadKeepsTheGuard`, whose premise, a `[read]`
+answering for `/x`, is gone), `TestXWaitsForAFetchOnItsWay` (a sync
+with and without a message of the chat, a failed sync, a history fetch
+of the chat and of another chat, an `[unread]` while waiting). RED:
+`an unbounded [read] closes nothing` and `with a sync on its way the
+answer closes nothing yet: "#news #dev", "reported @alice read, closed
+its window"`. Seven mutants, each caught.
+
 Still as before, and outside `/x`: `/mark-as-read` after an
 empty-prompt Tab does not drop the hold, so leaving within the double
 Tab's time puts the unread count back locally.

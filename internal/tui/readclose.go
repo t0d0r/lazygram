@@ -37,9 +37,10 @@ const (
 // and the report that answers it carries it, so an answer finds only its
 // own request.
 type readCloseReq struct {
-	w      *win
-	seen   map[string]bool
-	newest time.Time
+	w        *win
+	seen     map[string]bool
+	newest   time.Time
+	answered bool // the report went through; the closing waits for a fetch on its way
 }
 
 // readClose runs /x. The checks go in order, the argument first, as
@@ -85,7 +86,8 @@ func (m *Model) readClose(arg string) tea.Cmd {
 // closeReported closes the window /x was typed in, now that the receipt
 // and the unread mark of the report answering it went through. Each case
 // that keeps the window says why, none as an error: the report itself
-// went through.
+// went through. With a fetch on its way the decision waits for its result
+// (settleReadClose).
 //   - The request no longer stands: an [unread] for the chat removed it, or
 //     a later /x replaced it and its own answer is still to come.
 //   - The window is gone: closed by hand meanwhile. A window opened for the
@@ -104,18 +106,54 @@ func (m *Model) closeReported(msg readMsg) {
 		m.setInfo("reported " + name + " read")
 		return
 	}
-	delete(m.readClosing, msg.chatID)
-	i := m.indexOf(msg.x.w)
+	msg.x.answered = true
+	if m.fetching(msg.chatID) {
+		m.setInfo("reported " + name + " read; closing its window once the fetch on its way is in...")
+		return
+	}
+	m.settleReadClose(msg.chatID)
+}
+
+// fetching tells whether a result that can bring messages of the chat is
+// on its way: a sync (one waiting for chat names included) or a fetch of
+// the chat's history. Its command stores what the service gave before
+// the result is handed over, so until then the cache may hold a message
+// that the checks of /x cannot see.
+func (m *Model) fetching(chatID string) bool {
+	return m.syncing || m.loading[chatID]
+}
+
+// settleReadClose decides an answered /x of the chat once no fetch is on
+// its way (closeReported, and after every sync and history fetch): the
+// request is over, and its window closes unless a check keeps it. This
+// narrows the time between the answer and a message already fetched; a
+// message the service sends after the last fetch is not known here, and
+// it opens a window again when it comes, as after any /close.
+func (m *Model) settleReadClose(chatID string) {
+	x := m.readClosing[chatID]
+	if x == nil || !x.answered || m.fetching(chatID) {
+		return
+	}
+	delete(m.readClosing, chatID)
+	name := m.nameOf(chatID)
+	i := m.indexOf(x.w)
 	switch {
 	case i <= 0:
 		m.setInfo("reported " + name + " read; its window was closed already")
-	case msg.x.w.unread > 0:
+	case x.w.unread > 0:
 		m.setInfo("reported " + name + " read; unread again since, window kept")
-	case m.arrivedSince(msg.chatID, msg.x):
+	case m.arrivedSince(chatID, x):
 		m.setInfo("reported " + name + " read; a newer message arrived, window kept")
 	default:
 		m.closeWins([]int{i}) // close.go: the notice, the current window, the layout
 		m.setInfo("reported " + name + " read, closed its window")
+	}
+}
+
+// settleReadCloses is settleReadClose for every chat, after a sync.
+func (m *Model) settleReadCloses() {
+	for chatID := range m.readClosing {
+		m.settleReadClose(chatID)
 	}
 }
 

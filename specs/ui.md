@@ -1766,6 +1766,15 @@ When the answer comes:
   check is by the messages held, not by comparing ids, so it holds for
   messages of one second, which the list orders by id as text (`100`
   before `99`), and whatever report answers for `/x`.
+- A sync, or a fetch of the chat's history, is on its way when the
+  answer comes (`Model.syncing`, a sync waiting for chat names
+  included, or `Model.loading` for the chat): its command stores what
+  the service gave before the result is handed over, so the cache may
+  hold a message the checks cannot see yet. The status says `reported
+  @name read; closing its window once the fetch on its way is in...`,
+  nothing closes, and when the result is in (failed or not; each has a
+  90 s limit) and no other is on its way the same checks decide, with
+  the same statuses.
 - The window counts unread messages again: `reported @name read; unread
   again since, window kept`.
 - An `[unread]` for the chat was pressed since, with the `/x` waiting or
@@ -1789,12 +1798,25 @@ report, window kept; /last fetches some, /close closes it unreported`.
 
 A `/x` typed while a requested report for the chat is on its way waits
 its turn and closes after its own answer, not the earlier one's. A
-later `/mark-as-read` or `[read]` that replaces a waiting `/x` answers
-for it, with every check above unchanged (a `[read]` reports up to the
-service's newest message, so one that arrived since `/x` is covered
-unseen: the window stays). A second `/x` replaces the first request;
-the first answer then says `reported @name read` and closes nothing. An
-`[unread]` cancels the chat's `/x`, waiting or on its way.
+later `/mark-as-read` that replaces a waiting `/x` answers for it, with
+every check above unchanged: its receipt is bounded by a message id
+held here, like `/x`'s own. A `[read]` that replaces a waiting `/x`
+does not: it reports up to the service's newest message, which may be
+one lazygram has not been given yet, so it stays the explicit `[read]`
+it is, the closing is dropped, and the press says so (`...; the waiting
+/x is dropped, its window stays`). A `[read]` pressed while `/x`'s own
+report is on its way changes nothing about it: `/x` closes on its own
+bounded answer and the `[read]` goes after it. A second `/x` replaces
+the first request; the first answer then says `reported @name read` and
+closes nothing. An `[unread]` cancels the chat's `/x`, waiting (the
+press says so, as for `[read]`) or on its way.
+
+What this does not cover: a message the service has that no fetch has
+asked for yet when the window closes. `/x`'s receipt is bounded by a
+message held here, so such a message stays unread at the service; it
+opens a window for the chat again when a sync brings it, as after any
+`/close`, and after a restart `/autojoin` opens one for a chat with
+unread messages.
 
 A request is remembered per chat until its answer (code:
 `readCloseReq`, `Model.readClosing`): the window, the ids held and the
@@ -1826,6 +1848,15 @@ acts on what `/x` saw, the window by identity and the messages by id,
 not on what is found by the chat when the answer comes, because up to
 30 s pass in between and a reopened window, a second `/x` or a message
 of the same second would otherwise be mistaken for the request's own.
+Decision: `/x` never closes on a receipt without a message id: what
+such a receipt covers is decided at the service, so nothing here can
+tell whether everything it marked read was shown. `[read]` keeps its
+meaning ("this chat is read") and only loses the closing. Decision: the
+closing waits for a fetch on its way instead of closing and counting
+on the window being opened again, because the result may be minutes
+late (a FLOOD_WAIT retry) or never handed over (a quit), and a window
+closed over a message already in the cache is the case `/x` must not
+produce. The wait is bounded by the fetches' own time limit.
 
 ## Search in either script
 
