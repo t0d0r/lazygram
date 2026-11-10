@@ -67,6 +67,11 @@ func TestParse(t *testing.T) {
 		{"/read-receipts on", Command{Receipts, "on"}, false},
 		{"/receipts", Command{Receipts, ""}, false},
 		{"/mark-as-read", Command{MarkRead, ""}, false},
+		{"/x", Command{ReadClose, ""}, false},
+		{"/X", Command{ReadClose, ""}, false},
+		{"/x 2", Command{ReadClose, "2"}, false}, // the TUI rejects it
+		{"/xx", Command{}, true},                 // one spelling only
+		{"/mark-as-read-close", Command{}, true},
 		{"/autojoin off", Command{AutoJoin, "off"}, false},
 		{"/autojoin", Command{AutoJoin, ""}, false},
 		{"/markread", Command{}, true}, // one spelling only

@@ -223,6 +223,7 @@ type Model struct {
 	sharedChats  map[string]bool // every chat ever marked SharedIDs, kept: where a chat-less deletion looks
 	gone         map[string]bool // keys deleted at the service this session; a late fetch result does not bring them back
 	reportNext   map[string]pendingReport
+	readClosing  map[string]*readCloseReq // the /x request not yet answered, by chat (readclose.go)
 	status       string
 	isErr        bool
 	quitting     bool
@@ -302,7 +303,7 @@ func New(opt Options) *Model {
 	}
 	m := &Model{opt: opt, width: 100, height: 30, loading: map[string]bool{}, visited: map[string]bool{},
 		listed: map[string][]domain.Participant{}, listAsked: map[string]bool{}, listHidden: map[string]bool{},
-		live: map[string]bool{}, reporting: map[string]bool{}, reportNext: map[string]pendingReport{}, gone: map[string]bool{},
+		live: map[string]bool{}, reporting: map[string]bool{}, reportNext: map[string]pendingReport{}, readClosing: map[string]*readCloseReq{}, gone: map[string]bool{},
 		wins: []*win{{}}, status: "type /help for commands", started: time.Now(), fx: true, rcache: &renderCache{},
 		now: time.Now, after: tickAfter, typing: domain.NewTypingState(domain.DefaultTypingTTL), react: newReactState()}
 	if found, err := opt.Store.State(fxKey, &m.fx); !found || err != nil {
@@ -835,6 +836,7 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.changeCh = nil
 	case recentMsg:
 		delete(m.loading, msg.chatID)
+		defer m.settleReadClose(msg.chatID) // readclose.go: a /x that waited for this page
 		_, w := m.winFor(msg.chatID)
 		if w == nil {
 			w = m.wins[0]
@@ -991,9 +993,11 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case readMsg:
 		switch {
 		case msg.err != nil:
-			m.fail("read receipt for " + m.nameOf(msg.chatID) + ": " + errText(msg.err))
+			m.fail("read receipt for " + m.nameOf(msg.chatID) + ": " + errText(msg.err) + m.keptAfter(msg))
 		case msg.markErr != nil:
-			m.fail("unread mark for " + m.nameOf(msg.chatID) + ": " + errText(msg.markErr))
+			m.fail("unread mark for " + m.nameOf(msg.chatID) + ": " + errText(msg.markErr) + m.keptAfter(msg))
+		case msg.x != nil:
+			m.closeReported(msg) // readclose.go
 		case msg.manual:
 			m.setInfo("reported " + m.nameOf(msg.chatID) + " read")
 		}
@@ -1300,6 +1304,7 @@ func (m *Model) synced(msg syncedMsg) {
 	if len(msg.fresh) > 0 {
 		m.arrived(msg.fresh)
 	}
+	m.settleReadCloses() // readclose.go: a /x that waited for this result
 	m.react.learn(msg.page)
 	// With nothing fresh there is nothing to say: a status that pops up
 	// every poll only flickers.
@@ -2036,6 +2041,8 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.setDoubleTab(c.Arg)
 	case command.MarkRead:
 		return m.markAsRead()
+	case command.ReadClose:
+		return m, m.readClose(c.Arg) // readclose.go
 	case command.Fx:
 		m.setFx(!m.fx)
 	case command.Settings:

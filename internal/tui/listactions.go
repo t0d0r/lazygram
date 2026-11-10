@@ -76,11 +76,11 @@ func (m *Model) runListAction() (tea.Model, tea.Cmd) {
 		case "read":
 			w.clearUnread()
 			m.setInfo("marked " + m.winName(i) + " read" + reporting(w.chatID))
-			return m, m.report(w.chatID, "read", "") // up to the service's newest: the cache may be behind
+			return m, m.report(w.chatID, "read", "", nil) // up to the service's newest: the cache may be behind
 		case "unread":
 			w.unread = max(w.unread, 1)
 			m.setInfo("marked " + m.winName(i) + " unread" + reporting(w.chatID))
-			return m, m.report(w.chatID, "unread", "")
+			return m, m.report(w.chatID, "unread", "", nil)
 		case "close":
 			m.closeWin(i) // refuses window 0 with its own message
 			m.listCur = min(m.listCur, len(m.wins)-1)
@@ -108,7 +108,7 @@ func (m *Model) runListAction() (tea.Model, tea.Cmd) {
 		}
 		m.setChatUnread(c.ID, 0)
 		m.setInfo("marked " + m.nameOf(c.ID) + " read" + reporting(c.ID))
-		return m, m.report(c.ID, "read", "")
+		return m, m.report(c.ID, "read", "", nil)
 	case "unread":
 		if w == nil { // a window so that it shows in Act; the view stays where it is
 			_, w = m.openWin(c.ID)
@@ -116,7 +116,7 @@ func (m *Model) runListAction() (tea.Model, tea.Cmd) {
 		w.unread = max(w.unread, 1)
 		m.setChatUnread(c.ID, max(c.Unread, 1))
 		m.setInfo("marked " + m.nameOf(c.ID) + " unread" + reporting(c.ID))
-		return m, m.report(c.ID, "unread", "")
+		return m, m.report(c.ID, "unread", "", nil)
 	}
 	return m, nil
 }

@@ -19,18 +19,21 @@ import (
 // not reported for that Tab (lastwin.go).
 // Nothing is sent for opening a list, filtering, searching, a message
 // arriving in the window already shown, or a window without unread
-// messages. /mark-as-read and the [read] button of /list and /win send one
-// receipt for that chat on request, whatever the setting says, and change
-// nothing about it; they also clear the chat's unread mark, and [unread]
-// sets it. A receipt covers the newest message lazygram holds for the
-// chat, so messages it has not shown stay unread at the service; a [read]
-// for a chat with no message held covers the service's newest.
+// messages. /mark-as-read, /x and the [read] button of /list and /win send
+// one receipt for that chat on request, whatever the setting says, and
+// change nothing about it; they also clear the chat's unread mark, and
+// [unread] sets it. /x then closes the window (readclose.go). A receipt
+// covers the newest message lazygram holds for the chat, so messages it
+// has not shown stay unread at the service; a [read] for a chat with no
+// message held covers the service's newest.
 
 // readMsg is the outcome of one receipt; manual says the user asked for
-// it, markErr is the outcome of clearing the unread mark with it.
+// it, markErr is the outcome of clearing the unread mark with it. x is
+// the /x request this report answers, if any (readclose.go).
 type readMsg struct {
 	chatID  string
 	manual  bool
+	x       *readCloseReq
 	err     error
 	markErr error
 }
@@ -92,24 +95,46 @@ func (m *Model) markAsRead() (tea.Model, tea.Cmd) {
 	}
 	w.clearUnread()
 	m.setInfo("reporting " + m.nameOf(w.chatID) + " read...")
-	return m, m.report(w.chatID, "read", id)
+	return m, m.report(w.chatID, "read", id, nil)
 }
 
 // Requested reports (/mark-as-read, [read], [unread]) for one chat go to
 // the service one at a time, in the order asked: while one is on its way
 // the latest further request for that chat waits, and earlier waiting ones
 // are dropped, so the last press decides what the service ends with.
-type pendingReport struct{ act, id string }
+// A waiting /x's request passes to a later /mark-as-read that replaces its
+// report, which is bounded by a message id like its own. A [read] is not
+// (it reports up to the service's newest, seen here or not), so it and an
+// [unread] replace a waiting /x without its closing; an [unread] cancels
+// the chat's /x also when its report is on its way.
+type pendingReport struct {
+	act, id string
+	x       *readCloseReq // the /x request this report answers, if any
+}
 
 // report sends act ("read" or "unread") for chatID now, or queues it when a
 // report for that chat is on its way. id is the read limit: a message id,
-// or "" for the service's newest. Nil for the server window.
-func (m *Model) report(chatID, act, id string) tea.Cmd {
+// or "" for the service's newest; x is the /x request it answers, if any
+// (readclose.go). Nil for the server window.
+func (m *Model) report(chatID, act, id string, x *readCloseReq) tea.Cmd {
 	if chatID == "" {
 		return nil
 	}
+	if act == "unread" { // a chat marked unread is not one to put away
+		delete(m.readClosing, chatID)
+	}
 	if m.reporting[chatID] {
-		m.reportNext[chatID] = pendingReport{act, id}
+		if was := m.reportNext[chatID].x; was != nil && x == nil {
+			if act == "read" && id != "" {
+				x = was // the waiting /x is answered by this report instead
+			} else {
+				if m.readClosing[chatID] == was {
+					delete(m.readClosing, chatID)
+				}
+				m.setInfo(m.status + "; the waiting /x is dropped, its window stays")
+			}
+		}
+		m.reportNext[chatID] = pendingReport{act, id, x}
 		return nil
 	}
 	m.reporting[chatID] = true
@@ -122,7 +147,7 @@ func (m *Model) report(chatID, act, id string) tea.Cmd {
 		}
 		// Both even when one fails: the mark needs no message.
 		err := p.MarkRead(ctx, chatID, id)
-		return readMsg{chatID: chatID, manual: true, err: err, markErr: p.MarkUnread(ctx, chatID, false)}
+		return readMsg{chatID: chatID, manual: true, x: x, err: err, markErr: p.MarkUnread(ctx, chatID, false)}
 	}
 }
 
@@ -135,7 +160,7 @@ func (m *Model) reported(chatID string) tea.Cmd {
 		return nil
 	}
 	delete(m.reportNext, chatID)
-	return m.report(chatID, next.act, next.id)
+	return m.report(chatID, next.act, next.id, next.x)
 }
 
 // receiptCmd reports chatID read up to the newest message lazygram holds
@@ -154,10 +179,34 @@ func (m *Model) receiptCmd(chatID string, manual bool) tea.Cmd {
 }
 
 // newestID is the id of the newest message lazygram holds for a chat.
+// Messages of one second are ordered by id as text, "100" before "99"
+// (domain.Merge); among those of the newest second the id that comes last
+// as a number is the newest, so a receipt covers all of them.
 func (m *Model) newestID(chatID string) (string, bool) {
 	msgs := domain.Filter(m.msgs, domain.Query{ChatID: chatID})
 	if len(msgs) == 0 {
 		return "", false
 	}
-	return msgs[len(msgs)-1].ID, true
+	last := msgs[len(msgs)-1]
+	id := last.ID
+	for i := len(msgs) - 2; i >= 0 && msgs[i].Time.Equal(last.Time); i-- {
+		if idAfter(msgs[i].ID, id) {
+			id = msgs[i].ID
+		}
+	}
+	return id, true
 }
+
+// idAfter tells whether message id a comes after b: as whole numbers of
+// any size when both are digits only (Telegram's ids), else as text.
+func idAfter(a, b string) bool {
+	if isDigits(a) && isDigits(b) {
+		a, b = strings.TrimLeft(a, "0"), strings.TrimLeft(b, "0")
+		if len(a) != len(b) {
+			return len(a) > len(b)
+		}
+	}
+	return a > b
+}
+
+func isDigits(s string) bool { return s != "" && strings.Trim(s, "0123456789") == "" }

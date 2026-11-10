@@ -83,8 +83,8 @@ only for the account's own messages.
 
 `MarkRead` is a read receipt: the chat was read up to and including
 `msgID`. The TUI calls it with read receipts on (on focus), and on an
-explicit request: `/mark-as-read`, the `[read]` button of `/list` and
-`/win` (specs/ui.md); `MarkUnread` only on those requests and
+explicit request: `/mark-as-read`, `/x`, the `[read]` button of `/list`
+and `/win` (specs/ui.md); `MarkUnread` only on those requests and
 `[unread]`. A dialog marked unread (`unread_mark`) with no unread
 messages is reported as `Chat.Unread` 1; a provider that cannot report reads
 returns an error.
@@ -271,8 +271,8 @@ channels.getMessages (/press, /open), upload.getFile (/open),
 messages.editMessage (/edit), messages.deleteMessages with revoke or
 channels.deleteMessages (/delete), messages.readHistory or
 channels.readHistory with the newest known message as max_id (read
-receipts: only with /read-receipts on or on /mark-as-read; a receipt
-marks the chat read on every device of the account and shows to the
+receipts: only with /read-receipts on or on /mark-as-read or /x; a
+receipt marks the chat read on every device of the account and shows to the
 other side of a private chat; FLOOD_WAIT is retried once like any
 call, other errors surface), upload.saveFilePart /
 upload.saveBigFilePart and messages.sendMedia (/send: gotd's uploader in
