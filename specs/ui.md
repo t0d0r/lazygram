@@ -1674,7 +1674,9 @@ with unread messages is focused (`/win N`, `/win @name`, `/win last`,
 Tab, the double Tab's time later as below). The report covers the newest
 message lazygram holds for the chat (`Provider.MarkRead` with that message id), so what
 lazygram has not shown stays unread at the service; with no message of
-the chat known yet nothing is sent. A window focused by Tab on an empty
+the chat known yet nothing is sent. Among messages of the newest second
+the newest is the one whose id comes last as a number (Telegram's ids;
+`100` after `99`), not as text, so the report covers all of them. A window focused by Tab on an empty
 prompt, whatever `/doubletab` says (either Tab of a double Tab
 included), is reported once it has stayed current for the double Tab's
 time (400 ms unless `/doubletab <ms>` sets another, see Windows;
@@ -1745,8 +1747,9 @@ When the answer comes:
   the current window kept or the nearest open one before it, nothing
   focused, so no further receipt and no unread count changes, the
   layout saved once), and the status says `reported @name read, closed
-  its window`. The window is found by its chat, so it closes also when
-  another window is current by then, which stays current.
+  its window`. The window is the one `/x` was typed in, by identity, so
+  it closes also when another window is current by then, which stays
+  current.
 - The receipt or the mark failed: the error of `/mark-as-read` with `;
   window kept` after it (`read receipt for @name: <why>; window kept`,
   `unread mark for @name: <why>; window kept`), red, and in window 0;
@@ -1754,10 +1757,26 @@ When the answer comes:
   saved. Not retried; `/x` again asks again.
 - The window was closed by hand meanwhile: `reported @name read; its
   window was closed already`; a failure then is the plain error, with
-  no window to keep.
-- A message newer than the one the receipt covered is held by then (it
-  arrived after `/x`): `reported @name read; a newer message arrived,
-  window kept`, as information; the window stays open.
+  no window to keep. A window opened for the chat again since is
+  another window: it stays, and a `/x` typed in it is its own request.
+- A message arrived since `/x` (one whose id was not held when `/x` was
+  typed and that is not older than the newest held then; older history
+  fetched since is no arrival): `reported @name read; a newer message
+  arrived, window kept`, as information; the window stays open. The
+  check is by the messages held, not by comparing ids, so it holds for
+  messages of one second, which the list orders by id as text (`100`
+  before `99`), and whatever report answers for `/x`.
+- The window counts unread messages again: `reported @name read; unread
+  again since, window kept`.
+- An `[unread]` for the chat was pressed since, with the `/x` waiting or
+  already on its way: `reported @name read; marked unread since, window
+  kept`; then the mark goes, in its turn.
+
+An empty-prompt Tab that showed the window holds its unread count, to
+put it back when the window is left at once, and holds its receipt
+back (see above). `/x` settles that: it reports the window read
+itself, so leaving the window puts nothing back and the held receipt
+is not sent as a second one.
 
 Checks before anything is sent, in this order; on each nothing is sent,
 nothing closes, no unread count changes and the layout is not written:
@@ -1770,9 +1789,17 @@ report, window kept; /last fetches some, /close closes it unreported`.
 
 A `/x` typed while a requested report for the chat is on its way waits
 its turn and closes after its own answer, not the earlier one's. A
-later `/mark-as-read` or `[read]` that replaces a waiting `/x` keeps
-the closing; a later `[unread]` replaces it and the closing goes with
-it.
+later `/mark-as-read` or `[read]` that replaces a waiting `/x` answers
+for it, with every check above unchanged (a `[read]` reports up to the
+service's newest message, so one that arrived since `/x` is covered
+unseen: the window stays). A second `/x` replaces the first request;
+the first answer then says `reported @name read` and closes nothing. An
+`[unread]` cancels the chat's `/x`, waiting or on its way.
+
+A request is remembered per chat until its answer (code:
+`readCloseReq`, `Model.readClosing`): the window, the ids held and the
+time of the newest. The report that answers it carries it, so an
+answer finds only its own request.
 
 `/help` lists it right after `/mark-as-read`, a start hint names it,
 and Tab completes `/x` to `/x `.
@@ -1793,7 +1820,12 @@ after `/x` keeps the window, because the receipt does not cover it and
 closing would hide a message never reported; every other outcome of
 `/close` is unchanged because the closing is `closeWins`. Decision: a
 later `[unread]` drops the closing, since a chat just marked unread is
-not one to put away.
+not one to put away, also when the `/x` report is already on its way:
+the receipt cannot be taken back, the closing can. Decision: the answer
+acts on what `/x` saw, the window by identity and the messages by id,
+not on what is found by the chat when the answer comes, because up to
+30 s pass in between and a reopened window, a second `/x` or a message
+of the same second would otherwise be mistaken for the request's own.
 
 ## Search in either script
 

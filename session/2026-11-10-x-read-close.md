@@ -3,8 +3,8 @@
 ## Outcome
 
 `/x` is implemented, tested and committed locally on the branch
-`feature/x-mark-read-close` (not pushed, no pull request, no release).
-No blocker. One item is open: a check against live Telegram (todo).
+`feature/x-mark-read-close` (not pushed, no pull request, no release),
+with the races a review found closed in a second commit. No blocker. One item is open: a check against live Telegram (todo).
 
 ## Done
 
@@ -55,8 +55,67 @@ No blocker. One item is open: a check against live Telegram (todo).
   Decisions; commands table; short forms; Completion; hint lists),
   specs/security.md, specs/providers.md, docs/usage.md, todo/todo.md.
 
+## Races closed after review
+
+A review of `4c95d38` found five ways the answer could close a window
+it should not. Each was reproduced as a failing test first, then fixed
+(internal/tui/readclose.go, receipts.go):
+
+1. An `[unread]` pressed while `/x`'s report was already on its way did
+   not cancel the closing (only a waiting `/x` lost it). Now any
+   `[unread]` removes the chat's request; the answer says `reported
+   @name read; marked unread since, window kept`.
+2. The newer-message check compared the newest id held with the id
+   reported, and `newestID` took the last message of the list, which
+   orders ids of one second as text: with `99` reported and `100`
+   arriving in the same second the newest was still `99` and the window
+   closed. Now the request keeps the ids held and the newest time; a
+   message not held then and not older than that is an arrival.
+   `newestID` picks, among the messages of the newest second, the id
+   that comes last as a number (`idAfter`), so receipts of
+   `/mark-as-read`, `/x` and focus cover all of them.
+3. A `[read]` replacing a waiting `/x` reports with an empty id (the
+   service's newest), which skipped the check. The check no longer
+   depends on the id reported.
+4. The window was looked up by chat when the answer came, so a window
+   closed and opened again was closed by the stale answer. The request
+   keeps the window itself (`*win`).
+5. After an empty-prompt Tab, leaving the window within the double
+   Tab's time put its unread count back although `/x` had reported it,
+   and the window then closed unread (with receipts on a second, held
+   receipt could follow). `/x` drops the hold; and a window with an
+   unread count when the answer comes is never closed (`reported @name
+   read; unread again since, window kept`).
+
+Also closed: a second `/x` replaces the first request, so the first
+answer, whose receipt may not cover a message the second saw, closes
+nothing (`reported @name read`).
+
+The request is `readCloseReq` in `Model.readClosing`, one per chat,
+carried by the report that answers it (`pendingReport.x`, `readMsg.x`).
+
+Tests added: `TestXInFlightThenUnreadKeepsTheWindow`,
+`TestXSameSecondNumericIDs`, `TestXTransferredToListReadKeepsTheGuard`,
+`TestXStaleAnswerLeavesAReopenedWindow`, `TestXSettlesAHeldTab`,
+`TestXKeepsAWindowCountedUnread`, `TestXAnswerFindsOnlyItsOwnRequest`,
+`TestXOlderHistoryIsNoArrival`, `TestIDAfter`. RED before the fix: the
+first six failed with the window closed (`"#news #dev", "reported
+@alice read, closed its window"`), the held Tab with `puts no unread
+count back: 2`. Nine mutants of the fix, each caught: `[unread]` not
+cancelling, the answer not tied to its request, the window by chat, no
+unread check, same-second arrivals missed, older history counted as an
+arrival, the hold not dropped, a waiting `/x` not passed on, no
+numeric tie-break.
+
+Still as before, and outside `/x`: `/mark-as-read` after an
+empty-prompt Tab does not drop the hold, so leaving within the double
+Tab's time puts the unread count back locally.
+
 ## Decisions
 
+- The answer acts on what `/x` saw (the window by identity, the
+  messages by id), not on what is found by the chat when the answer
+  comes: up to 30 s pass in between.
 - The receipt first, the close on its answer, not both at once: the
   receipt is asynchronous (up to 30 s), and closing at once would leave
   a failed report as a line about a window no longer on screen. A closed
@@ -86,8 +145,9 @@ No blocker. One item is open: a check against live Telegram (todo).
 
 ## Files touched
 
-- internal/tui/readclose.go (new), readclose_test.go (new), receipts.go,
-  listactions.go, model.go, hints.go, hints_test.go
+- internal/tui/readclose.go (new), readclose_test.go (new), receipts.go
+  (also `newestID`, `idAfter`), listactions.go, model.go, hints.go,
+  hints_test.go
 - internal/command/command.go, command_test.go
 - specs/ui.md, specs/security.md, specs/providers.md, docs/usage.md,
   todo/todo.md, this note

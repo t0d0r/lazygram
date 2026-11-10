@@ -424,3 +424,207 @@ func TestHintNamesX(t *testing.T) {
 	}
 	t.Fatal("no start hint names /x")
 }
+
+// TestXInFlightThenUnreadKeepsTheWindow: an [unread] pressed while /x's
+// own report is on its way cancels the closing too, not only one that
+// still waits: the answer says so and closes nothing, then the mark goes.
+func TestXInFlightThenUnreadKeepsTheWindow(t *testing.T) {
+	f := newFake()
+	m, _ := inAlice(t, f)
+	cmd := enter(m, "/x") // on its way
+	enter(m, "/list alice")
+	press(m, tea.KeyRight) // [read]
+	press(m, tea.KeyRight) // [unread]
+	if waits := press(m, tea.KeyEnter); waits != nil {
+		t.Fatal("[unread] waits for the report on its way")
+	}
+	_, next := m.Update(cmd())
+	if _, open := m.winFor("c2"); open == nil || closedCount(m) != 0 {
+		t.Fatalf("/x's answer after an [unread] closes nothing: %q, %q", winNames(m), m.status)
+	}
+	if m.isErr || m.status != "reported @alice read; marked unread since, window kept" {
+		t.Fatalf("the answer says why the window stays: %q (error %v)", m.status, m.isErr)
+	}
+	runAll(m, next)
+	_, w := m.winFor("c2")
+	if w == nil || w.unread == 0 || strings.Join(f.marks, ",") != "c2:false,c2:true" || !strings.Contains(m.status, "reported @alice unread") {
+		t.Fatalf("then the mark goes and the window stays unread: %q, marks %v, %q", winNames(m), f.marks, m.status)
+	}
+}
+
+// TestXSameSecondNumericIDs: Telegram ids are numbers and two messages
+// can carry the same second, where the list orders "100" before "99".
+// The receipt covers the numerically newest of them, and a 100 arriving
+// after /x reported 99 keeps the window like any newer message.
+func TestXSameSecondNumericIDs(t *testing.T) {
+	f := newFake()
+	f.msgs = append(f.msgs, mk("c2", "99", "alice", "ninety-nine", 10))
+	f.recent["c2"] = append(f.recent["c2"], mk("c2", "99", "alice", "ninety-nine", 10))
+	m, _ := inAlice(t, f)
+	if id, _ := m.newestID("c2"); id != "99" {
+		t.Fatalf("99 is the newest held: %q", id)
+	}
+	cmd := enter(m, "/x")
+	f.msgs = append(f.msgs, mk("c2", "100", "alice", "one hundred", 10))
+	m.Update(m.syncCmd()())
+	runAll(m, cmd)
+	if len(f.read) != 1 || f.read[0] != "c2:99" {
+		t.Fatalf("the receipt covered 99: %v", f.read)
+	}
+	if _, open := m.winFor("c2"); open == nil || m.status != "reported @alice read; a newer message arrived, window kept" {
+		t.Fatalf("100 in the same second as 99 keeps the window: %q, %q", winNames(m), m.status)
+	}
+	// Both held: the receipt covers 100, and then the window closes.
+	f.read = nil
+	runAll(m, enter(m, "/x"))
+	if len(f.read) != 1 || f.read[0] != "c2:100" || winNames(m) != "#news #dev" {
+		t.Fatalf("with both held the receipt covers 100 and the window closes: %v, %q, %q", f.read, winNames(m), m.status)
+	}
+}
+
+// TestXTransferredToListReadKeepsTheGuard: a [read] that replaces a
+// waiting /x reports up to the service's newest, without a message id;
+// the window still stays when a message arrived after /x was typed.
+func TestXTransferredToListReadKeepsTheGuard(t *testing.T) {
+	f := newFake()
+	m, _ := inAlice(t, f)
+	first := enter(m, "/mark-as-read")
+	enter(m, "/x") // waits
+	f.msgs = append(f.msgs, mk("c2", "9", "alice", "one more thing", 5))
+	m.Update(m.syncCmd()())
+	enter(m, "/list alice")
+	press(m, tea.KeyRight) // [read]: replaces the waiting /x's report
+	press(m, tea.KeyEnter)
+	_, next := m.Update(first())
+	runAll(m, next)
+	if len(f.read) != 2 || f.read[1] != "c2:" {
+		t.Fatalf("the [read] went, up to the service's newest: %v", f.read)
+	}
+	if _, open := m.winFor("c2"); open == nil || closedCount(m) != 0 || m.status != "reported @alice read; a newer message arrived, window kept" {
+		t.Fatalf("a message after /x keeps the window whatever report answers: %q, %q", winNames(m), m.status)
+	}
+}
+
+// TestXStaleAnswerLeavesAReopenedWindow: /x closes the window it was
+// typed in, by identity. When that window was closed and the chat opened
+// again before the answer, the new window is another one and stays.
+func TestXStaleAnswerLeavesAReopenedWindow(t *testing.T) {
+	f := newFake()
+	m, old := inAlice(t, f)
+	cmd := enter(m, "/x")
+	enter(m, "/close")
+	runAll(m, enter(m, "/win @alice"))
+	_, fresh := m.winFor("c2")
+	if fresh == nil || fresh == old {
+		t.Fatalf("the chat is open again in a new window: %q", winNames(m))
+	}
+	runAll(m, cmd)
+	if _, w := m.winFor("c2"); w != fresh || closedCount(m) != 1 {
+		t.Fatalf("the stale answer closes nothing: %q, %d closed notices", winNames(m), closedCount(m))
+	}
+	if m.isErr || m.status != "reported @alice read; its window was closed already" {
+		t.Fatalf("the status: %q (error %v)", m.status, m.isErr)
+	}
+	// A /x typed in the new window is its own request and closes it.
+	runAll(m, enter(m, "/x"))
+	if _, w := m.winFor("c2"); w != nil {
+		t.Fatalf("/x in the new window closes it: %q, %q", winNames(m), m.status)
+	}
+}
+
+// TestXSettlesAHeldTab: a Tab on an empty prompt holds what it cleared
+// of the window, to put it back when the window is left at once, and
+// holds its receipt back. /x reports the window read itself, so nothing
+// is put back when it is left, the held receipt is dropped (one receipt,
+// /x's), and the window closes read.
+func TestXSettlesAHeldTab(t *testing.T) {
+	f := newFake()
+	m, step, held := fromDev(t, f) // in #dev; @alice has 2 unread
+	enter(m, "/read-receipts on")
+	f.read, f.marks = nil, nil
+	press(m, tea.KeyTab)
+	w := m.wins[3]
+	if m.cur != 3 || w.chatID != "c2" || m.held == nil {
+		t.Fatalf("Tab shows @alice and holds it: current %d, held %v", m.cur, m.held != nil)
+	}
+	cmd := enter(m, "/x")
+	runAll(m, enter(m, "/win 1")) // left within the double Tab's time
+	if w.unread != 0 {
+		t.Fatalf("leaving after /x puts no unread count back: %d", w.unread)
+	}
+	step(2 * m.tabGap)
+	for _, tick := range *held {
+		runAll(m, func() tea.Msg { return tick })
+	}
+	runAll(m, cmd)
+	if _, open := m.winFor("c2"); open != nil || m.status != "reported @alice read, closed its window" {
+		t.Fatalf("the window closes: %q, %q", winNames(m), m.status)
+	}
+	if len(f.read) != 1 || !strings.HasPrefix(f.read[0], "c2:") {
+		t.Fatalf("one receipt, /x's; the held one is dropped: %v", f.read)
+	}
+}
+
+// TestXKeepsAWindowCountedUnread: whatever marks the window unread again
+// before the answer, a window with an unread count is not closed.
+func TestXKeepsAWindowCountedUnread(t *testing.T) {
+	f := newFake()
+	m, w := inAlice(t, f)
+	cmd := enter(m, "/x")
+	w.unread = 2
+	runAll(m, cmd)
+	if _, open := m.winFor("c2"); open == nil || m.status != "reported @alice read; unread again since, window kept" {
+		t.Fatalf("an unread window stays: %q, %q", winNames(m), m.status)
+	}
+}
+
+// TestXAnswerFindsOnlyItsOwnRequest: a second /x typed after a message
+// arrived replaces the first request. The first answer, whose receipt
+// does not cover that message, closes nothing; the second one's does.
+func TestXAnswerFindsOnlyItsOwnRequest(t *testing.T) {
+	f := newFake()
+	m, _ := inAlice(t, f)
+	first := enter(m, "/x")
+	f.msgs = append(f.msgs, mk("c2", "9", "alice", "one more thing", 5))
+	m.Update(m.syncCmd()())
+	if cmd := enter(m, "/x"); cmd != nil {
+		t.Fatal("the second /x waits")
+	}
+	_, next := m.Update(first())
+	if _, open := m.winFor("c2"); open == nil || next == nil || m.status != "reported @alice read" {
+		t.Fatalf("the first answer closes nothing: %q, %q", winNames(m), m.status)
+	}
+	runAll(m, next)
+	if winNames(m) != "#news #dev" || len(f.read) != 2 || f.read[1] != "c2:9" || m.status != "reported @alice read, closed its window" {
+		t.Fatalf("the second answer, covering the new message, closes: %q, sent %v, %q", winNames(m), f.read, m.status)
+	}
+}
+
+// TestXOlderHistoryIsNoArrival: older messages fetched after /x are not
+// newer ones; the window closes.
+func TestXOlderHistoryIsNoArrival(t *testing.T) {
+	f := newFake()
+	m, _ := inAlice(t, f)
+	cmd := enter(m, "/x")
+	f.msgs = append(f.msgs, mk("c2", "0a", "alice", "from long ago", -90))
+	m.Update(m.syncCmd()())
+	runAll(m, cmd)
+	if winNames(m) != "#news #dev" {
+		t.Fatalf("older history keeps nothing open: %q, %q", winNames(m), m.status)
+	}
+}
+
+func TestIDAfter(t *testing.T) {
+	for _, c := range []struct {
+		a, b string
+		want bool
+	}{
+		{"100", "99", true}, {"99", "100", false}, {"7", "7", false}, {"10", "9", true},
+		{"0100", "99", true}, {"99999999999999999999999", "99999999999999999999998", true},
+		{"b", "a", true}, {"a10", "a9", false}, {"9", "a", false},
+	} {
+		if got := idAfter(c.a, c.b); got != c.want {
+			t.Errorf("idAfter(%q, %q) = %v, want %v", c.a, c.b, got, c.want)
+		}
+	}
+}
