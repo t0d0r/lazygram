@@ -991,9 +991,11 @@ func (m *Model) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case readMsg:
 		switch {
 		case msg.err != nil:
-			m.fail("read receipt for " + m.nameOf(msg.chatID) + ": " + errText(msg.err))
+			m.fail("read receipt for " + m.nameOf(msg.chatID) + ": " + errText(msg.err) + m.keptAfter(msg))
 		case msg.markErr != nil:
-			m.fail("unread mark for " + m.nameOf(msg.chatID) + ": " + errText(msg.markErr))
+			m.fail("unread mark for " + m.nameOf(msg.chatID) + ": " + errText(msg.markErr) + m.keptAfter(msg))
+		case msg.closing:
+			m.closeReported(msg) // readclose.go
 		case msg.manual:
 			m.setInfo("reported " + m.nameOf(msg.chatID) + " read")
 		}
@@ -2036,6 +2038,8 @@ func (m *Model) run(c command.Command) (tea.Model, tea.Cmd) {
 		m.setDoubleTab(c.Arg)
 	case command.MarkRead:
 		return m.markAsRead()
+	case command.ReadClose:
+		return m, m.readClose(c.Arg) // readclose.go
 	case command.Fx:
 		m.setFx(!m.fx)
 	case command.Settings:

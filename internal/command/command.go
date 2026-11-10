@@ -54,6 +54,10 @@ const (
 	// sent in the current window's chat: Arg names the reaction (empty:
 	// like).
 	Like
+	// ReadClose reports the current window's chat read, as MarkRead, and
+	// closes the window once the report came back without an error; it
+	// takes no Arg (the TUI rejects one).
+	ReadClose
 )
 
 // Command is a parsed slash command.
@@ -99,6 +103,7 @@ var table = map[string]Kind{
 	"doubletab":    DoubleTab,
 	"close-others": CloseOthers,
 	"like":         Like,
+	"x":            ReadClose,
 }
 
 // Parse turns an input line into a Command. The line must start with "/".
@@ -173,6 +178,7 @@ const HelpText = `Commands
   /names                 show chats by nick (@alias) or name (@Title); also /nicks
   /read-receipts [on|off]  report a chat read when you focus its window with unread messages; off by default, kept; no argument shows; also /receipts
   /mark-as-read          one receipt for this window's chat, now, whatever /read-receipts says
+  /x                     report this window's chat read, as /mark-as-read, then close the window once the report came back; a failed report keeps it open and says why; refused in window 0; takes no argument
   /autojoin [on|off]     at start open a window for every chat with unread messages; on by default, kept
   /feed [on|off]         window 0 shows every chat's messages and the reactions someone adds as they arrive (on, the default) or only its notices (off); kept; no argument shows
   /vim [on|off]          vi keys: Normal and Insert modes on the input, in the lists and the pager (Esc enters Normal, i returns to typing; /keys lists the keys); off by default, kept; no argument shows

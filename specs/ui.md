@@ -39,7 +39,7 @@ completion, and an activity indicator.
   `/theme`, `/autojoin`, `/read-receipts`, `/whois`, `/send`,
   `/open <link>`, Ctrl-L, `/about`, `/mark-as-read`, `/names`, `/last`,
   Up and Down, `/mouse`, PgUp and PgDn, `/move` and `/close`,
-  `/close-others`, `/feed off`, `/settings`, `/win last` and `/unread`,
+  `/close-others`, `/x`, `/feed off`, `/settings`, `/win last` and `/unread`,
   `/doubletab last` or `unread`, `/vim on`, `/like`), so
   the pair differs between starts (`Options.Rand` draws them,
   `rand.IntN` unless a test injects one). They are printed once per start, in window 0 only,
@@ -52,7 +52,7 @@ completion, and an activity indicator.
   window 0, which has no chat, so it never speaks of "this" chat or
   window, and one that names Ctrl-X or a command the server window
   refuses (`/send`, `/mark-as-read`, `/last`, `/move`, `/close`,
-  `/close-others`, `/edit`, `/delete`, `/me`, `/press`, `/like`) says it
+  `/close-others`, `/x`, `/edit`, `/delete`, `/me`, `/press`, `/like`) says it
   works in a chat window. A word such
   as `on` or `off` after a command appears only where that command takes
   it (`/autojoin off`, `/read-receipts on`); `/mouse` takes none, it
@@ -811,6 +811,7 @@ and read like the commands under them.
 | `/clip [mode]`                | where a mouse selection is copied: `auto`, `osc52`, `tool`, `off`; no argument shows the mode and the tool (kept) |
 | `/read-receipts [on\|off]`, `/receipts` | read receipts to the service: off by default (kept); on reports a chat read when its window with unread messages is focused; no argument shows the setting (see Read receipts) |
 | `/mark-as-read`               | one read receipt for this window's chat, now, whatever `/read-receipts` says; an error in the server window and for a chat without a known message |
+| `/x`                          | `/mark-as-read`, then `/close`, for the current chat window: the receipt goes first and the window closes only when the service answered without an error; a failed report keeps the window and says why; any argument, window 0 and a chat without a known message are errors that send and close nothing; it has no other spelling (see Read receipts, Read and close) |
 | `/autojoin [on\|off]`         | at start open a window for every chat with unread messages: on by default, kept; no argument shows the setting (see Windows) |
 | `/feed [on\|off]`             | window 0 shows every chat's messages as they arrive and the reactions someone adds (on, the default) or only its notices (off); kept; no argument shows the setting (see Windows, Reactions) |
 | `/vim [on\|off]`              | vi keys: Normal and Insert modes on the input, in the lists and the pager; off by default, kept, takes effect at once; no argument shows the setting (see Vim mode) |
@@ -830,7 +831,9 @@ Short forms: `/h` for `/help`; `/shortcuts`, `/bindings` for `/keys`;
 `/anim` for `/fx`; `/nicks` for `/names`. `/settings` has none: `/set`
 and `/options` are unknown commands, like any other unknown name.
 `/close-others` has none either (`/closeothers` is unknown), nor has
-`/like` (`/react` is unknown; its reaction names have aliases).
+`/like` (`/react` is unknown; its reaction names have aliases). `/x` is
+itself the short name of read and close and the only one (`/xx` is
+unknown).
 `/help` prints every spelling
 the parser accepts, the short forms as `also /x, /y` after their
 command, so the printed reference and the parser table never disagree
@@ -1720,6 +1723,78 @@ is the only existing action that clears a window's unread count, and a
 message arriving while a window is shown is not reported because
 lazygram cannot tell whether anyone is looking.
 
+### Read and close: /x
+
+`/x` is `/mark-as-read`, then `/close`, for the current chat window, in
+that order (code: `internal/tui/readclose.go`). It takes no argument
+and has no other spelling.
+
+The report is `/mark-as-read`'s, unchanged: one receipt for the newest
+message lazygram holds of the chat (`Provider.MarkRead`), with the
+unread mark cleared (`Provider.MarkUnread(false)`, also when the receipt
+fails), on request, with `/read-receipts` off or on, which it leaves
+alone; the window's unread count is cleared when the command is typed;
+the request goes in the queue of requested reports for the chat, one at
+a time. The status says `reporting @name read, then closing its
+window...` and the window stays open until the answer.
+
+When the answer comes:
+
+- Receipt and mark both went through: the chat's window closes through
+  the code of `/close` (a `window closed: <name>` notice in window 0,
+  the current window kept or the nearest open one before it, nothing
+  focused, so no further receipt and no unread count changes, the
+  layout saved once), and the status says `reported @name read, closed
+  its window`. The window is found by its chat, so it closes also when
+  another window is current by then, which stays current.
+- The receipt or the mark failed: the error of `/mark-as-read` with `;
+  window kept` after it (`read receipt for @name: <why>; window kept`,
+  `unread mark for @name: <why>; window kept`), red, and in window 0;
+  nothing closes, no notice of a closing is written, the layout is not
+  saved. Not retried; `/x` again asks again.
+- The window was closed by hand meanwhile: `reported @name read; its
+  window was closed already`; a failure then is the plain error, with
+  no window to keep.
+- A message newer than the one the receipt covered is held by then (it
+  arrived after `/x`): `reported @name read; a newer message arrived,
+  window kept`, as information; the window stays open.
+
+Checks before anything is sent, in this order; on each nothing is sent,
+nothing closes, no unread count changes and the layout is not written:
+any argument, in any window (`/x 2`, `/x 0`, `/x @alice`; spaces alone
+are none), is the error `/x takes no argument; it reports this chat
+window read and closes it`; then window 0 is the error `the server
+window has no chat; /win to a chat first`; then a chat without a known
+message is the error `no message of #chat is known yet, nothing to
+report, window kept; /last fetches some, /close closes it unreported`.
+
+A `/x` typed while a requested report for the chat is on its way waits
+its turn and closes after its own answer, not the earlier one's. A
+later `/mark-as-read` or `[read]` that replaces a waiting `/x` keeps
+the closing; a later `[unread]` replaces it and the closing goes with
+it.
+
+`/help` lists it right after `/mark-as-read`, a start hint names it,
+and Tab completes `/x` to `/x `.
+
+Decision: the receipt first and the close on its answer, not both at
+once: the receipt is asynchronous, and a window closed at once would
+leave a failed report as a line about a window no longer on screen. A
+closed window therefore always means the service took the report, and
+a failure leaves the chat where it can be reported again. Decision: a
+failed unread mark keeps the window as a failed receipt does: the chat
+would still show as unread elsewhere. Decision: the current window
+only and no argument: `/x 3` would send a receipt, visible to the
+other side of a private chat, for a chat that is not on screen; the
+argument is checked first, as `/close-others` checks it. Decision: no
+closing without a report (no known message): the command promises
+both, and `/close` closes unreported. Decision: a message that arrived
+after `/x` keeps the window, because the receipt does not cover it and
+closing would hide a message never reported; every other outcome of
+`/close` is unchanged because the closing is `closeWins`. Decision: a
+later `[unread]` drops the closing, since a chat just marked unread is
+not one to put away.
+
 ## Search in either script
 
 The `/search` pager and the `/list` filter compare a query with the text
@@ -2135,9 +2210,10 @@ and chat names
 where the command takes a chat: the first argument of `/win`, `/msg`,
 `/whois` and `/list`, every word of `/me` and `/edit` text, and every
 word of a line without a command (message text). After any other
-command (`/last`, `/search`, `/press`, the settings, `/close-others`)
-Tab offers no chat names: those arguments are numbers, settings or free
-text, and `/close-others` takes none. `/close` Tab stops at `/close`,
+command (`/last`, `/search`, `/press`, the settings, `/close-others`,
+`/x`) Tab offers no chat names: those arguments are numbers, settings or
+free text, and `/close-others` and `/x` take none (`/x` Tab completes to
+`/x ` and nothing follows). `/close` Tab stops at `/close`,
 which `/close-others` begins too, as `/clip` does beside `/clipboard`;
 a second Tab lists both. A chat is
 offered when the word begins its alias or its title as shown, in either

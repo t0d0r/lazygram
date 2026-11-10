@@ -34,8 +34,8 @@
 - Read receipts are off by default: lazygram never calls
   messages.readHistory or channels.readHistory unless `/read-receipts on`
   was given (kept across runs, shown by `/read-receipts`), or
-  `/mark-as-read` is typed or the `[read]` button of `/list` or `/win`
-  pressed for one chat (with messages.markDialogUnread clearing the
+  `/mark-as-read` or `/x` is typed or the `[read]` button of `/list` or
+  `/win` pressed for one chat (with messages.markDialogUnread clearing the
   chat's unread mark). `[unread]` calls messages.markDialogUnread to set
   the mark, once per press. With receipts on, a report goes
   out only when a window with unread messages is focused, for the newest
